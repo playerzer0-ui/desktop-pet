@@ -57,7 +57,7 @@
 - people start learning magic and some decide to abuse it
 - the Gods never thought about it much, until Heaven killed Sally
 - by the time the Gods tried damage control, it is too late
-- all their powers are little to none and they vanished from the world
+- all their powers are little to none and they vanished from the world because there is no point in staying there
 - there are no signs of them coming back, ever, the only way to search up about them is through some ancient library to study about what they do
 
 ### Everlily
@@ -77,6 +77,7 @@
 - controls space and time, aids the humans in exploring space
 - supports the idea so she can talk to humans at a more personal level
 - the happiest and most social God
+- killed by libera, she trusted humans too much, one day she got backstabbed by libera's space time powers
 
 ### Silas
 - One of the many Gods, his job is to look over humanity
