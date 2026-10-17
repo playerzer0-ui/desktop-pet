@@ -1,25 +1,11 @@
-import os, time, psutil
-from llama_cpp import Llama
+import json
+from load import *
 
-proc = psutil.Process(os.getpid())
-proc.cpu_percent()
+start_server()
 
-llm = Llama(model_path="models/Qwen3.5-2B-Q5_K_M.gguf", n_ctx=8192, verbose=False)
-
-def context_used(messages):
-    total = 0
-    for m in messages:
-        total += len(llm.tokenize(m["content"].encode("utf-8"), add_bos=False))
-        total += 5  # small overhead per message (role tags like <|im_start|>user)
-    return total
-
-def load(path):
-    with open(path, encoding="utf-8") as f:
-        return f.read()
-
-# created once, before the loop, so it keeps growing = memory
 system_prompt = load("character/persona.md") + "\n\n# Background lore\n" + load("character/lore.md")
 
+# created once, before the loop, so it keeps growing = memory
 messages = [
     {"role": "system", "content": system_prompt},
     # example exchange: teaches Pip the length and style of her replies
@@ -44,22 +30,36 @@ while True:
     print("A: ", end="")
 
     t0 = time.time()
-    first_token = None  # when the first word appeared (= time spent reading the prompt)
-    tokens = 0
+    first_token = None
     reply = ""
-    for chunk in llm.create_chat_completion(
-        messages=messages,
-        max_tokens=200,
-        temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5,  # Qwen's recommended chat settings
+    timings = {}
+
+    response = requests.post(
+        f"{SERVER}/v1/chat/completions",
+        json={
+            "messages": messages,
+            "max_tokens": 200,
+            "temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5,  # Qwen's recommended chat settings
+            "chat_template_kwargs": {"enable_thinking": False},  # answer directly, no hidden <think> step
+            "stream": True,
+        },
         stream=True,
-    ):
-        text = chunk["choices"][0]["delta"].get("content", "")
+    )
+
+    # the server sends the reply as lines like:  data: {...json...}
+    for line in response.iter_lines():
+        if not line.startswith(b"data: ") or line == b"data: [DONE]":
+            continue
+        chunk = json.loads(line[6:])
+        timings = chunk.get("timings", timings)  # the last chunk carries the server's timing stats
+        if not chunk.get("choices"):
+            continue
+        text = chunk["choices"][0]["delta"].get("content") or ""
         if text:
             if first_token is None:
                 first_token = time.time()
             print(text, end="", flush=True)
             reply += text
-            tokens += 1
 
     elapsed = time.time() - t0
     print()
@@ -67,17 +67,18 @@ while True:
     # remember the model's own answer
     messages.append({"role": "assistant", "content": reply})
 
-    # forget the oldest chat lines when context gets too full (system prompt + examples are kept)
-    while context_used(messages) > llm.n_ctx() * 0.75 and len(messages) > KEEP + 1:
-        messages.pop(KEEP)
+    # how full the context is = cached tokens + newly read tokens + reply tokens
+    used = timings.get("cache_n", 0) + timings.get("prompt_n", 0) + timings.get("predicted_n", 0)
 
-    used = context_used(messages)
+    # forget the oldest chat lines when context gets too full (system prompt + examples are kept)
+    if used > N_CTX * 0.75 and len(messages) > KEEP + 2:
+        messages.pop(KEEP)  # oldest question
+        messages.pop(KEEP)  # and its answer
+
     print()
-    print(f"[context: {used} / {llm.n_ctx()} tokens ({used / llm.n_ctx():.0%})]")
+    print(f"[context: {used} / {N_CTX} tokens ({used / N_CTX:.0%})]")
     print()
-    first_token = first_token or t0 + elapsed
     print(f"Answer time : {elapsed:.2f} s")
-    print(f"Reading time: {first_token - t0:.2f} s  (before the first word)")
-    print(f"Writing     : {tokens / max(t0 + elapsed - first_token, 0.01):.1f} tokens/s")
-    print(f"RAM used    : {proc.memory_info().rss / 1024**2:.0f} MB")
-    print(f"CPU (avg)   : {proc.cpu_percent() / psutil.cpu_count():.0f}%")
+    print(f"Reading time: {(first_token or t0 + elapsed) - t0:.2f} s  "
+          f"(re-read {timings.get('prompt_n', '?')} tokens, reused {timings.get('cache_n', '?')} from cache)")
+    print(f"Writing     : {timings.get('predicted_per_second', 0):.1f} tokens/s")
