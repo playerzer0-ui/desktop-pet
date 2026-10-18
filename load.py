@@ -1,4 +1,4 @@
-import atexit, ctypes, glob, os, shutil, subprocess, time, requests
+import atexit, ctypes, glob, os, re, shutil, subprocess, time, requests
 from ctypes import wintypes
 
 HERE = os.path.dirname(os.path.abspath(__file__))  # the desktop-pet folder
@@ -10,6 +10,42 @@ MODEL = os.path.join(HERE, "models", "Qwen3.5-4B-Q5_K_M.gguf")
 def load(path):
     with open(os.path.join(HERE, path), encoding="utf-8") as f:
         return f.read()
+
+def for_stage(text, stage):
+    """Character files are sorted by trust: '# Stage N' blocks, each holding '##'/'###' sections.
+    Keep the blocks up to this trust stage (1-5) and merge sections with the same heading,
+    so the model reads e.g. Republic once, with everything Pip is ready to share about it.
+    Lines before the first '# Stage' block are always kept as they are."""
+    preamble = []
+    tree = {"lines": [], "children": {}}  # heading -> section, in the order headings first appear
+    block = None  # stage of the block we're in (None = before the first block)
+    path = []     # headings we're currently inside
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        stage_heading = re.match(r"# Stage ([1-5])\s*$", line)
+        if stage_heading:
+            block, path = int(stage_heading.group(1)), []
+        elif block is None:
+            preamble.append(line)
+        elif block <= stage:
+            heading = re.match(r"(#{2,}) (.*)", line)
+            if heading:
+                depth = len(heading.group(1)) - 2  # '##' = top level
+                path = path[:depth] + [heading.group(2).strip()]
+                continue
+            section = tree
+            for name in path:
+                section = section["children"].setdefault(name, {"lines": [], "children": {}})
+            section["lines"].append(line)
+
+    parts = ["\n".join(preamble)] if preamble else []
+    def write(section, level):
+        for name, child in section["children"].items():
+            parts.append("\n".join(["#" * level + " " + name] + child["lines"]))
+            write(child, level + 1)
+    write(tree, 2)
+    return "\n\n".join(parts)
 
 def find_llama_server():
     # 1. a copy inside the project (how the game will ship)

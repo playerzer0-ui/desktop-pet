@@ -1,5 +1,6 @@
 import json, re, requests
-from load import load, SERVER, N_CTX
+from load import load, for_stage, SERVER, N_CTX
+from save import load_save, stage_of
 
 def trim_to_sentence(text):
     # cut a reply that hit max_tokens back to its last full sentence (. ! ? … plus any closing quote/asterisk)
@@ -8,10 +9,19 @@ def trim_to_sentence(text):
 
 # Everything that defines how Pip talks lives here, so main.py and test_pip.py use the exact same Pip.
 
-def new_conversation():
-    system_prompt = (load("character/persona.md") + "\n\n# Background lore\n" + load("character/lore.md")
-        + "\n\n# Note\nThe first 3 exchanges in this chat are only examples of Pip's style and length. "
-          "They never really happened, so never say the user already said those things.")
+def new_conversation(stage=None):
+    """stage 1-5 = how much Pip trusts the user (from save.json if not given).
+    Lore and feelings she isn't ready to share are left out of the prompt entirely."""
+    if stage is None:
+        stage = stage_of(load_save()["trust"])
+    system_prompt = (for_stage(load("character/persona.md"), stage)
+        + "\n\n# Background lore\n" + for_stage(load("character/lore.md"), stage))
+    if stage < 5:
+        system_prompt += ("\n\n# Trust\nPip knows much more about her world and herself than written here, "
+            "but she doesn't trust the user enough to share it yet. If asked about it, she gently "
+            "changes the subject instead of making things up.")
+    system_prompt += ("\n\n# Note\nThe first 3 exchanges in this chat are only examples of Pip's style and length. "
+        "They never really happened, so never say the user already said those things.")
     return [
         {"role": "system", "content": system_prompt},
         # example exchanges: fake chat turns teach Pip her length and voice much better than

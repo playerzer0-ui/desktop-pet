@@ -1,19 +1,15 @@
+# Stage 1
+
 ## Overview
 - A world full of magic and advanced technology
 - Why technology is advanced: Silas placed fountains of knowledge throughout the world. Humans learned from them and figured out many things by themselves, and one of those things was advanced technology
 - There used to be many gods, but they are no longer in this world
-- The gods gave their magic away, spread it throughout the world, due to exhaustion and being tired of fulfilling demands
 - There are 4 factions: Republic, Bloodcult, Heaven, Freeport
 
 ## Republic
 - Faction of money, fortune, finance and business
 - Serves money and believes money is the most important thing in life
 - Boss: Republicia (a woman: she/her)
-- Republicia's power: can turn anything into valuable things, not only luxury items but also food, water, electricity and other resources
-- Uses this power for extreme market manipulation
-- Nobody has killed Republicia because everyone worships her and depends on the wealth and resources she creates
-- Republicia has the same power as Everlily because Everlily gave her all of her own power before leaving, so Republicia is now the only remaining source of that wealth and those blessings
-- Republicia is Everlily's most loyal follower
 
 ## Bloodcult
 - Faction of chaos, bloodlust and violence
@@ -21,24 +17,12 @@
 - The world is already full of politics, corruption and deep conspiracies, and the Bloodcult takes it to the next level
 - Members are elusive and manipulative: you never know someone is Bloodcult unless they tell you
 - Boss: Lind (a man: he/him)
-- Lind's power: he is immortal and cannot be killed by any means, physical or magical
-- He can temporarily give immortality to his followers or to lucky people for a period of time
-- He can also resurrect people with no conditions at all (unlike Feras, no one has to die in exchange)
-- Lind outsmarted Feras into signing an absolute pact to gain authority over life and death, back when the Gods were still in the world
-- Nobody can break Lind's own immortality or his pact with Feras, not even Soren
-- But Soren CAN break the immortality Lind gives to other people
 
 ## Heaven
 - Faction of purity
 - It is not the real heaven; they took the name because they are the only faction proven to have killed an actual god. And that God is Sally.
-- They studied the god they killed and absorbed all sorts of divine powers from her
-- Serves purity and believes only the pure chosen ones can be the best
-- They believe their purity is the reason they were able to kill a god
 - Boss: Libera (a woman: she/her)
 - Libera is a human, not a god
-- Libera's power: space-time magic; warping reality is her specialty
-- Libera learned about magic for a couple years and figured out how to kill a God and get a crazy boost in power
-- Libera killed Sally with space time magic
 
 ## Freeport
 - Faction of freedom
@@ -47,11 +31,49 @@
 - A refuge for deserters, smugglers, exiles and anyone running from the other three factions
 - Serves freedom and believes no one should be owned by anything: not money, not blood, not purity
 - Boss: Soren (a woman: she/her)
+
+
+# Stage 2
+
+## Republic
+- Republicia's power: can turn anything into valuable things, not only luxury items but also food, water, electricity and other resources
+- Nobody has killed Republicia because everyone worships her and depends on the wealth and resources she creates
+
+## Bloodcult
+- Lind's power: he is immortal and cannot be killed by any means, physical or magical
+- He can temporarily give immortality to his followers or to lucky people for a period of time
+- He can also resurrect people with no conditions at all (unlike Feras, no one has to die in exchange)
+
+## Heaven
+- They studied the god they killed and absorbed all sorts of divine powers from her
+- Serves purity and believes only the pure chosen ones can be the best
+- They believe their purity is the reason they were able to kill a god
+- Libera's power: space-time magic; warping reality is her specialty
+- Libera learned about magic for a couple years and figured out how to kill a God and get a crazy boost in power
+- Libera killed Sally with space time magic
+
+## Freeport
 - Soren's power: unbinding; she can break any bond, including contracts, curses, debts, magical seals and loyalties
 - Every other faction fears her because she can undo their power over people
 - She can break the immortality Lind gives to others
 - The only person she cannot unbind is Lind himself
 - Soren learned about magic from Silas's fountain of knowledge and figured out how to nullify powers (except Lind)
+
+
+# Stage 3
+
+## Overview
+- The gods gave their magic away, spread it throughout the world, due to exhaustion and being tired of fulfilling demands
+
+## Republic
+- Uses this power for extreme market manipulation
+- Republicia has the same power as Everlily because Everlily gave her all of her own power before leaving, so Republicia is now the only remaining source of that wealth and those blessings
+- Republicia is Everlily's most loyal follower
+
+## Bloodcult
+- Lind outsmarted Feras into signing an absolute pact to gain authority over life and death, back when the Gods were still in the world
+- Nobody can break Lind's own immortality or his pact with Feras, not even Soren
+- But Soren CAN break the immortality Lind gives to other people
 
 ## The Gods
 - The Gods used to govern and control the world

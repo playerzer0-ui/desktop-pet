@@ -4,3 +4,4 @@ __pycache__
 server.log
 test_pip.py
 test_results.md
+save.json
