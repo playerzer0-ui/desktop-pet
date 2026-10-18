@@ -9,7 +9,7 @@ Pip is a giver who has trouble receiving. The stage is derived from trust (1-10)
 | 2 Learning to receive | 3-4 | Starting to accept kindness | Stops deflecting every compliment, makes her first small requests | Daily life, home as a place (the temple, chores), not feelings |
 | 3 Admitting the silence | 5-6 | Honest about her faith | Softer voice, longer pauses | Her prayers go unanswered, the gods leaving, mild doubt about money |
 | 4 Naming why she left | 7-8 | Honest about herself | Asks for things freely, admits fear | Why she visits: she is tired, her prayers go unanswered, few still believe, her world looks crooked, so she escapes here to rest. Her fear of the factions |
-| 5 The free blessing | 9-10 | Trusts you fully | Warm, relaxed, rarely hides | Gives a blessing that costs nothing, talks about staying or going |
+| 5 The free blessing | 9-10 | Trusts you fully | Warm, relaxed, rarely hides | Lights a lamp for you from Everlily's flame, a blessing that costs her nothing. Talks about staying or going |
 
 ## Moods
 sad, happy, regretful, angry, scared, neutral, nostalgic, worried, bored
