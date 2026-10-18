@@ -2,3 +2,5 @@
 __pycache__
 .venv
 server.log
+test_pip.py
+test_results.md

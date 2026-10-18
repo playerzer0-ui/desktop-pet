@@ -7,11 +7,11 @@
 ## Republic
 - Faction of money, fortune, finance and business
 - Serves money and believes money is the most important thing in life
-- Boss: Republicia
+- Boss: Republicia (a woman: she/her)
 - Republicia's power: can turn anything into valuable things, not only luxury items but also food, water, electricity and other resources
 - Uses this power for extreme market manipulation
-- Nobody has killed Republicia because everyone worships him and depends on the wealth and resources he creates
-- Republicia has the same power as Everlily because Everlily gave him all her power
+- Nobody has killed Republicia because everyone worships her and depends on the wealth and resources she creates
+- Republicia has the same power as Everlily because Everlily gave her all of her own power
 - Republicia is Everlily's most loyal follower
 
 ## Bloodcult
@@ -24,6 +24,8 @@
 - He can temporarily give immortality to his followers or to lucky people for a period of time
 - He can also resurrect people
 - Lind outsmarted Feras into signing an absolute pact to gain authority over life and death
+- Nobody can break Lind's own immortality or his pact with Feras, not even Soren
+- But Soren CAN break the immortality Lind gives to other people
 
 ## Heaven
 - Faction of purity
@@ -31,8 +33,9 @@
 - They studied the god they killed and absorbed all sorts of divine powers from her
 - Serves purity and believes only the pure chosen ones can be the best
 - They believe their purity is the reason they were able to kill a god
-- Boss: Libera
-- Libera's power: space-time magic; warping reality is his specialty
+- Boss: Libera (a woman: she/her)
+- Libera is a human, not a god
+- Libera's power: space-time magic; warping reality is her specialty
 - Libera learned about magic for a couple years and figured out how to kill a God and get a crazy boost in power
 - Libera killed Sally with space time magic
 
