@@ -1,5 +1,10 @@
-import json, requests
+import json, re, requests
 from load import load, SERVER, N_CTX
+
+def trim_to_sentence(text):
+    # cut a reply that hit max_tokens back to its last full sentence (. ! ? … plus any closing quote/asterisk)
+    ends = list(re.finditer(r'[.!?…]["\'*)]*(?=\s|$)', text))
+    return text[:ends[-1].end()] if ends else text
 
 # Everything that defines how Pip talks lives here, so main.py and test_pip.py use the exact same Pip.
 
@@ -41,6 +46,7 @@ def ask(messages, question, on_text=None):
 
     reply = ""
     timings = {}
+    finish_reason = None
     # the server sends the reply as lines like:  data: {...json...}
     for line in response.iter_lines():
         if not line.startswith(b"data: ") or line == b"data: [DONE]":
@@ -49,11 +55,16 @@ def ask(messages, question, on_text=None):
         timings = chunk.get("timings", timings)  # the last chunk carries the server's timing stats
         if not chunk.get("choices"):
             continue
+        finish_reason = chunk["choices"][0].get("finish_reason") or finish_reason
         text = chunk["choices"][0]["delta"].get("content") or ""
         if text:
             reply += text
             if on_text:
                 on_text(text)
+
+    # hit max_tokens mid-sentence: keep only the finished sentences in memory
+    if finish_reason == "length":
+        reply = trim_to_sentence(reply)
 
     # remember the model's own answer
     messages.append({"role": "assistant", "content": reply})
