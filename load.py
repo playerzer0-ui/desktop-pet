@@ -6,6 +6,7 @@ PORT = int(os.environ.get("PET_PORT", 8080))  # override if port 8080 is taken
 SERVER = f"http://localhost:{PORT}"
 N_CTX = 8192  # context size
 MODEL = os.path.join(HERE, "models", "Qwen3.5-4B-Q5_K_M.gguf")
+CACHE_DIR = os.path.join(HERE, "cache")  # Pip's already-read system prompt, saved by the server (see pet.warm_up)
 
 def load(path):
     with open(os.path.join(HERE, path), encoding="utf-8") as f:
@@ -114,9 +115,12 @@ def start_server():
                 f"A llama-server with a different model ({model}) is already running on port {PORT}.\n"
                 f"Close it (or its start-server.bat window) and run this again.")
         return
+    os.makedirs(CACHE_DIR, exist_ok=True)
     log = open(os.path.join(HERE, "server.log"), "w")  # server messages go here, for debugging
     server = subprocess.Popen(
-        [find_llama_server(), "-m", MODEL, "-c", str(N_CTX), "-ngl", "0", "--port", str(PORT)],
+        [find_llama_server(), "-m", MODEL, "-c", str(N_CTX), "-ngl", "0", "--port", str(PORT),
+         "-np", "1",  # one conversation slot, so the saved prompt cache always lands where the chat runs
+         "--slot-save-path", CACHE_DIR],
         stdout=log, stderr=subprocess.STDOUT,
         creationflags=subprocess.CREATE_NO_WINDOW,  # no extra black window
     )

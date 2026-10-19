@@ -1,11 +1,15 @@
 ﻿import time
 from load import start_server, N_CTX
-from pet import new_conversation, ask, context_used
+from pet import new_conversation, ask, context_used, warm_up
 
 start_server()
 
 # created once, before the loop, so it keeps growing = memory
 messages = new_conversation()
+
+t0 = time.time()
+if warm_up(messages) == "read":  # first launch since persona/lore changed: slow once, then saved
+    print(f"(Pip read her persona and lore in {time.time() - t0:.0f} s, saved for next time)")
 
 while True:
 

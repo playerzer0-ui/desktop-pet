@@ -1,5 +1,5 @@
-import json, re, requests
-from load import load, for_stage, SERVER, N_CTX
+import glob, hashlib, json, os, re, requests
+from load import load, for_stage, SERVER, N_CTX, MODEL, CACHE_DIR
 from save import load_save, stage_of
 
 def trim_to_sentence(text):
@@ -36,6 +36,32 @@ def new_conversation(stage=None):
     ]
 
 KEEP = len(new_conversation())  # system prompt + examples are never trimmed
+
+def warm_up(messages):
+    """Get the server to read the system prompt + examples before the first question.
+    The first time, it reads them (~20 s on CPU) and saves what it read to cache/.
+    After that, it just loads the file (~1 s). Editing persona or lore changes the prompt,
+    so it's read fresh once and saved under a new name. Returns "loaded" or "read"."""
+    # the exact text every request in this conversation starts with: everything before the first question
+    marker = "PIP_FIRST_QUESTION"
+    full = requests.post(f"{SERVER}/apply-template", json={
+        "messages": messages + [{"role": "user", "content": marker}],
+        "chat_template_kwargs": {"enable_thinking": False},
+    }).json()["prompt"]
+    prefix = full[:full.rindex("<|im_start|>", 0, full.index(marker))]  # cut where the question's turn begins
+
+    name = hashlib.sha256(f"{os.path.basename(MODEL)} {N_CTX}\n{prefix}".encode()).hexdigest()[:16] + ".bin"
+    if os.path.exists(os.path.join(CACHE_DIR, name)):
+        if requests.post(f"{SERVER}/slots/0?action=restore", json={"filename": name}).ok:
+            return "loaded"
+        # (a llama-server update can make old cache files unreadable: then just read it again)
+
+    requests.post(f"{SERVER}/completion", json={"prompt": prefix, "n_predict": 0, "cache_prompt": True})
+    requests.post(f"{SERVER}/slots/0?action=save", json={"filename": name})
+    # keep only the newest few files (one per trust stage is all that's ever useful)
+    for old in sorted(glob.glob(os.path.join(CACHE_DIR, "*.bin")), key=os.path.getmtime)[:-5]:
+        os.remove(old)
+    return "read"
 
 def ask(messages, question, on_text=None):
     """Send a question, return (reply, timings). Adds both to messages = memory.
