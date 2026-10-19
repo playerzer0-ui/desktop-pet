@@ -106,7 +106,7 @@ def running_model():
     except requests.RequestException:
         return ""
 
-def start_server():
+def start_server(say=print):  # say = how to show the startup message (the CLI shows its own)
     global _job
     if server_is_up():  # already running (e.g. started by start-server.bat), just use it...
         model = os.path.basename(running_model())
@@ -127,7 +127,7 @@ def start_server():
     atexit.register(server.terminate)  # shut the server down when the pet closes normally
     _job = kill_with_python(server)    # ...and also if the pet crashes or its window is closed
 
-    print("Waking up Pip...")
+    say("Waking up Pip...")
     for _ in range(120):
         if server_is_up():
             return

@@ -1,0 +1,3 @@
+requests>=2.32
+rich>=15.0          # the CLI's boxes and colors (cli/)
+prompt_toolkit>=3.0 # the CLI's input line, so Pip can speak while you type (cli/)
