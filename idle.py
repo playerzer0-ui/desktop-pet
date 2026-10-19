@@ -38,6 +38,10 @@ class Idle:
         self.last = self.user_last = time.time()
         self.nudges = 0
 
+    def pip_spoke(self):
+        """Pip just said something for another reason (like a quest): wait before nudging again."""
+        self.last = time.time()
+
     def opening(self):
         """The stage direction for when Pip opens."""
         return direction("The user just opened the desktop and Pip has woken up. She greets them first.")

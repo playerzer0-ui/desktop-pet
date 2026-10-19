@@ -1,6 +1,7 @@
 ﻿import atexit, queue, threading, time
 import trust
 from idle import Idle
+from quests import Quests
 from load import start_server, N_CTX
 from pet import new_conversation, ask, context_used, warm_up
 
@@ -22,9 +23,9 @@ t0 = time.time()
 if warm_up(messages) == "read":  # first launch since persona/lore changed: slow once, then saved
     print(f"(Pip read her persona and lore in {time.time() - t0:.0f} s, saved for next time)")
 
-def say(text, from_user):
+def say(text, from_user, quest=False):
     """Send a message to Pip and print her reply. text is what the user typed,
-    or (from_user=False) a hidden stage direction from idle.py that makes her speak on her own."""
+    or (from_user=False) a hidden stage direction from idle.py / quests.py that makes her speak on her own."""
     print("Pip: ", end="", flush=True)
     t0 = time.time()
     first_token = None
@@ -40,11 +41,17 @@ def say(text, from_user):
     print()
 
     old_trust = save["trust"]
+    finished = False
     if from_user:  # Pip talking on her own earns nothing
         trust.talked(save, text, feeling)
+        finished = quests.answered(save, text, feeling)
     count_stay()
     print(f"  [{'felt ' + feeling if from_user else 'spoke on her own'} | trust {save['trust']}, {save['points']} points | "
           f"today: talk {save['today']['talk']}/{trust.TALK_CAP}, {save['today']['minutes']:.0f} min open]")
+    if quest:
+        print("  *** Quest: Pip is curious about your world. Answer her to earn her trust! ***")
+    if finished:
+        print("  *** Quest complete: Pip learned something about your world! ***")
     if save["trust"] > old_trust:
         print(f"  *** Pip trusts you more! Trust {save['trust']} ***")
         if trust.stage_of(save["trust"]) > trust.stage_of(old_trust):
@@ -67,6 +74,7 @@ def read_keyboard():
 threading.Thread(target=read_keyboard, daemon=True).start()
 
 idle = Idle()
+quests = Quests()
 print("Type to talk to Pip (or 'exit' to quit).")
 say(idle.opening(), from_user=False)
 
@@ -74,6 +82,11 @@ while True:
     try:
         question = typed.get(timeout=5)  # every 5 s with nothing typed: check if she wants to speak up
     except queue.Empty:
+        ask_about = quests.due(save)
+        if ask_about:
+            idle.pip_spoke()
+            say(ask_about, from_user=False, quest=True)
+            continue
         nudge = idle.due()
         if nudge:
             say(nudge, from_user=False)
