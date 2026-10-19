@@ -1,11 +1,21 @@
-﻿import time
+﻿import atexit, time
+import trust
 from load import start_server, N_CTX
 from pet import new_conversation, ask, context_used, warm_up
 
 start_server()
 
+save = trust.start()  # counts today as a day logged
+opened = time.time()  # for "duration of stay"
+
+def count_stay():
+    global opened
+    trust.stayed(save, (time.time() - opened) / 60)
+    opened = time.time()
+atexit.register(count_stay)  # the last stretch counts too
+
 # created once, before the loop, so it keeps growing = memory
-messages = new_conversation()
+messages = new_conversation(stage=trust.stage(save))
 
 t0 = time.time()
 if warm_up(messages) == "read":  # first launch since persona/lore changed: slow once, then saved
@@ -29,10 +39,20 @@ while True:
             first_token = time.time()
         print(text, end="", flush=True)
 
-    reply, timings = ask(messages, question, on_text=show)
+    reply, timings, feeling = ask(messages, question, on_text=show)
 
     elapsed = time.time() - t0
     print()
+
+    old_trust = save["trust"]
+    trust.talked(save, question, feeling)
+    count_stay()
+    print(f"[felt {feeling} | trust {save['trust']}, {save['points']} points | "
+          f"today: talk {save['today']['talk']}/{trust.TALK_CAP}, {save['today']['minutes']:.0f} min open]")
+    if save["trust"] > old_trust:
+        print(f"*** Pip trusts you more! Trust {save['trust']} ***")
+        if trust.stage_of(save["trust"]) > trust.stage_of(old_trust):
+            print(f"*** Stage {trust.stage(save)}: she'll open up more next time you open her ***")
 
     used = context_used(timings)
     print()

@@ -1,0 +1,81 @@
+"""How much Pip trusts you (1-10), earned from what you do together. It never goes down.
+
+Daily things fill the bar slowly, each with a daily cap so they can't be farmed:
+    day logged     +3 the first time you open her each day
+    talking        per message of 3+ words, judged by Pip: nice +2, neutral +1, rude +0 (max 10 a day)
+    stay           +1 for every 15 minutes she's open (max 4 a day)
+Quests give big chunks. A stage's MAJOR quest is a gate: until it's done, trust stops at the
+top of that stage (and so do points, so they can't be saved up to skip a stage).
+Minor quests just give points.
+"""
+import datetime, re
+from save import load_save, write_save, stage_of
+
+TRUST_POINTS = [0, 15, 40, 70, 110, 160, 220, 290, 370, 460]  # points needed for trust 1, 2, ... 10
+MAJOR_QUESTS = {1: None, 2: None, 3: None, 4: None}  # stage -> quest id that opens the next stage (None = no gate yet)
+
+DAY_POINTS = 3
+TALK_POINTS = {"nice": 2, "neutral": 1, "rude": 0}
+TALK_CAP = 10
+STAY_MINUTES, STAY_CAP = 15, 4
+
+def start():
+    """Call when Pip opens. Returns the save data that the other functions update."""
+    data = {"trust": 1, "points": 0, "days_logged": 0, "last_day": None,
+            "today": {"talk": 0, "minutes": 0}, "messages": 0, "quests_done": []}
+    data.update(load_save())
+    data["points"] = max(data["points"], TRUST_POINTS[data["trust"] - 1])  # a trust typed into save.json by hand
+    _new_day(data)
+    write_save(data)
+    return data
+
+def talked(data, message, feeling):
+    """One message from the user. feeling = how it felt to Pip: nice, neutral or rude."""
+    _new_day(data)
+    data["messages"] += 1
+    if len(re.findall(r"\w+", message)) >= 3:  # "hi", "ok", "lol" don't count
+        gain = min(TALK_POINTS.get(feeling, 1), TALK_CAP - data["today"]["talk"])
+        if gain > 0:
+            data["today"]["talk"] += gain
+            _add(data, gain)
+    write_save(data)
+
+def stayed(data, minutes):
+    """Pip has been open for this many more minutes."""
+    _new_day(data)
+    before = min(int(data["today"]["minutes"] // STAY_MINUTES), STAY_CAP)
+    data["today"]["minutes"] += minutes
+    after = min(int(data["today"]["minutes"] // STAY_MINUTES), STAY_CAP)
+    _add(data, after - before)
+    write_save(data)
+
+def quest_done(data, quest_id, points):
+    """A quest was finished (does nothing if it was already done)."""
+    if quest_id in data["quests_done"]:
+        return
+    data["quests_done"].append(quest_id)
+    _add(data, points)  # after marking it done, so a major quest opens its gate first
+    write_save(data)
+
+def stage(data):
+    return stage_of(data["trust"])
+
+def _new_day(data):
+    today = datetime.date.today().isoformat()
+    if data["last_day"] != today:
+        data["last_day"] = today
+        data["today"] = {"talk": 0, "minutes": 0}
+        data["days_logged"] += 1
+        _add(data, DAY_POINTS)
+
+def _limit(data):
+    """Most points allowed right now: just short of the next stage, if its major quest isn't done."""
+    for st, quest in sorted(MAJOR_QUESTS.items()):
+        if quest and quest not in data["quests_done"]:
+            return TRUST_POINTS[st * 2] - 1  # TRUST_POINTS[st * 2] = first trust level of the next stage
+    return float("inf")
+
+def _add(data, points):
+    data["points"] = max(data["points"], min(data["points"] + points, _limit(data)))
+    reached = sum(1 for need in TRUST_POINTS if data["points"] >= need)
+    data["trust"] = max(data["trust"], reached)  # never goes down

@@ -20,19 +20,22 @@ def new_conversation(stage=None):
         system_prompt += ("\n\n# Trust\nPip happily talks about everything written above. She also knows more "
             "that isn't written here, but she isn't ready to share it yet. If asked about it, she gently "
             "changes the subject instead of making things up.")
-    system_prompt += ("\n\n# Note\nThe first 3 exchanges in this chat are only examples of Pip's style and length. "
+    system_prompt += ("\n\n# Note\nThe first 4 exchanges in this chat are only examples of Pip's style and length. "
         "They never really happened, so never say the user already said those things.")
     return [
         {"role": "system", "content": system_prompt},
         # example exchanges: fake chat turns teach Pip her length and voice much better than
         # examples written inside the persona (tested: those got copied word for word)
         # (kept different from things the user will really say, or Pip thinks they're repeating themselves)
+        # (each ends with Pip's [nice]/[neutral]/[rude] judgement of the message, which ask() hides)
         {"role": "user", "content": "*opens the laptop*"},
-        {"role": "assistant", "content": "*stretches and yawns* Blessings of Everlily upon you! It's warm and cozy in here today."},
+        {"role": "assistant", "content": "*stretches and yawns* Blessings of Everlily upon you! It's warm and cozy in here today. [neutral]"},
         {"role": "user", "content": "your robe looks really nice"},
-        {"role": "assistant", "content": "*hides behind her sleeves* W-what? You can't just say things like that so suddenly!"},
+        {"role": "assistant", "content": "*hides behind her sleeves* W-what? You can't just say things like that so suddenly! [nice]"},
         {"role": "user", "content": "it's raining outside"},
-        {"role": "assistant", "content": "*shivers* Ugh, I hate rain... I'm glad it's warm and dry in here with you."},
+        {"role": "assistant", "content": "*shivers* Ugh, I hate rain... I'm glad it's warm and dry in here with you. [neutral]"},
+        {"role": "user", "content": "ugh you're so annoying, just be quiet"},
+        {"role": "assistant", "content": "*shrinks into her sleeves* Oh... I'm sorry. I'll be quiet for a little while, then. [rude]"},
     ]
 
 KEEP = len(new_conversation())  # system prompt + examples are never trimmed
@@ -63,9 +66,12 @@ def warm_up(messages):
         os.remove(old)
     return "read"
 
+FEELING_TAG = re.compile(r"\s*\[(nice|neutral|rude)\]", re.I)
+
 def ask(messages, question, on_text=None):
-    """Send a question, return (reply, timings). Adds both to messages = memory.
-    on_text(text) is called with each new piece of the reply as it streams in."""
+    """Send a question, return (reply, timings, feeling). Adds both to messages = memory.
+    feeling = how the question felt to Pip: "nice", "neutral" or "rude" (her hidden tag, see persona.md).
+    on_text(text) is called with each new piece of the reply as it streams in (without the tag)."""
     messages.append({"role": "user", "content": question})
 
     response = requests.post(
@@ -81,6 +87,7 @@ def ask(messages, question, on_text=None):
     )
 
     reply = ""
+    shown = 0  # how much of the reply on_text has been given
     timings = {}
     finish_reason = None
     # the server sends the reply as lines like:  data: {...json...}
@@ -95,22 +102,30 @@ def ask(messages, question, on_text=None):
         text = chunk["choices"][0]["delta"].get("content") or ""
         if text:
             reply += text
-            if on_text:
-                on_text(text)
+            visible = reply.split("[")[0]  # hold back anything from "[" on: it's probably the feeling tag
+            if on_text and len(visible) > shown:
+                on_text(visible[shown:])
+                shown = len(visible)
 
     # hit max_tokens mid-sentence: keep only the finished sentences in memory
     if finish_reason == "length":
         reply = trim_to_sentence(reply)
 
-    # remember the model's own answer
-    messages.append({"role": "assistant", "content": reply})
+    tag = FEELING_TAG.search(reply)
+    feeling = tag.group(1).lower() if tag else "neutral"
+    reply = FEELING_TAG.sub("", reply).rstrip()
+    if on_text and len(reply) > shown:  # a "[" that wasn't a tag after all: show the rest now
+        on_text(reply[shown:])
+
+    # remember the model's own answer, tag included: seeing her own tags keeps Pip adding them
+    messages.append({"role": "assistant", "content": f"{reply} [{feeling}]"})
 
     # forget the oldest chat lines when context gets too full (system prompt + examples are kept)
     if context_used(timings) > N_CTX * 0.75 and len(messages) > KEEP + 2:
         messages.pop(KEEP)  # oldest question
         messages.pop(KEEP)  # and its answer
 
-    return reply, timings
+    return reply.strip(), timings, feeling
 
 def context_used(timings):
     # how full the context is = cached tokens + newly read tokens + reply tokens
