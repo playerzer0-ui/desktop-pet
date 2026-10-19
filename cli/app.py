@@ -73,6 +73,8 @@ class App:
         elif cmd == "/stats":
             self.verbose = not self.verbose
             console.print(f"[dim]  reply timings {'on' if self.verbose else 'off'}[/]")
+        elif cmd == "/memories":
+            console.print(ui.memories(self.s.memories))
         elif cmd == "/clear":
             console.clear()
             console.print(ui.header(self.s.save))
@@ -101,7 +103,6 @@ class App:
                 console.print(ui.you(text))
                 asyncio.create_task(self.pip("user", self.s.user_says, text))
             ticker.cancel()
-        console.print("[dim]  Pip dreamwalks home. She'll be here when you come back.[/] [flame]✻[/]")
 
 def main():
     with console.status(f"[{ui.GOLD}]Waking up Pip…", spinner="dots", spinner_style=ui.GOLD):
@@ -113,4 +114,8 @@ def main():
     try:
         asyncio.run(App(session).run())
     finally:
-        session.close()
+        with console.status(f"[{ui.GOLD}]Pip is writing in her diary…", spinner="dots", spinner_style=ui.GOLD):
+            notes = session.close()
+        if notes:
+            console.print(ui.diary(notes))
+        console.print("[dim]  Pip dreamwalks home. She'll be here when you come back.[/] [flame]✻[/]")

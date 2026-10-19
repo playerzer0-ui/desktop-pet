@@ -6,17 +6,18 @@ The CLI (cli/) draws it today; the desktop pet can drive the exact same thing la
     turn = s.user_says("hi")     # your message -> her reply
     turn = s.tick()              # call every few seconds: she may speak up on her own (or None)
                                  # (or split it: what = s.wants_to_speak(), then s.speak(*what))
-    s.close()                    # counts the last stretch of time spent together
+    notes = s.close()            # counts the last stretch of time, and Pip writes in her diary (see memory.py)
 
 Every call takes an optional on_text(piece) to stream her reply as it's written.
 """
 import time
 from dataclasses import dataclass
-import trust
+import memory, quests, trust
 from idle import Idle
 from quests import Quests
 from load import start_server, N_CTX
 from pet import new_conversation, ask, context_used, warm_up
+from save import write_save
 
 @dataclass
 class Turn:
@@ -45,6 +46,10 @@ class Session:
         self.save = trust.start()  # counts today as a day logged
         self.opened = time.time()  # for "duration of stay"
         self.messages = new_conversation(stage=trust.stage(self.save))
+        remembered = memory.as_message(self.save)  # her memories of you from earlier visits
+        if remembered:
+            self.messages.append(remembered)
+        self.keep = len(self.messages)  # never forgotten during the sitting; the chat starts after these
         t0 = time.time()
         self.prompt_was = warm_up(self.messages)  # "read" (slow, first time since persona/lore changed) or "loaded"
         self.warm_up_seconds = time.time() - t0
@@ -76,7 +81,16 @@ class Session:
         return self._turn(direction, kind, on_text)
 
     def close(self):
+        """End of the sitting. Returns the diary notes Pip wrote about you (may be empty). Takes a few seconds."""
         self._count_stay()
+        notes = memory.write_diary(self.save, self.messages, self.keep)
+        if notes:
+            write_save(self.save)
+        return notes
+
+    @property
+    def memories(self):
+        return self.save.get("memories", [])
 
     @property
     def quest_waiting(self):
@@ -85,14 +99,17 @@ class Session:
     def _turn(self, text, kind, on_text):
         trust_before, points_before = self.save["trust"], self.save["points"]
         t0 = time.time()
-        reply, timings, feeling = ask(self.messages, text, on_text=on_text)
-        done = False
+        reply, timings, feeling = ask(self.messages, text, on_text=on_text, keep=self.keep)
+        done = None
         if kind == "user":  # Pip talking on her own earns nothing
             trust.talked(self.save, text, feeling)
             done = self.quests.answered(self.save, text, feeling)
+            if done:
+                memory.remember_answer(self.save, quests.topic(done), text)
+                write_save(self.save)
         self._count_stay()
         return Turn(reply, kind, feeling if kind == "user" else None, time.time() - t0, timings,
-                    trust_before, self.save["trust"], points_before, self.save["points"], done)
+                    trust_before, self.save["trust"], points_before, self.save["points"], bool(done))
 
     def _count_stay(self):
         trust.stayed(self.save, (time.time() - self.opened) / 60)

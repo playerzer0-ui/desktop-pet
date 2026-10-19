@@ -20,7 +20,7 @@ def new_conversation(stage=None):
         system_prompt += ("\n\n# Trust\nPip happily talks about everything written above. She also knows more "
             "that isn't written here, but she isn't ready to share it yet. If asked about it, she gently "
             "changes the subject instead of making things up.")
-    system_prompt += ("\n\n# Note\nThe first 4 exchanges in this chat are only examples of Pip's style and length. "
+    system_prompt += ("\n\n# Note\nThe first 5 exchanges in this chat are only examples of Pip's style and length. "
         "They never really happened, so never say the user already said those things.")
     return [
         {"role": "system", "content": system_prompt},
@@ -36,42 +36,56 @@ def new_conversation(stage=None):
         {"role": "assistant", "content": "*shivers* Ugh, I hate rain... I'm glad it's warm and dry in here with you. [neutral]"},
         {"role": "user", "content": "ugh you're so annoying, just be quiet"},
         {"role": "assistant", "content": "*shrinks into her sleeves* Oh... I'm sorry. I'll be quiet for a little while, then. [rude]"},
+        # (she can't touch the user: when she reaches out anyway, she bumps into the screen)
+        {"role": "user", "content": "the printer jammed three times today"},
+        {"role": "assistant", "content": "*reaches out to pat your head, and her hand bumps against the screen* Ah! Oops... I forgot I can't reach you from here. Poor you, three times is just cruel. [neutral]"},
     ]
 
 KEEP = len(new_conversation())  # system prompt + examples are never trimmed
 
 def warm_up(messages):
-    """Get the server to read the system prompt + examples before the first question.
-    The first time, it reads them (~20 s on CPU) and saves what it read to cache/.
-    After that, it just loads the file (~1 s). Editing persona or lore changes the prompt,
-    so it's read fresh once and saved under a new name. Returns "loaded" or "read"."""
-    # the exact text every request in this conversation starts with: everything before the first question
-    marker = "PIP_FIRST_QUESTION"
+    """Get the server to read the system prompt + examples (+ anything after them, like memories)
+    before the first question.
+    The system prompt + examples (the first KEEP messages) are read once (~20 s on CPU) and saved to cache/.
+    After that, they're just loaded from the file (~1 s). Editing persona or lore changes them,
+    so they're read fresh once and saved under a new name. Anything after them (Pip's memories,
+    which change often) is read on top each time: only a few lines, so it's quick.
+    Returns "loaded" or "read" (whether the cached part was loaded or had to be read)."""
+    cached = prefix_of(messages[:KEEP])  # the part that rarely changes
+    everything = prefix_of(messages)
+
+    name = hashlib.sha256(f"{os.path.basename(MODEL)} {N_CTX}\n{cached}".encode()).hexdigest()[:16] + ".bin"
+    how = "read"
+    if os.path.exists(os.path.join(CACHE_DIR, name)) and \
+            requests.post(f"{SERVER}/slots/0?action=restore", json={"filename": name}).ok:
+        how = "loaded"
+    else:  # (also when a llama-server update made an old cache file unreadable: then just read it again)
+        requests.post(f"{SERVER}/completion", json={"prompt": cached, "n_predict": 0, "cache_prompt": True})
+        requests.post(f"{SERVER}/slots/0?action=save", json={"filename": name})
+        # keep only the newest few files (one per trust stage is all that's ever useful)
+        for old in sorted(glob.glob(os.path.join(CACHE_DIR, "*.bin")), key=os.path.getmtime)[:-5]:
+            os.remove(old)
+
+    if everything != cached:  # read the memories on top of the cached part
+        requests.post(f"{SERVER}/completion", json={"prompt": everything, "n_predict": 0, "cache_prompt": True})
+    return how
+
+def prefix_of(messages):
+    """The exact text a request starts with when it holds these messages: everything before the next question."""
+    marker = "PIP_NEXT_QUESTION"
     full = requests.post(f"{SERVER}/apply-template", json={
         "messages": messages + [{"role": "user", "content": marker}],
         "chat_template_kwargs": {"enable_thinking": False},
     }).json()["prompt"]
-    prefix = full[:full.rindex("<|im_start|>", 0, full.index(marker))]  # cut where the question's turn begins
-
-    name = hashlib.sha256(f"{os.path.basename(MODEL)} {N_CTX}\n{prefix}".encode()).hexdigest()[:16] + ".bin"
-    if os.path.exists(os.path.join(CACHE_DIR, name)):
-        if requests.post(f"{SERVER}/slots/0?action=restore", json={"filename": name}).ok:
-            return "loaded"
-        # (a llama-server update can make old cache files unreadable: then just read it again)
-
-    requests.post(f"{SERVER}/completion", json={"prompt": prefix, "n_predict": 0, "cache_prompt": True})
-    requests.post(f"{SERVER}/slots/0?action=save", json={"filename": name})
-    # keep only the newest few files (one per trust stage is all that's ever useful)
-    for old in sorted(glob.glob(os.path.join(CACHE_DIR, "*.bin")), key=os.path.getmtime)[:-5]:
-        os.remove(old)
-    return "read"
+    return full[:full.rindex("<|im_start|>", 0, full.index(marker))]  # cut where the question's turn begins
 
 FEELING_TAG = re.compile(r"\s*\[(nice|neutral|rude)\]", re.I)
 
-def ask(messages, question, on_text=None):
+def ask(messages, question, on_text=None, keep=KEEP):
     """Send a question, return (reply, timings, feeling). Adds both to messages = memory.
     feeling = how the question felt to Pip: "nice", "neutral" or "rude" (her hidden tag, see persona.md).
-    on_text(text) is called with each new piece of the reply as it streams in (without the tag)."""
+    on_text(text) is called with each new piece of the reply as it streams in (without the tag).
+    keep = how many messages at the start are never forgotten (system prompt + examples, + memories if any)."""
     messages.append({"role": "user", "content": question})
 
     response = requests.post(
@@ -120,10 +134,10 @@ def ask(messages, question, on_text=None):
     # remember the model's own answer, tag included: seeing her own tags keeps Pip adding them
     messages.append({"role": "assistant", "content": f"{reply} [{feeling}]"})
 
-    # forget the oldest chat lines when context gets too full (system prompt + examples are kept)
-    if context_used(timings) > N_CTX * 0.75 and len(messages) > KEEP + 2:
-        messages.pop(KEEP)  # oldest question
-        messages.pop(KEEP)  # and its answer
+    # forget the oldest chat lines when context gets too full (the first `keep` messages stay)
+    if context_used(timings) > N_CTX * 0.75 and len(messages) > keep + 2:
+        messages.pop(keep)  # oldest question
+        messages.pop(keep)  # and its answer
 
     return reply.strip(), timings, feeling
 

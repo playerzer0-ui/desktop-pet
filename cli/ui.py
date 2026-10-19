@@ -55,6 +55,7 @@ def header(save, prompt_note=None):
     rows.add_row("points", Text(goal))
     rows.add_row("together", Text(f"{save['days_logged']} day(s) · {save['messages']} messages"))
     rows.add_row("quests", Text(f"{len(save['quests_done'])} finished"))
+    rows.add_row("memories", Text(f"{len(save.get('memories', []))} · /memories to read them"))
     body = Group(info, rows)
     grid = Table.grid(padding=(0, 3))
     grid.add_row(art(), body)
@@ -167,8 +168,29 @@ def toolbar(save, n_ctx, ctx_used, busy_since, verb, now, quest_waiting):
 
 HELP = [("/status", "trust, points and today's progress"),
         ("/stats", "show or hide reply timings (for testing)"),
+        ("/memories", "what Pip remembers about you, and when"),
         ("/clear", "clear the screen"),
         ("/exit", "close Pip (Ctrl+D works too)")]
+
+def memories(entries):
+    """Everything Pip remembers, oldest first, with when each memory was made."""
+    if not entries:
+        return Text("  Pip has no memories of you yet. Answer her questions, and talk a while before you close her.", style="dim")
+    rows = Table.grid(padding=(0, 2))
+    rows.add_column(style="dim", no_wrap=True)
+    rows.add_column(no_wrap=True)
+    rows.add_column()
+    for m in entries:
+        icon = Text("◇", style="flame") if m["kind"] == "world" else Text("✎", style="robe")
+        rows.add_row(m["when"], icon, Text(m["text"]))
+    return Panel.fit(rows, title=Text("what Pip remembers", style=f"bold {GOLD}"), title_align="left",
+                     box=box.ROUNDED, border_style="dim", padding=(0, 2))
+
+def diary(notes):
+    """The notes Pip just wrote at the end of the sitting."""
+    body = Group(*[Text("✎ ", style="robe") + Text(n["text"]) for n in notes])
+    return Panel.fit(body, title=Text(f"Pip's diary · {notes[0]['when']}", style=f"bold {LAVENDER}"),
+                     title_align="left", box=box.ROUNDED, border_style="robe", padding=(0, 2))
 
 def help_panel():
     rows = Table.grid(padding=(0, 3))

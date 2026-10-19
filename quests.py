@@ -57,14 +57,18 @@ class Quests:
                          f"She asks the user about {topic}.")
 
     def answered(self, save, message, feeling):
-        """Call with each user message. Returns True if it finished the quest Pip was waiting on."""
+        """Call with each user message. Returns the quest id if it finished the quest Pip was waiting on, else None."""
         if not self.pending:
-            return False
+            return None
         quest_id, asked = self.pending
         self.pending = None  # one chance: a non-answer drops it (she can ask again another time)
         if (time.time() - asked > ANSWER_WITHIN * 60 or feeling == "rude"
                 or len(re.findall(r"\w+", message)) < 4):
-            return False
+            return None
         save["today"]["quests"] = save["today"].get("quests", 0) + 1
         trust.quest_done(save, quest_id, POINTS)
-        return True
+        return quest_id
+
+def topic(quest_id):
+    """What a world quest asked about, like "whether it rains a lot in the user's world, ..."."""
+    return next(t for q, _, t in WORLD if "world-" + q == quest_id)
