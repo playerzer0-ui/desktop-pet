@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QWidget
 from load import HERE
 
 SPRITES = os.path.join(HERE, "character", "pip", "sprites")
-SCALE = 3                    # 64px sprites drawn at 192px, crisp (no smoothing)
+SCALE = 2                    # 64px sprites drawn at 192px, crisp (no smoothing)
 SIZE = 64 * SCALE
 W, H = SIZE + 80, SIZE + 60  # the window is a little bigger than her, so stretching and hopping never clip
 FEET = H - 8                 # where her feet touch the floor, inside the window
