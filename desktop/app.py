@@ -9,12 +9,15 @@ import sys, time
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
 import trust
+from desktop import moves
 from desktop.body import Body
 from desktop.brain import Brain
 from desktop.bubble import Bubble, InputBox, GOLD, ROSE, GRAY
 
 TICK_MS = 5000       # how often she checks whether she wants to speak up on her own
-SQUISH_EVERY = 0.13  # seconds between talking squishes (one per bit of speech, but not faster than this)
+SQUISH_EVERY = 0.13  # seconds between talking squishes (one per few letters typed, but not faster than this)
+MOOD_SECONDS = {"happy": 15}  # after she stops talking, a mood lasts this long before she's back to neutral
+MOOD_DEFAULT_SECONDS = 35     # (any mood not listed)
 STAGES = {1: "Guarded caretaker", 2: "Learning to receive", 3: "Admitting the silence",
           4: "Naming why she left", 5: "The free blessing"}  # from character/pip/events.md
 
@@ -24,12 +27,16 @@ class App:
         self.ready = False
         self.leaving = False
         self.last_squish = 0.0
+        self.acted = False  # an *action* in her current reply got its own move (else her mood picks one)
 
         self.body.moved.connect(self.follow)
         self.body.clicked.connect(self.talk)
         self.body.menu_requested.connect(self.menu)
         self.input.submitted.connect(self.send)
         self.input.closed.connect(self.release)
+        self.bubble.typed.connect(self.on_typed)
+        self.bubble.acted.connect(self.on_acted)
+        self.bubble.done.connect(self.on_done)
         self.brain.ready.connect(self.on_ready)
         self.brain.speaking.connect(self.on_speaking)
         self.brain.piece.connect(self.on_piece)
@@ -38,7 +45,7 @@ class App:
         self.brain.failed.connect(self.on_failed)
 
         self.ticker = QTimer(timeout=self.tick)
-        self.release_timer = QTimer(singleShot=True, timeout=self.release)
+        self.calm_down = QTimer(singleShot=True, timeout=lambda: self.body.set_mood("neutral"))
 
         self.body.show()
         self.follow()
@@ -56,14 +63,16 @@ class App:
         self.follow()
 
     def send(self, text):
+        self.follow()  # the input box just closed: the bubble goes back to just above her head
         if not self.ready:
             self.bubble.say("*still waking up…*", stay=3)
+            self.release()
             return
         self.brain.say(text)
 
     def release(self):
         """Let her wander again, unless you're typing or she's still talking."""
-        if not self.input.isVisible() and not self.brain.busy:
+        if not self.input.isVisible() and not self.brain.busy and not self.bubble.active:
             self.body.hold(False)
 
     def menu(self, where):
@@ -120,20 +129,47 @@ class App:
 
     def on_speaking(self, kind):
         self.body.hold(True)
-        self.release_timer.stop()
+        self.body.think(True)  # a "…" thought icon until her first words show up
+        self.calm_down.stop()
+        self.acted = False
         self.bubble.start()
         self.follow()
 
     def on_piece(self, piece):
-        self.bubble.add(piece)
+        self.bubble.add(piece)  # (queued: the bubble shows it a sentence at a time, at reading pace)
         self.follow()
+
+    def on_acted(self, action):
+        """She does an *action* (it's not shown as text): act it out with a move and an emote."""
+        self.body.think(False)
+        move, emote = moves.for_action(action)
+        if move:
+            self.acted = True
+            self.body.play(move)
+        self.body.emote(emote)
+
+    def on_typed(self):
+        self.body.think(False)
         now = time.time()
-        if now - self.last_squish > SQUISH_EVERY:  # she squishes as she talks
+        if now - self.last_squish > SQUISH_EVERY:  # she squishes as her words appear
             self.last_squish = now
             self.body.squish(0.7)
+        self.follow()
+
+    def on_done(self):
+        """Her whole reply has been read: she can wander again, and her mood slowly settles back to neutral."""
+        self.release()
+        if self.body.mood != "neutral":
+            self.calm_down.start(MOOD_SECONDS.get(self.body.mood, MOOD_DEFAULT_SECONDS) * 1000)
 
     def on_spoke(self, turn):
         self.body.set_mood(turn.mood)
+        move, emote = moves.MOOD_MOVES.get(turn.mood, (None, None))
+        if not self.acted and move:  # no action of hers matched a move: show how she feels instead
+            self.body.play(move)
+        if turn.feeling == "nice":
+            emote = "heart"  # you were kind to her
+        self.body.emote(emote)
         notes = []
         if turn.kind == "quest":
             notes.append(self._note("✦ She's curious about your world. Answer her to earn her trust!", GOLD))
@@ -144,9 +180,7 @@ class App:
         if turn.stage_up:
             notes.append(self._note(f"✻ Stage {trust.stage_of(turn.trust_after)}: she'll open up more next time", ROSE))
         self.bubble.finish("<br>".join(notes))
-        self.body.squish(1.0)
         self.follow()
-        self.release_timer.start(int((4 + len(turn.reply) / 14) * 1000))  # stand still while you read
 
     def on_closed(self, notes):
         said = f"✎ She'll remember {len(notes)} new thing{'s' if len(notes) != 1 else ''} from today" if notes else ""
@@ -164,7 +198,7 @@ class App:
     # --- every few seconds, and whenever she moves ---
 
     def tick(self):
-        if self.ready and not self.leaving and not self.input.isVisible():
+        if self.ready and not self.leaving and not self.input.isVisible() and not self.bubble.active:
             self.brain.tick()
 
     def follow(self):

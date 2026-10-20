@@ -2,19 +2,22 @@
 
 Everything moves with squash and stretch, like the units in King God Castle:
     walking   little hops: squashed flat as she lands, stretched tall in the air
-    talking   a squish for every bit of speech that arrives (call squish())
-    standing  a slow breathing bob
+    talking   a squish for every few letters she says (call squish())
+    standing  breathing and fidgeting that changes with her mood (moves.idle_shape)
+    acting    one-off moves for her *actions*: hop, bow, shiver, bonk... (call play(); see moves.py)
     dropped   if you drag her somewhere, she falls back to the floor and lands with a squash
+Little emote icons pop up beside her head (call emote()): ♥ ! ? ♪ sweat, anger, zzz, ✦, and … while she thinks.
 She wanders along the bottom of the screen on her own, and stops while she's talking or you're typing.
 """
 import math, os, random, time
-from PySide6.QtCore import QPoint, QPointF, Qt, QTimer, Signal
-from PySide6.QtGui import QGuiApplication, QPainter, QPixmap
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 from load import HERE
+from desktop import moves
 
 SPRITES = os.path.join(HERE, "character", "pip", "sprites")
-SCALE = 2                    # 64px sprites drawn at 192px, crisp (no smoothing)
+SCALE = 2                    # 64px sprites drawn at SCALE times their size, crisp (no smoothing)
 SIZE = 64 * SCALE
 W, H = SIZE + 80, SIZE + 60  # the window is a little bigger than her, so stretching and hopping never clip
 FEET = H - 8                 # where her feet touch the floor, inside the window
@@ -25,6 +28,56 @@ HOP = 10                     # how high each hop goes, in pixels
 SQUASH = 0.11                # how much a hop squashes / stretches her
 IDLE_SECONDS = (4, 12)       # how long she stands around before wandering again
 GRAVITY = 2600               # pixels per second², when she's dropped
+
+EMOTE_SECONDS = 1.8
+INK = "#3B3049"
+
+def _glyph(text, color, size=1.0, font="Segoe UI Symbol"):
+    def draw(painter, cx, cy, r, now):
+        painter.setPen(QColor(color))
+        painter.setFont(QFont(font, max(6, int(r * 0.95 * size)), QFont.Bold))
+        painter.drawText(QRectF(cx - r, cy - r, 2 * r, 2 * r), Qt.AlignCenter, text)
+    return draw
+
+def _sweat(painter, cx, cy, r, now):
+    drop = QPainterPath()
+    drop.moveTo(cx, cy - r * 0.65)
+    drop.cubicTo(cx + r * 0.6, cy + r * 0.1, cx + r * 0.45, cy + r * 0.6, cx, cy + r * 0.6)
+    drop.cubicTo(cx - r * 0.45, cy + r * 0.6, cx - r * 0.6, cy + r * 0.1, cx, cy - r * 0.65)
+    painter.setPen(QPen(QColor("#2E6FB0"), 1.5))
+    painter.setBrush(QColor("#7FC3F0"))
+    painter.drawPath(drop)
+
+def _anger(painter, cx, cy, r, now):
+    painter.setPen(QPen(QColor("#D23C3C"), max(2.0, r * 0.18), Qt.SolidLine, Qt.RoundCap))
+    painter.setBrush(Qt.NoBrush)
+    g, s = r * 0.18, r * 0.5
+    for fx, fy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):  # four little bulging corners
+        corner = QPainterPath()
+        corner.moveTo(cx + fx * g, cy + fy * s)
+        corner.quadTo(cx + fx * g, cy + fy * g, cx + fx * s, cy + fy * g)
+        painter.drawPath(corner)
+
+def _think(painter, cx, cy, r, now):
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor("#8A8296"))
+    shown = int(now * 3) % 4  # 0 to 3 dots, over and over
+    for i in range(shown):
+        painter.drawEllipse(QPointF(cx + (i - 1) * r * 0.55, cy + r * 0.1), r * 0.16, r * 0.16)
+
+def _dizzy(painter, cx, cy, r, now):
+    painter.save()
+    painter.translate(cx, cy)
+    painter.rotate(now * 360 % 360)
+    _glyph("✦", "#E8B04B")(painter, 0, 0, r, now)
+    painter.restore()
+
+EMOTES = {
+    "heart": _glyph("♥", "#E0507A"), "exclaim": _glyph("!", "#E07A1F", font="Segoe UI"),
+    "question": _glyph("?", "#7A5BC8", font="Segoe UI"), "note": _glyph("♪", "#C8902E"),
+    "zzz": _glyph("z", "#4A7FC8", 0.85, font="Segoe UI"), "sparkle": _glyph("✦", "#E8B04B"),
+    "sweat": _sweat, "anger": _anger, "think": _think, "dizzy": _dizzy,
+}
 
 class Body(QWidget):
     clicked = Signal()               # left click (without dragging)
@@ -51,6 +104,9 @@ class Body(QWidget):
         self.pulse_at = -10.0        # when the last squish started
         self.pulse_size = 0.0
         self.drag_from = None
+        self.move_name, self.move_at = None, 0.0    # the one-off move playing (see moves.PRESETS)
+        self.emote_name, self.emote_at = None, 0.0  # the emote icon showing
+        self.thinking = False                       # shows a "…" thought icon while the model writes
 
         self.last = time.time()
         self.timer = QTimer(self)
@@ -68,6 +124,24 @@ class Body(QWidget):
     def squish(self, size=1.0):
         """A quick squash-and-bounce, like a little jelly wobble (used while she talks)."""
         self.pulse_at, self.pulse_size = time.time(), size
+
+    def play(self, name):
+        """Play one of moves.PRESETS (hop, bow, shiver, bonk...)."""
+        if name in moves.PRESETS:
+            self.move_name, self.move_at = name, time.time()
+
+    def emote(self, name):
+        """Pop up an emote icon beside her head: heart, exclaim, question, note, sweat, anger, zzz, sparkle, dizzy."""
+        if name:
+            self.emote_name, self.emote_at = name, time.time()
+
+    def think(self, on):
+        """Show (or stop showing) the "…" thought icon while the model is writing her reply."""
+        if on and not self.thinking:
+            self.emote_name, self.emote_at = "think", time.time()
+        elif not on and self.emote_name == "think":
+            self.emote_name = None
+        self.thinking = on
 
     def head(self):
         """The screen point just above her head (where the speech bubble's tail points)."""
@@ -120,12 +194,12 @@ class Body(QWidget):
             self.moved.emit()
 
     def _shape(self):
-        """(stretch sideways, stretch upward, lift off the floor) for this moment."""
+        """(stretch sideways, stretch upward, tilt in degrees, shift right, shift down) for this moment."""
         sx = sy = 1.0
-        lift = 0.0
+        rot = dx = dy = 0.0
         if self.mode == "walk":
             t = self.phase % 1                          # 0 = landing, 0.5 = top of the hop
-            lift = HOP * math.sin(math.pi * t)
+            dy = -HOP * math.sin(math.pi * t)
             c = math.cos(2 * math.pi * t)               # 1 when landing (squash), -1 in the air (stretch)
             sx, sy = 1 + SQUASH * c, 1 - SQUASH * c
         elif self.mode == "drag":
@@ -133,24 +207,62 @@ class Body(QWidget):
         elif self.mode == "fall":
             sx, sy = 0.9, 1.12
         else:
-            b = math.sin(2 * math.pi * time.time() / 2.6)  # breathing
-            sx, sy = 1 - 0.015 * b, 1 + 0.015 * b
+            sx, sy, rot, dx, dy = moves.idle_shape(self.mood, time.time())
+
+        if self.move_name:                              # a one-off move on top
+            seconds, shape = moves.PRESETS[self.move_name]
+            progress = (time.time() - self.move_at) / seconds
+            if progress >= 1:
+                self.move_name = None
+            else:
+                msx, msy, mrot, mdx, mdy = shape(progress)
+                k = SCALE / 3                           # (moves are measured at 3x size)
+                sx, sy, rot, dx, dy = sx * msx, sy * msy, rot + mrot, dx + mdx * k, dy + mdy * k
 
         age = time.time() - self.pulse_at               # a squish: squash, then a small bounce back
         if age < 0.6:
             p = self.pulse_size * math.exp(-6 * age) * math.cos(18 * age)
             sx, sy = sx * (1 + 0.12 * p), sy * (1 - 0.14 * p)
-        return sx, sy, lift
+        return sx, sy, rot, dx, dy
 
     def paintEvent(self, _):
-        sx, sy, lift = self._shape()
+        sx, sy, rot, dx, dy = self._shape()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.SmoothPixmapTransform, False)  # keep the pixel art crisp
-        painter.translate(W / 2, FEET - lift)                         # her feet are the anchor point
+        painter.save()
+        painter.translate(W / 2 + dx, FEET + dy)                      # her feet are the anchor point
+        painter.rotate(rot)
         painter.scale(sx * (-1 if self.facing < 0 and self.mode == "walk" else 1), sy)
         sprite = self.sprites.get(self.mood) or self.sprites["neutral"]
         painter.drawPixmap(QPointF(-SIZE / 2, -SIZE), sprite)
+        painter.restore()
+        self._draw_emote(painter, dx, dy)
         painter.end()
+
+    # --- emote icons ---
+
+    def _draw_emote(self, painter, dx, dy):
+        now = time.time()
+        if self.thinking:
+            name, age = "think", now - self.emote_at if self.emote_name == "think" else 1.0
+        elif self.emote_name and now - self.emote_at < EMOTE_SECONDS:
+            name, age = self.emote_name, now - self.emote_at
+        else:
+            return
+        pop = min(1.0, age / 0.12) * (1 + 0.25 * math.sin(math.pi * min(1.0, age / 0.3)))  # pops in, overshoots
+        fade = 1.0 if name == "think" else max(0.0, min(1.0, (EMOTE_SECONDS - age) / 0.4))
+        r = 11 * SCALE / 2 * pop                                   # badge radius
+        cx = W / 2 + dx + SIZE * 0.34                              # beside her head, on the right
+        cy = FEET + dy - SIZE * 0.86 - 6 * min(1.0, age / EMOTE_SECONDS)  # floats up a little
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setOpacity(fade)
+        painter.setPen(QPen(QColor(INK), 2))
+        painter.setBrush(QColor("#FFFDF7"))
+        painter.drawEllipse(QPointF(cx, cy), r, r)
+        draw = EMOTES.get(name)
+        if draw:
+            draw(painter, cx, cy, r, now)
+        painter.setOpacity(1.0)
 
     # --- the mouse: click to talk, right click for the menu, drag to move her ---
 
@@ -174,6 +286,9 @@ class Body(QWidget):
         if e.button() != Qt.LeftButton or self.drag_from is None:
             return
         self.drag_from = None
+        self.move_name, self.move_at = None, 0.0    # the one-off move playing (see moves.PRESETS)
+        self.emote_name, self.emote_at = None, 0.0  # the emote icon showing
+        self.thinking = False                       # shows a "…" thought icon while the model writes
         if self.mode == "drag":
             self.mode, self.vy = "fall", 0.0
         else:

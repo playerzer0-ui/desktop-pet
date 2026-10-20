@@ -30,7 +30,7 @@ def new_conversation(stage=None):
         # (each ends with Pip's [nice]/[neutral]/[rude] judgement of the message and her [mood: ...],
         #  which ask() hides; the moods are varied on purpose so she uses more than "happy")
         {"role": "user", "content": "*opens the laptop*"},
-        {"role": "assistant", "content": "*stretches and yawns* Blessings of Everlily upon you! It's warm and cozy in here today. [neutral] [mood: happy]"},
+        {"role": "assistant", "content": "*stretches and yawns* Blessings of Everlily upon you! It's warm and cozy in here today. [neutral] [mood: neutral]"},
         {"role": "user", "content": "your robe looks really nice"},
         {"role": "assistant", "content": "*hides behind her sleeves* W-what? You can't just say things like that so suddenly! [nice] [mood: happy]"},
         {"role": "user", "content": "it's raining outside"},

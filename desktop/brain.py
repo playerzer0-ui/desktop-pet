@@ -69,5 +69,11 @@ class Brain(QObject):
 
     def _speak(self, kind, call, *args):
         self.speaking.emit(kind)
-        turn = call(*args, on_text=self.piece.emit)
+
+        def on_text(piece):
+            if piece is None:  # the server had to be restarted: her reply starts over
+                self.speaking.emit(kind)
+            else:
+                self.piece.emit(piece)
+        turn = call(*args, on_text=on_text)
         self.spoke.emit(turn)

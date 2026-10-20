@@ -41,7 +41,8 @@ class App:
             console.print()
 
     def add_words(self, piece):
-        self.writing += piece  # (called from the model thread; the screen redraws on its own every 0.15 s)
+        # (called from the model thread; the screen redraws on its own every 0.15 s)
+        self.writing = "" if piece is None else self.writing + piece  # None: the server restarted, her reply starts over
 
     async def ticker(self):
         while True:

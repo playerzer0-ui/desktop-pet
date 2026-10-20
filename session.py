@@ -11,6 +11,7 @@ The CLI (cli/) draws it today; the desktop pet can drive the exact same thing la
 Every call takes an optional on_text(piece) to stream her reply as it's written.
 """
 import datetime, time
+import requests
 from dataclasses import dataclass
 import events, memory, quests, trust
 from idle import Idle, direction
@@ -43,6 +44,7 @@ class Turn:
 
 class Session:
     def __init__(self, say=print):
+        self.say = say
         start_server(say)
         self.save = trust.start()  # counts today as a day logged
         self.opened = time.time()  # for "duration of stay"
@@ -107,7 +109,16 @@ class Session:
     def _turn(self, text, kind, on_text):
         trust_before, points_before = self.save["trust"], self.save["points"]
         t0 = time.time()
-        reply, timings, feeling, mood = ask(self.messages, text, on_text=on_text, keep=self.keep)
+        try:
+            reply, timings, feeling, mood = ask(self.messages, text, on_text=on_text, keep=self.keep)
+        except requests.ConnectionError:
+            # the server went away (e.g. another copy of Pip that owned it was closed): start it again and retry once
+            if self.messages and self.messages[-1] == {"role": "user", "content": text}:
+                self.messages.pop()  # that question never got an answer
+            self.reconnect()
+            if on_text:
+                on_text(None)  # tells the screen to start her reply over
+            reply, timings, feeling, mood = ask(self.messages, text, on_text=on_text, keep=self.keep)
         self.save["mood"] = mood or self.mood  # (events.py checks it: some events wait for the right mood)
         done = None
         if kind == "user":  # Pip talking on her own earns nothing
@@ -129,6 +140,11 @@ class Session:
         events.told(today, self.save, news)
         write_save(self.save)
         return news["text"]
+
+    def reconnect(self):
+        """Start llama-server again if it's gone, and get her prompt (and this sitting's chat) back into it."""
+        start_server(self.say)
+        warm_up(self.messages)
 
     def _count_stay(self):
         trust.stayed(self.save, (time.time() - self.opened) / 60)
