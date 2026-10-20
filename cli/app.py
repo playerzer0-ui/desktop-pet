@@ -1,6 +1,6 @@
 """The terminal app: welcome box, an input line, and Pip speaking up on her own while you type.
 
-    python main.py
+    python desktop_cli.py
 """
 import asyncio, functools, random, time
 from prompt_toolkit import PromptSession

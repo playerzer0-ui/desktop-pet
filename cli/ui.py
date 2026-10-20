@@ -113,6 +113,7 @@ def turn(t, verbose=False):
         notes.append("asked about your world")
     elif t.kind == "opening":
         notes.append("woke up")
+    notes.append(f"mood {t.mood}")
     if gained:
         notes.append(f"+{gained} trust point{'s' if gained > 1 else ''}")
     if verbose:

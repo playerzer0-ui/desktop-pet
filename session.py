@@ -24,6 +24,7 @@ class Turn:
     reply: str
     kind: str              # "opening", "user" (her answer to you), "idle" (spoke on her own) or "quest" (asked one)
     feeling: str | None    # how your message felt to her: nice / neutral / rude (only for kind="user")
+    mood: str              # how she feels now: one of pet.MOODS (each has a sprite in character/pip/sprites/)
     seconds: float
     timings: dict          # llama-server's stats for this reply
     trust_before: int
@@ -96,13 +97,18 @@ class Session:
         return self.save.get("memories", [])
 
     @property
+    def mood(self):
+        return self.save.get("mood") or "neutral"
+
+    @property
     def quest_waiting(self):
         return self.quests.pending is not None
 
     def _turn(self, text, kind, on_text):
         trust_before, points_before = self.save["trust"], self.save["points"]
         t0 = time.time()
-        reply, timings, feeling = ask(self.messages, text, on_text=on_text, keep=self.keep)
+        reply, timings, feeling, mood = ask(self.messages, text, on_text=on_text, keep=self.keep)
+        self.save["mood"] = mood or self.mood  # (events.py checks it: some events wait for the right mood)
         done = None
         if kind == "user":  # Pip talking on her own earns nothing
             trust.talked(self.save, text, feeling)
@@ -111,7 +117,7 @@ class Session:
                 memory.remember_answer(self.save, quests.topic(done), text)
                 write_save(self.save)
         self._count_stay()
-        return Turn(reply, kind, feeling if kind == "user" else None, time.time() - t0, timings,
+        return Turn(reply, kind, feeling if kind == "user" else None, self.mood, time.time() - t0, timings,
                     trust_before, self.save["trust"], points_before, self.save["points"], bool(done))
 
     def _news(self):

@@ -7,7 +7,7 @@ def trim_to_sentence(text):
     ends = list(re.finditer(r'[.!?…]["\'*)]*(?=\s|$)', text))
     return text[:ends[-1].end()] if ends else text
 
-# Everything that defines how Pip talks lives here, so main.py and test_pip.py use the exact same Pip.
+# Everything that defines how Pip talks lives here, so the desktop pet (main.py), the terminal (desktop_cli.py) and test_pip.py use the exact same Pip.
 
 def new_conversation(stage=None):
     """stage 1-5 = how much Pip trusts the user (from save.json if not given).
@@ -27,18 +27,19 @@ def new_conversation(stage=None):
         # example exchanges: fake chat turns teach Pip her length and voice much better than
         # examples written inside the persona (tested: those got copied word for word)
         # (kept different from things the user will really say, or Pip thinks they're repeating themselves)
-        # (each ends with Pip's [nice]/[neutral]/[rude] judgement of the message, which ask() hides)
+        # (each ends with Pip's [nice]/[neutral]/[rude] judgement of the message and her [mood: ...],
+        #  which ask() hides; the moods are varied on purpose so she uses more than "happy")
         {"role": "user", "content": "*opens the laptop*"},
-        {"role": "assistant", "content": "*stretches and yawns* Blessings of Everlily upon you! It's warm and cozy in here today. [neutral]"},
+        {"role": "assistant", "content": "*stretches and yawns* Blessings of Everlily upon you! It's warm and cozy in here today. [neutral] [mood: happy]"},
         {"role": "user", "content": "your robe looks really nice"},
-        {"role": "assistant", "content": "*hides behind her sleeves* W-what? You can't just say things like that so suddenly! [nice]"},
+        {"role": "assistant", "content": "*hides behind her sleeves* W-what? You can't just say things like that so suddenly! [nice] [mood: happy]"},
         {"role": "user", "content": "it's raining outside"},
-        {"role": "assistant", "content": "*shivers* Ugh, I hate rain... I'm glad it's warm and dry in here with you. [neutral]"},
+        {"role": "assistant", "content": "*shivers* Ugh, I hate rain... I'm glad it's warm and dry in here with you. [neutral] [mood: angry]"},
         {"role": "user", "content": "ugh you're so annoying, just be quiet"},
-        {"role": "assistant", "content": "*shrinks into her sleeves* Oh... I'm sorry. I'll be quiet for a little while, then. [rude]"},
+        {"role": "assistant", "content": "*shrinks into her sleeves* Oh... I'm sorry. I'll be quiet for a little while, then. [rude] [mood: sad]"},
         # (she can't touch the user: when she reaches out anyway, she bumps into the screen)
         {"role": "user", "content": "the printer jammed three times today"},
-        {"role": "assistant", "content": "*reaches out to pat your head, and her hand bumps against the screen* Ah! Oops... I forgot I can't reach you from here. Poor you, three times is just cruel. [neutral]"},
+        {"role": "assistant", "content": "*reaches out to pat your head, and her hand bumps against the screen* Ah! Oops... I forgot I can't reach you from here. Poor you, three times is just cruel. [neutral] [mood: worried]"},
     ]
 
 KEEP = len(new_conversation())  # system prompt + examples are never trimmed
@@ -80,10 +81,13 @@ def prefix_of(messages):
     return full[:full.rindex("<|im_start|>", 0, full.index(marker))]  # cut where the question's turn begins
 
 FEELING_TAG = re.compile(r"\s*\[(nice|neutral|rude)\]", re.I)
+MOOD_TAG = re.compile(r"\s*\[mood:\s*([a-z]+)\]", re.I)
+MOODS = {"happy", "neutral", "sad", "worried", "scared", "angry", "regretful", "nostalgic", "bored"}  # one sprite each
 
 def ask(messages, question, on_text=None, keep=KEEP):
-    """Send a question, return (reply, timings, feeling). Adds both to messages = memory.
+    """Send a question, return (reply, timings, feeling, mood). Adds both to messages = memory.
     feeling = how the question felt to Pip: "nice", "neutral" or "rude" (her hidden tag, see persona.md).
+    mood = how Pip feels after replying, one of MOODS (her second hidden tag), or None if she left it out.
     on_text(text) is called with each new piece of the reply as it streams in (without the tag).
     keep = how many messages at the start are never forgotten (system prompt + examples, + memories if any)."""
     messages.append({"role": "user", "content": question})
@@ -127,19 +131,21 @@ def ask(messages, question, on_text=None, keep=KEEP):
 
     tag = FEELING_TAG.search(reply)
     feeling = tag.group(1).lower() if tag else "neutral"
-    reply = FEELING_TAG.sub("", reply).rstrip()
+    mood_tag = MOOD_TAG.search(reply)
+    mood = mood_tag.group(1).lower() if mood_tag and mood_tag.group(1).lower() in MOODS else None
+    reply = MOOD_TAG.sub("", FEELING_TAG.sub("", reply)).rstrip()
     if on_text and len(reply) > shown:  # a "[" that wasn't a tag after all: show the rest now
         on_text(reply[shown:])
 
     # remember the model's own answer, tag included: seeing her own tags keeps Pip adding them
-    messages.append({"role": "assistant", "content": f"{reply} [{feeling}]"})
+    messages.append({"role": "assistant", "content": f"{reply} [{feeling}] [mood: {mood or 'neutral'}]"})
 
     # forget the oldest chat lines when context gets too full (the first `keep` messages stay)
     if context_used(timings) > N_CTX * 0.75 and len(messages) > keep + 2:
         messages.pop(keep)  # oldest question
         messages.pop(keep)  # and its answer
 
-    return reply.strip(), timings, feeling
+    return reply.strip(), timings, feeling, mood
 
 def context_used(timings):
     # how full the context is = cached tokens + newly read tokens + reply tokens

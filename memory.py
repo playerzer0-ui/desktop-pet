@@ -78,7 +78,7 @@ def write_diary(save, messages, start):
     pip_said = ""
     for m in messages[start:]:
         if m["role"] == "assistant":
-            pip_said = re.sub(r"\s*\[(nice|neutral|rude)\]", "", m["content"])
+            pip_said = re.sub(r"\s*\[(nice|neutral|rude|mood:\s*\w+)\]", "", m["content"])
         elif not m["content"].startswith("(No message from the user"):  # skip idle and quest stage directions
             if len(m["content"].split()) < 6 and pip_said:
                 lines.append("(Pip had said: " + pip_said + ")")

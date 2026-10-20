@@ -1,12 +1,11 @@
-﻿"""Talk to Pip in the terminal (the prototype until she becomes a real desktop pet).
+"""Pip as a desktop pet: she wanders along the bottom of your screen.
 
     python main.py
 
-The app itself lives in cli/, and everything Pip does lives in session.py.
+Click her to talk, right-click for the menu (status, memories, goodbye), drag her anywhere.
+The app itself lives in desktop/, and everything Pip does lives in session.py.
+The terminal version: python desktop_cli.py
 """
-from cli.app import main
-import os
-import subprocess
+from desktop.app import main
 
-subprocess.run(["cmd", "/c", "cls"] if os.name == "nt" else ["clear"], check=False)
 main()

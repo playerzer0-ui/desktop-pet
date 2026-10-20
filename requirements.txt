@@ -1,3 +1,4 @@
 requests>=2.32
 rich>=15.0          # the CLI's boxes and colors (cli/)
 prompt_toolkit>=3.0 # the CLI's input line, so Pip can speak while you type (cli/)
+PySide6>=6.7      # the desktop pet window (desktop/)
