@@ -1,4 +1,4 @@
-"""World events: dated days when something happens in Pip's world (character/events.md).
+"""World events: dated days when something happens in Pip's world (character/pip/events.md).
 
 Each '## Name' block there has WHEN (the date), READY (min trust, moods that hold her back) and
 CONTENT (the fact, a reaction for each trust stage, a tone note); see template.md.
@@ -52,7 +52,7 @@ def parse(text):
         })
     return found
 
-EVENTS = parse(load("character/events.md"))
+EVENTS = parse(load("character/pip/events.md"))
 
 def on(date):
     """Events that fall on this date."""

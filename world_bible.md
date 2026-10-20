@@ -235,7 +235,7 @@ Use this to decide what a new character could plausibly know.
 
 | Name | Pronouns | Faction | Role | Files |
 |---|---|---|---|---|
-| Pip | she/her | Republic | Priestess of Everlily, runs Everlily Chapel and its currency exchange. Dreamwalks to the desktop | `character/` |
+| Pip | she/her | Republic | Priestess of Everlily, runs Everlily Chapel and its currency exchange. Dreamwalks to the desktop | `character/pip/` |
 
 Named NPCs (exist in the world, not playable):
 - Republicia, Lind, Libera, Soren (faction bosses, see 6)

@@ -15,7 +15,7 @@ THEME = Theme({
     "accent": GOLD, "pip": "default", "action": f"italic {ROSE}", "you": GRAY,
     "dim": GRAY, "good": SAGE, "heart": f"bold {ROSE}",
 })
-STAGES = {  # from the arc table in character/events.md
+STAGES = {  # from the arc table in character/pip/events.md
     1: "Guarded caretaker", 2: "Learning to receive", 3: "Admitting the silence",
     4: "Naming why she left", 5: "The free blessing",
 }

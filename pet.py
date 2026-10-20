@@ -14,8 +14,8 @@ def new_conversation(stage=None):
     Lore and feelings she isn't ready to share are left out of the prompt entirely."""
     if stage is None:
         stage = stage_of(load_save()["trust"])
-    system_prompt = (for_stage(load("character/persona.md"), stage)
-        + "\n\n# Background lore\n" + for_stage(load("character/lore.md"), stage))
+    system_prompt = (for_stage(load("character/pip/persona.md"), stage)
+        + "\n\n# Background lore\n" + for_stage(load("character/pip/lore.md"), stage))
     if stage < 5:
         system_prompt += ("\n\n# Trust\nPip happily talks about everything written above. She also knows more "
             "that isn't written here, but she isn't ready to share it yet. If asked about it, she gently "

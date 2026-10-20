@@ -18,7 +18,7 @@ CLOCK = [  # (hour, minute, what she speaks up about) - checked for 30 minutes a
 TOPICS = [  # (stage it unlocks at, what she speaks up about) for quiet nudges.
     # Picked at random from her stage and below, without repeating the last few.
     # Keep them concrete: vague topics ("the weather back home") make her fall back on rain and Everlily every time.
-    # Each topic should only lean on lore/persona she has at that stage (see character/).
+    # Each topic should only lean on lore/persona she has at that stage (see character/pip/).
     # stage 1: the desktop, the user, small likes
     (1, "noticing the user is busy, and quietly keeping them company"),
     (1, "a gentle question about what the user is up to"),

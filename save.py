@@ -16,6 +16,6 @@ def write_save(data):
         json.dump(data, f, indent=2)
 
 def stage_of(trust):
-    # two trust levels per stage: 1-2 -> 1, 3-4 -> 2, ... 9-10 -> 5 (see character/events.md)
+    # two trust levels per stage: 1-2 -> 1, 3-4 -> 2, ... 9-10 -> 5 (see character/pip/events.md)
     trust = min(max(trust, 1), 10)
     return (trust + 1) // 2
