@@ -10,10 +10,10 @@ The CLI (cli/) draws it today; the desktop pet can drive the exact same thing la
 
 Every call takes an optional on_text(piece) to stream her reply as it's written.
 """
-import time
+import datetime, time
 from dataclasses import dataclass
-import memory, quests, trust
-from idle import Idle
+import events, memory, quests, trust
+from idle import Idle, direction
 from quests import Quests
 from load import start_server, N_CTX
 from pet import new_conversation, ask, context_used, warm_up
@@ -58,7 +58,7 @@ class Session:
         self.n_ctx = N_CTX
 
     def open(self, on_text=None):
-        return self._turn(self.idle.opening(), "opening", on_text)
+        return self._turn(self.idle.opening(self._news()), "opening", on_text)
 
     def user_says(self, text, on_text=None):
         self.idle.user_spoke()
@@ -74,8 +74,11 @@ class Session:
         if ask_about:
             self.idle.pip_spoke()
             return ask_about, "quest"
-        nudge = self.idle.due()
-        return (nudge, "idle") if nudge else None
+        nudge = self.idle.due(trust.stage(self.save))
+        if not nudge:
+            return None
+        news = self._news()  # a world event she hasn't told yet today takes the place of the small talk
+        return (direction(f"Pip says something on her own. {news}"), "idle") if news else (nudge, "idle")
 
     def speak(self, direction, kind, on_text=None):
         return self._turn(direction, kind, on_text)
@@ -110,6 +113,16 @@ class Session:
         self._count_stay()
         return Turn(reply, kind, feeling if kind == "user" else None, time.time() - t0, timings,
                     trust_before, self.save["trust"], points_before, self.save["points"], bool(done))
+
+    def _news(self):
+        """Today's world event, if Pip is ready to tell it and hasn't yet (marked told as it's handed out), else None."""
+        today = datetime.date.today()
+        news = events.due(today, self.save)
+        if not news:
+            return None
+        events.told(today, self.save, news)
+        write_save(self.save)
+        return news["text"]
 
     def _count_stay(self):
         trust.stayed(self.save, (time.time() - self.opened) / 60)

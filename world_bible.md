@@ -14,6 +14,7 @@ If a character needs a new world fact, add it here first, then reference it from
 - Four factions hold power: Republic, Bloodcult, Heaven, Freeport
 - Politics, corruption and conspiracy run deep everywhere
 - Knowledge is power, and it is gatekept: the fountains of knowledge are locked away by the privileged
+- Everyday technology mixes with magic: lamps that run on bottled lightning, ledgers that do their own sums, rail carriages that run on runes, letters that fly themselves to the address
 
 ## 2. Realms
 - **The world**: where every faction, god and character comes from
@@ -39,8 +40,15 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 ## 4. Recurring dates
 | Date | Event | Notes |
 |---|---|---|
+| March 3 (yearly) | Day of plenty | Republicia makes food, water and warmth free across the Republic for one day |
+| June 21 (yearly) | Lantern night | Freeport floats lanterns for ships that never came back |
 | August 14 (yearly) | The day the gods left | 10 years ago |
 | October 15 (yearly) | Sally's death anniversary | Heaven celebrates its victory publicly. The other factions keep quiet |
+| October 31 (yearly) | Long night | A night-long Bloodcult brawl; Lind resurrects everyone who falls |
+| December 21 (yearly) | First snow | Usually around this date in the Republic |
+| November 20, 2026 (once) | The ancient library is torn down | |
+| December 2, 2026 (once) | Heaven inspects the Republic trade district | Lasts a week |
+| January 18, 2027 (once) | Rumour: another fountain of knowledge destroyed | Nobody says who |
 
 ---
 

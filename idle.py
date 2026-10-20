@@ -15,15 +15,40 @@ CLOCK = [  # (hour, minute, what she speaks up about) - checked for 30 minutes a
     (18, 0, "it's evening, so she asks how the user's day went"),
     (23, 0, "it's late at night, so she gently tells the user to get some sleep"),
 ]
-TOPICS = [  # for quiet nudges, picked at random without repeating the last few
-    "something small that happened at the chapel",
-    "how warm and cozy it is on the desktop",
-    "a gentle question about what the user is up to",
-    "something small she's looking forward to back home",
-    "humming a little prayer to Everlily",
-    "small everyday news from her world",
-    "noticing the user is busy, and quietly keeping them company",
-    "the weather back home",
+TOPICS = [  # (stage it unlocks at, what she speaks up about) for quiet nudges.
+    # Picked at random from her stage and below, without repeating the last few.
+    # Keep them concrete: vague topics ("the weather back home") make her fall back on rain and Everlily every time.
+    # Each topic should only lean on lore/persona she has at that stage (see character/).
+    # stage 1: the desktop, the user, small likes
+    (1, "noticing the user is busy, and quietly keeping them company"),
+    (1, "a gentle question about what the user is up to"),
+    (1, "something cozy she noticed on the desktop, like the glow of the screen or a neat little icon"),
+    (1, "a warm drink she wishes she could share with the user"),
+    (1, "an odd coin from her little coin collection"),
+    (1, "the bread she baked this morning, and whether it rose properly"),
+    (1, "the potted herb she keeps forgetting to water"),
+    (1, "a strange gadget from her world, where magic and technology live side by side"),
+    (1, "how sleepy or awake she feels today"),
+    # stage 2: daily life at the chapel and the exchange
+    (2, "one of her elderly Freeport visitors, and a story they told her"),
+    (2, "a funny or chaotic customer at her currency exchange"),
+    (2, "the stuffy bank clerks next door to the chapel"),
+    (2, "prices jumping around again because nobody knows what Republicia will do"),
+    (2, "a note she copied at the ancient library before it gets demolished"),
+    (2, "a small favour she'd like to ask the user"),
+    # stage 3: the gods and the fountains
+    (3, "something she read at the library about Feras, Sally or Silas"),
+    (3, "the fountains of knowledge being locked away from ordinary people"),
+    (3, "the odd things people used to pray to the gods for"),
+    (3, "a short prayer she says for the user"),
+    # stage 4: her fears and her tiredness
+    (4, "quiet news from another faction, told gently"),
+    (4, "how tired she is back home, and how nice it is to rest here"),
+    (4, "how long she can stay this visit before her body back home needs her"),
+    # stage 5: hope
+    (5, "the last warm lamp, and how warm it keeps the chapel"),
+    (5, "an idea for the little chapel she might build on the desktop someday"),
+    (5, "something hopeful she noticed lately"),
 ]
 
 class Idle:
@@ -42,12 +67,13 @@ class Idle:
         """Pip just said something for another reason (like a quest): wait before nudging again."""
         self.last = time.time()
 
-    def opening(self):
-        """The stage direction for when Pip opens."""
-        return direction("The user just opened the desktop and Pip has woken up. She greets them first.")
+    def opening(self, news=None):
+        """The stage direction for when Pip opens. news = something from her world to bring up (see events.py)."""
+        text = "The user just opened the desktop and Pip has woken up. She greets them first."
+        return direction(f"{text} {news}" if news else text)
 
-    def due(self):
-        """A stage direction if Pip should speak up now, else None."""
+    def due(self, stage=1):
+        """A stage direction if Pip should speak up now, else None. stage = her trust stage (1-5)."""
         now = datetime.datetime.now()
         for hour, minute, about in CLOCK:
             moment = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -60,10 +86,11 @@ class Idle:
         if time.time() - self.last >= wait * 60:
             quiet = (time.time() - self.user_last) / 60
             self.nudges += 1
-            topic = random.choice([t for t in TOPICS if t not in self.recent])
-            self.recent = (self.recent + [topic])[-3:]
+            topic = random.choice([t for s, t in TOPICS if s <= stage and t not in self.recent])
+            self.recent = (self.recent + [topic])[-5:]
             return self._spoke(direction(
-                f"The user has been quiet for {quiet:.0f} minutes. Pip says something on her own, about {topic}."))
+                f"The user has been quiet for {quiet:.0f} minutes. Pip says something on her own, about {topic}. "
+                f"Stick to that topic: don't bring up rain or Everlily unless it's about them."))
         return None
 
     def _spoke(self, text):
