@@ -6,6 +6,7 @@ The code never names a character itself, so another one is just another folder.
     pip.staged("lore.md", 2)      the same, with only the '# Stage N' blocks she's ready to share at trust stage 2
     pip.events                    her dated world events (events.md, parsed by events.py)
     pip.sprites                   the folder with her <mood>.png sprites
+    pip.portal                    the portal she arrives through while her mind loads (character/portal.png, shared)
     pip.save_path                 her own save (saves/pip.json): trust, mood, memories... are per character
     pip.log_path                  her reply stats for tuning (pip.log)
     pip.fill("{name} says something on {their} own")  ->  "Pip says something on her own"
@@ -19,6 +20,7 @@ import events
 from config import HERE
 
 DEFAULT = "pip"  # who main.py opens when no character is named
+PORTAL = os.path.join(HERE, "character", "portal.png")  # every character arrives through the same portal (for now)
 
 class Character:
     def __init__(self, folder=DEFAULT):
@@ -37,6 +39,7 @@ class Character:
         self.quests = [(quest_id, int(stage), about)
                        for stage, asks in c["quests"].items() for quest_id, about in asks.items()]
         self.sprites = os.path.join(self.dir, "sprites")
+        self.portal = PORTAL
         self.save_path = os.path.join(HERE, "saves", folder + ".json")
         self.log_path = os.path.join(HERE, folder + ".log")
         self.events = events.parse(self.text("events.md"))

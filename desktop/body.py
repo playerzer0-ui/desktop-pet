@@ -6,6 +6,8 @@ Everything moves with squash and stretch, like the units in King God Castle:
     standing  breathing and fidgeting that changes with her mood (moves.idle_shape)
     acting    one-off moves for her *actions*: hop, bow, shiver, bonk... (call play(); see moves.py)
     dropped   if you drag her somewhere, she falls back to the floor and lands with a squash
+    arriving  while her mind loads, only a swirling portal is on the floor; arrive() pops her out of it
+    leaving   vanish(): her astral body comes apart into glowing motes that drift up, feet first (dreamwalking)
 Little emote icons pop up beside her head (call emote()): ♥ ! ? ♪ sweat, anger, zzz, ✦, and … while she thinks.
 She wanders along the bottom of the screen on her own, and stops while she's talking or you're typing.
 """
@@ -26,6 +28,17 @@ HOP = 10                     # how high each hop goes, in pixels
 SQUASH = 0.11                # how much a hop squashes / stretches her
 IDLE_SECONDS = (4, 12)       # how long she stands around before wandering again
 GRAVITY = 2600               # pixels per second², when she's dropped
+
+PORTAL_OPEN = 0.5            # seconds for the portal to swirl open when the app starts
+PORTAL_SPIN = 50             # degrees per second
+ARRIVE_SECONDS = 1.1         # arrive(): the portal flares, she pops out and lands, the portal closes
+EMERGE = (0.2, 0.65)         # ...she comes out over this part of it (seconds)
+
+MOTE = 1                     # vanish(): she breaks into squares this many sprite pixels wide (1 = she looks
+                             # exactly like her sprite until each pixel floats off)
+VANISH_SWEEP = 1.0           # seconds for the dissolving to climb from her feet to her head
+MOTE_LIFE = 0.9              # seconds each mote drifts and fades
+DREAM = QColor("#A8F0FF")    # what the motes glow toward as they fade (the portal's light)
 
 EMOTE_SECONDS = 1.8
 INK = "#3B3049"
@@ -81,9 +94,11 @@ class Body(QWidget):
     clicked = Signal()               # left click (without dragging)
     menu_requested = Signal(QPoint)  # right click, at this screen position
     moved = Signal()                 # she moved (the bubble follows her)
+    vanished = Signal()              # vanish() has finished: she's gone
 
-    def __init__(self, sprites):
-        """sprites = the folder with the character's <mood>.png files (Character.sprites)."""
+    def __init__(self, sprites, portal=None):
+        """sprites = the folder with the character's <mood>.png files (Character.sprites).
+        portal = an image to show instead of her until arrive() (Character.portal); None = she's here at once."""
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(W, H)
@@ -107,6 +122,11 @@ class Body(QWidget):
         self.move_name, self.move_at = None, 0.0    # the one-off move playing (see moves.PRESETS)
         self.emote_name, self.emote_at = None, 0.0  # the emote icon showing
         self.thinking = False                       # shows a "…" thought icon while the model writes
+        self.portal = self._load(portal) if portal and os.path.exists(portal) else None
+        self.state = "portal" if self.portal else "here"  # portal -> arriving (arrive()) -> here
+        self.portal_at = time.time()                # when the portal opened (or, once arriving, when she started)
+        self.landed = self.portal is None           # she's dropped out of the portal onto the floor
+        self.motes, self.vanish_at = [], 0.0        # vanish(): the pieces of her, and when she started going
 
         self.last = time.time()
         self.timer = QTimer(self)
@@ -147,6 +167,34 @@ class Body(QWidget):
         """The screen point just above her head (where the speech bubble's tail points)."""
         return QPoint(int(self.foot_x), int(self.foot_y - SIZE - 4))
 
+    @property
+    def here(self):
+        """She's out of the portal: she can be clicked, dragged, and wander."""
+        return self.state == "here"
+
+    def arrive(self):
+        """Her mind is ready: she pops out of the portal, which closes behind her."""
+        if self.state == "portal":
+            self.state, self.portal_at = "arriving", time.time()
+
+    def vanish(self):
+        """She leaves the dream: her sprite breaks into motes that drift up and fade, then `vanished` fires."""
+        if self.state == "vanishing":
+            return
+        image = self.sprites.get(self.mood, self.sprites["neutral"]).toImage()
+        cell = MOTE * SCALE
+        self.motes = []
+        for y in range(0, image.height(), cell):
+            for x in range(0, image.width(), cell):
+                color = image.pixelColor(x + cell // 2, y + cell // 2)
+                if color.alpha() == 0:
+                    continue
+                delay = (1 - y / image.height()) * VANISH_SWEEP + random.uniform(0, 0.25)  # feet go first
+                drift = (random.uniform(-18, 18), -random.uniform(35, 80), random.uniform(0, 6.28))
+                self.motes.append((x - SIZE / 2, y - SIZE, color, delay, drift))
+        self.state, self.vanish_at, self.emote_name, self.thinking = "vanishing", time.time(), None, False
+        self.mode, self.move_name = "idle", None
+
     def hold(self, held):
         self.held = held
         if held and self.mode == "walk":
@@ -159,7 +207,19 @@ class Body(QWidget):
         dt, self.last = min(now - self.last, 0.05), now
         floor = self._screen().bottom()
 
-        if self.mode == "idle" and not self.held and now > self.idle_until:
+        if self.state == "arriving" and not self.landed and now - self.portal_at >= EMERGE[1]:
+            self.landed = True
+            self.squish(1.3)
+            self.emote("sparkle")
+        if self.state == "arriving" and now - self.portal_at >= ARRIVE_SECONDS:
+            self.state = "here"
+            self.idle_until = now + random.uniform(*IDLE_SECONDS)
+        if self.state == "vanishing" and now - self.vanish_at >= VANISH_SWEEP + 0.25 + MOTE_LIFE:
+            self.state = "gone"
+            self.vanished.emit()
+        if self.state != "here":
+            pass  # (no wandering until she's out of the portal, nor once she's leaving)
+        elif self.mode == "idle" and not self.held and now > self.idle_until:
             left, right = self._screen().left() + SIZE / 2, self._screen().right() - SIZE / 2
             self.target = max(left, min(right, self.foot_x + random.choice([-1, 1]) * random.uniform(120, 420)))
             self.facing = 1 if self.target > self.foot_x else -1
@@ -226,8 +286,21 @@ class Body(QWidget):
         return sx, sy, rot, dx, dy
 
     def paintEvent(self, _):
-        sx, sy, rot, dx, dy = self._shape()
         painter = QPainter(self)
+        now = time.time()
+        if self.state in ("vanishing", "gone"):
+            self._draw_motes(painter, now)
+            painter.end()
+            return
+        if self.state != "here":
+            self._draw_portal(painter, now)
+        arrival = self._arrival(now)
+        if arrival is None:  # still in the portal
+            painter.end()
+            return
+        sx, sy, rot, dx, dy = self._shape()
+        asx, asy, ady = arrival
+        sx, sy, dy = sx * asx, sy * asy, dy + ady
         painter.setRenderHint(QPainter.SmoothPixmapTransform, False)  # keep the pixel art crisp
         painter.save()
         painter.translate(W / 2 + dx, FEET + dy)                      # her feet are the anchor point
@@ -239,10 +312,80 @@ class Body(QWidget):
         self._draw_emote(painter, dx, dy)
         painter.end()
 
+    # --- the portal she arrives through ---
+
+    def _arrival(self, now):
+        """How she's drawn while coming out of the portal: (stretch sideways, stretch upward, shift down),
+        or None while she's not out yet. She grows out of the portal's middle, stretched tall, overshoots a
+        little, and drops to the floor (landing with a squash once she's here)."""
+        if self.state == "here":
+            return 1.0, 1.0, 0.0
+        if self.state == "portal":
+            return None
+        start, end = EMERGE
+        e = (now - self.portal_at - start) / (end - start)
+        if e <= 0:
+            return None
+        if e >= 1:
+            return 1.0, 1.0, 0.0
+        grow = 1 + 2.7 * (e - 1) ** 3 + 1.7 * (e - 1) ** 2  # ease out with a little overshoot
+        return grow * (1 - 0.2 * (1 - e)), grow * (1 + 0.3 * (1 - e)), -SIZE * 0.45 * (1 - e) ** 2
+
+    def _draw_portal(self, painter, now):
+        """The portal swirls open, spins and breathes while she loads; when she arrives it flares and closes."""
+        age = now - self.portal_at
+        if self.state == "portal":
+            t = min(1.0, age / PORTAL_OPEN)
+            size, glow = (1 - (1 - t) ** 3) * (1 + 0.05 * math.sin(now * 3)), 0.0
+        else:
+            flare = math.sin(math.pi * min(1.0, age / 0.35))     # a bright swell as she comes through
+            closing = max(0.0, (age - EMERGE[1]) / (ARRIVE_SECONDS - EMERGE[1]))
+            size, glow = (1 + 0.25 * flare) * (1 - closing ** 2), flare
+        if size <= 0.01:
+            return
+        painter.save()
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)    # (it spins: smoothing reads better than jaggies)
+        painter.translate(W / 2, FEET - SIZE / 2)
+        painter.rotate(now * PORTAL_SPIN % 360)
+        painter.scale(size, size)
+        target = QRectF(-SIZE / 2, -SIZE / 2, SIZE, SIZE)
+        painter.drawPixmap(target, self.portal, QRectF(self.portal.rect()))
+        if glow > 0.05:                                          # brighten it by drawing it again, added on
+            painter.setCompositionMode(QPainter.CompositionMode_Plus)
+            painter.setOpacity(glow)
+            painter.drawPixmap(target, self.portal, QRectF(self.portal.rect()))
+        painter.restore()
+
+    def _draw_motes(self, painter, now):
+        """vanish(): each piece of her waits its turn, then drifts up, swaying, glowing paler as it fades."""
+        cell, age = MOTE * SCALE, now - self.vanish_at
+        painter.setPen(Qt.NoPen)
+        for x, y, color, delay, (vx, vy, sway) in self.motes:
+            t = age - delay
+            if t >= MOTE_LIFE:
+                continue
+            if t <= 0:
+                painter.setOpacity(1.0)
+                painter.setBrush(color)
+                painter.drawRect(QRectF(W / 2 + x, FEET + y, cell, cell))
+                continue
+            k = t / MOTE_LIFE
+            glow = QColor(*(int(a + (b - a) * min(1.0, k * 2)) for a, b in
+                            ((color.red(), DREAM.red()), (color.green(), DREAM.green()), (color.blue(), DREAM.blue()))))
+            size = cell * (1 - 0.5 * k)
+            px = W / 2 + x + vx * t + 4 * math.sin(sway + t * 6)
+            py = FEET + y + vy * t - 30 * t * t                  # drifting up, a little faster as it goes
+            painter.setOpacity(1 - k)
+            painter.setBrush(glow)
+            painter.drawRect(QRectF(px + (cell - size) / 2, py + (cell - size) / 2, size, size))
+        painter.setOpacity(1.0)
+
     # --- emote icons ---
 
     def _draw_emote(self, painter, dx, dy):
         now = time.time()
+        if not self.landed:  # (no icons over the portal)
+            return
         if self.thinking:
             name, age = "think", now - self.emote_at if self.emote_name == "think" else 1.0
         elif self.emote_name and now - self.emote_at < EMOTE_SECONDS:
@@ -269,7 +412,7 @@ class Body(QWidget):
     def mousePressEvent(self, e):
         if e.button() == Qt.RightButton:
             self.menu_requested.emit(e.globalPosition().toPoint())
-        elif e.button() == Qt.LeftButton:
+        elif e.button() == Qt.LeftButton and self.here:  # (the portal can't be dragged or talked to)
             self.drag_from = e.globalPosition()
 
     def mouseMoveEvent(self, e):
@@ -294,7 +437,7 @@ class Body(QWidget):
     # --- helpers ---
 
     def _load(self, name):
-        pixmap = QPixmap(os.path.join(self.sprite_dir, name))
+        pixmap = QPixmap(os.path.join(self.sprite_dir, name))  # (an absolute path, like the portal's, is kept)
         return pixmap.scaled(pixmap.width() * SCALE, pixmap.height() * SCALE,
                              Qt.IgnoreAspectRatio, Qt.FastTransformation)  # nearest neighbour: crisp pixels
 

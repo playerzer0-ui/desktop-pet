@@ -3,6 +3,7 @@
     python main.py
 
 Click her to talk, right-click for the menu, drag her anywhere (she falls back to the floor).
+While her mind loads, only a portal sits on the floor; once it's ready she pops out of it and says hello.
 Her mind is session.py, run by brain.py on its own thread. The screen never reads her save directly:
 after every job the brain sends a snapshot (trust summary, memories), and Status / memories show that.
 """
@@ -23,7 +24,7 @@ MOOD_DEFAULT_SECONDS = 35     # (any mood not listed)
 class App:
     def __init__(self, character):
         self.character = character  # who's on the desktop (character.py)
-        self.body, self.bubble = Body(character.sprites), Bubble()
+        self.body, self.bubble = Body(character.sprites, character.portal), Bubble()
         self.input, self.brain = InputBox(character.name), Brain(character)
         self.ready = False
         self.snap = None    # the latest snapshot from the brain: {"summary": trust.summary(...), "memories": [...]}
@@ -34,6 +35,7 @@ class App:
         self.body.moved.connect(self.follow)
         self.body.clicked.connect(self.talk)
         self.body.menu_requested.connect(self.menu)
+        self.body.vanished.connect(QApplication.quit)
         self.input.submitted.connect(self.send)
         self.input.closed.connect(self.release)
         self.bubble.typed.connect(self.on_typed)
@@ -51,16 +53,14 @@ class App:
         self.calm_down = QTimer(singleShot=True, timeout=self.settle)
         self.last_reply = 0  # Turn.number of her latest reply (whose mood the calm_down timer settles)
 
-        self.body.show()
+        self.body.show()  # (a portal until she's loaded: on_ready brings her out)
         self.follow()
-        self.bubble.say("*rubs her eyes sleepily*",
-                        note=self._note("waking up… (after you edit her persona or lore, this takes about 30 s once)", GRAY))
         self.brain.start()
 
     # --- you ---
 
     def talk(self):
-        if self.leaving:
+        if self.leaving or not self.body.here:
             return
         self.body.hold(True)
         self.input.open_at(self.body.head())
@@ -85,7 +85,7 @@ class App:
     def build_menu(self):
         """Her right-click menu. Status and memories wait while she's talking (they'd cut her reply short)."""
         menu = QMenu()
-        menu.addAction("Talk to her", self.talk)
+        menu.addAction("Talk to her", self.talk).setEnabled(self.body.here)
         talking = self.bubble.active or self.brain.busy
         for label, action in (("Status", self.status), ("What she remembers", self.memories)):
             menu.addAction(label, action).setEnabled(not talking)
@@ -134,6 +134,7 @@ class App:
 
     def on_ready(self, prompt_was):
         self.ready = True
+        self.body.arrive()  # out of the portal (her opening line is "…" until it's written: she's out by then)
         self.ticker.start(TICK_MS)
         self.brain.open()
 
@@ -201,9 +202,9 @@ class App:
 
     def on_closed(self, notes):
         said = f"✎ She'll remember {len(notes)} new thing{'s' if len(notes) != 1 else ''} from today" if notes else ""
-        self.bubble.say("*waves goodbye* See you soon!", note=self._note(said, GRAY), stay=3)
+        self.bubble.say("*waves goodbye* See you soon!", note=self._note(said, GRAY), stay=2.5)
         self.body.squish(1.0)
-        QTimer.singleShot(2500, QApplication.quit)
+        QTimer.singleShot(1800, self.body.vanish)  # she wakes up back home: her dream-self comes apart (then quits)
 
     def on_failed(self, error):
         print(error, file=sys.stderr)

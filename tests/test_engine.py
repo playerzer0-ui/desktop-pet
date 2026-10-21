@@ -283,7 +283,7 @@ class DesktopTest(unittest.TestCase):
         b.finish()
         self.assertEqual(b.page, "Fresh start.")
 
-    def app(self):
+    def app(self, loaded=True):
         from desktop import app as A
         class Signal:
             def connect(self, *_): pass
@@ -298,8 +298,40 @@ class DesktopTest(unittest.TestCase):
             a = A.App(pip())
         finally:
             A.Brain = real
-        a.ready = True
+        if loaded:
+            a.ready = True
+            a.body.state, a.body.landed = "here", True  # (out of the portal already)
         return a
+
+    def test_she_arrives_through_the_portal(self):
+        import time
+        from desktop import body as B
+        a = self.app(loaded=False)
+        self.assertEqual(a.body.state, "portal")
+        self.assertIsNone(a.body._arrival(time.time()), "she's drawn before she's loaded")
+        a.talk()
+        self.assertFalse(a.input.isVisible(), "you can talk to the portal")
+        a.on_ready("loaded")
+        self.assertEqual(a.body.state, "arriving")
+        a.body.portal_at -= B.ARRIVE_SECONDS  # (skip the animation)
+        a.body._tick()
+        self.assertTrue(a.body.here and a.body.landed)
+        a.talk()
+        self.assertTrue(a.input.isVisible())
+        a.input.hide()
+
+    def test_goodbye_she_dissolves_then_quits(self):
+        from desktop import body as B
+        a = self.app()
+        gone = []
+        a.body.vanished.connect(lambda: gone.append(True))
+        a.body.vanish()
+        self.assertEqual(a.body.state, "vanishing")
+        self.assertTrue(a.body.motes, "nothing to dissolve")
+        self.assertFalse(a.body.here, "she can still be dragged or talked to while dissolving")
+        a.body.vanish_at -= B.VANISH_SWEEP + 0.25 + B.MOTE_LIFE  # (skip the animation)
+        a.body._tick()
+        self.assertEqual((a.body.state, gone), ("gone", [True]))
 
     def test_status_waits_while_she_talks(self):
         a = self.app()
