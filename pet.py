@@ -7,7 +7,7 @@ def trim_to_sentence(text):
     ends = list(re.finditer(r'[.!?…]["\'*)]*(?=\s|$)', text))
     return text[:ends[-1].end()] if ends else text
 
-# Everything that defines how Pip talks lives here, so the desktop pet (main.py), the terminal (desktop_cli.py) and test_pip.py use the exact same Pip.
+# Everything that defines how Pip talks lives here, so the desktop pet (main.py) and test_pip.py use the exact same Pip.
 
 def new_conversation(stage=None):
     """stage 1-5 = how much Pip trusts the user (from save.json if not given).

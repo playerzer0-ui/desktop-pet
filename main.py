@@ -4,7 +4,7 @@
 
 Click her to talk, right-click for the menu (status, memories, goodbye), drag her anywhere.
 The app itself lives in desktop/, and everything Pip does lives in session.py.
-The terminal version: python desktop_cli.py
+Each sitting's reply stats (timings, context, mood, trust) are written to pip.log, for tuning.
 """
 from desktop.app import main
 

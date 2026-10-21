@@ -8,7 +8,7 @@ Each one becomes a hidden "stage direction" message that Pip answers in characte
 """
 import datetime, random, time
 
-QUIET_MINUTES = [5, 15, 30, 60]  # silence before each nudge; after the last, every 60 minutes
+QUIET_MINUTES = [5, 10, 10, 15]  # silence before each nudge; after the last, every 15 minutes
 CLOCK = [  # (hour, minute, what she speaks up about) - checked for 30 minutes after the time
     (7, 0, "it's morning, so she wishes the user a good morning"),
     (12, 0, "it's lunchtime, so she asks if the user has eaten"),
