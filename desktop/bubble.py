@@ -8,16 +8,25 @@ Her *actions* aren't shown: each one is reported (the acted signal) as its page 
 """
 import html, re
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QLabel, QLineEdit, QVBoxLayout, QWidget
+from sentences import first_end
 
 CREAM, INK, GOLD, ROSE, GRAY = "#FFF8EC", "#3B3049", "#C8902E", "#B76E79", "#8A8296"
 WIDTH = 230
 TAIL = 10                # height of the bubble's little tail
+TAIL_INSET = 18          # the tail never gets closer than this to the bubble's side (its rounded corner)
+EDGE = 4                 # gap kept between the bubble (or input box) and the screen edge
 LETTERS_PER_SECOND = 32
 PAGE_MAX = 95            # a sentence longer than this is split into more pages (at a comma, or a space)
-SENTENCE_END = re.compile(r"[.!?…~]+[\"')*]*\s+")
 ACTION = re.compile(r"\*([^*]+)\*?")  # *an action*, or one still being written at the very end
+
+def on_screen(anchor, x, y, width):
+    """(x, y) moved so a box this wide, with its top-left at x, y, stays on the screen she's on."""
+    screen = QGuiApplication.screenAt(anchor) or QGuiApplication.primaryScreen()
+    area = screen.availableGeometry()
+    x = max(area.left() + EDGE, min(x, area.right() + 1 - EDGE - width))
+    return x, max(area.top() + EDGE, y)
 
 def read_time(page):
     """How long a page stays up once it's fully typed, in seconds."""
@@ -76,14 +85,16 @@ class Bubble(QWidget):
         layout.addWidget(self.label)
         layout.addWidget(self.note)
         self.anchor = QPoint()
+        self.tail_x = WIDTH // 2  # where the tail sits along the bottom (moves when the bubble meets a screen edge)
 
-        self.active = False      # a dialogue is playing (from start() until done)
+        self.active = False     # a dialogue is playing (from start() until done)
         self.streaming = False   # her reply is still arriving from the model
         self.incoming = ""       # streamed text not yet cut into pages
         self.pages = []          # pages waiting to be shown
         self.page = ""           # the page on screen
         self.shown = 0           # how many of its letters are typed out
         self.final_note = ""     # small print under the last page (quest, trust...)
+        self.cancelled = False   # say() cut the dialogue short: the rest of her reply is dropped until start()
         self.typer = QTimer(self, interval=int(1000 / LETTERS_PER_SECOND), timeout=self._type)
         self.reader = QTimer(self, singleShot=True, timeout=self._next)  # waits while you read a page
         self.hider = QTimer(self, singleShot=True, timeout=self._close)
@@ -91,18 +102,22 @@ class Bubble(QWidget):
     # --- a dialogue: start(), add() as her reply streams in, finish() when it's complete ---
 
     def start(self):
-        self.active, self.streaming = True, True
+        self.active, self.streaming, self.cancelled = True, True, False
         self.incoming, self.pages, self.page, self.shown, self.final_note = "", [], "", 0, ""
         for timer in (self.typer, self.reader, self.hider):
             timer.stop()
         self.hide()  # (nothing to read yet: she shows a "…" thought icon instead)
 
     def add(self, piece):
+        if self.cancelled:
+            return
         self.incoming += piece
         self._cut_pages(final=False)
         self._continue()
 
     def finish(self, note=""):
+        if self.cancelled:
+            return
         self.streaming, self.final_note = False, note
         self._cut_pages(final=True)
         self._continue()
@@ -110,7 +125,11 @@ class Bubble(QWidget):
     # --- a plain message (status, menus...): shown at once ---
 
     def say(self, text, note="", stay=None):
-        """Show a whole message at once. stay = seconds before it hides (None = until replaced)."""
+        """Show a whole message at once. stay = seconds before it hides (None = until replaced).
+        If her reply is still playing, it's cut short: what's left of it won't type over this message."""
+        if self.active:
+            self.cancelled = True
+            self.streaming, self.incoming, self.pages, self.page = False, "", [], ""
         self.active = False
         for timer in (self.typer, self.reader, self.hider):
             timer.stop()
@@ -121,17 +140,21 @@ class Bubble(QWidget):
             self.hider.start(int(stay * 1000))
 
     def follow(self, anchor):
-        """Keep the tail pointing at this screen point (just above her head)."""
+        """Keep the tail pointing at this screen point (just above her head). Near a screen edge the bubble
+        slides back onto the screen and its tail moves along it, so it still points at her."""
         self.anchor = anchor
-        self.move(anchor.x() - self.width() // 2, anchor.y() - self.height())
+        x, y = on_screen(anchor, anchor.x() - self.width() // 2, anchor.y() - self.height(), self.width())
+        self.tail_x = max(TAIL_INSET, min(self.width() - TAIL_INSET, anchor.x() - x))
+        self.move(x, y)
+        self.update()
 
     # --- paging ---
 
     def _cut_pages(self, final):
         while True:
-            end = SENTENCE_END.search(self.incoming)
-            if end and readable(self.incoming[:end.end()]) <= PAGE_MAX + 20:
-                page, self.incoming = self.incoming[:end.end()].strip(), self.incoming[end.end():]
+            end = first_end(self.incoming, final)  # (not after "Mr." or "St.", see sentences.py)
+            if end and readable(self.incoming[:end]) <= PAGE_MAX + 20:
+                page, self.incoming = self.incoming[:end].strip(), self.incoming[end:]
             elif readable(self.incoming) > PAGE_MAX + 20 or (final and readable(self.incoming) > PAGE_MAX):
                 page, self.incoming = cut_long(self.incoming)
             elif final and self.incoming.strip():
@@ -240,7 +263,7 @@ class Bubble(QWidget):
         path = QPainterPath()
         path.addRoundedRect(box, 10, 10)
         tail = QPainterPath()
-        mid = self.width() / 2
+        mid = self.tail_x
         tail.moveTo(mid - 8, box.bottom() - 1)
         tail.lineTo(mid, self.height() - 1)
         tail.lineTo(mid + 8, box.bottom() - 1)
@@ -277,8 +300,8 @@ class InputBox(QWidget):
         self.line.setFocus()
 
     def follow(self, anchor):
-        """Sit just above her head (the bubble then goes above this box)."""
-        self.move(anchor.x() - self.width() // 2, anchor.y() - self.height())
+        """Sit just above her head (the bubble then goes above this box), kept on the screen."""
+        self.move(*on_screen(anchor, anchor.x() - self.width() // 2, anchor.y() - self.height(), self.width()))
 
     def _send(self):
         text = self.line.text().strip()
