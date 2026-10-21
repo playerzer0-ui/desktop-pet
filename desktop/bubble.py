@@ -139,6 +139,13 @@ class Bubble(QWidget):
         if stay:
             self.hider.start(int(stay * 1000))
 
+    def show_picture(self, picture, stay=None):
+        """Show a picture (like the Status card, see status.py) instead of words, the way say() shows a message."""
+        self.say("", stay=stay)
+        self.label.setPixmap(picture)  # (the next say() or page replaces it with words again)
+        self.label.setVisible(True)
+        self._fit()
+
     def follow(self, anchor):
         """Keep the tail pointing at this screen point (just above her head). Near a screen edge the bubble
         slides back onto the screen and its tail moves along it, so it still points at her."""
@@ -251,10 +258,17 @@ class Bubble(QWidget):
         self.label.setVisible(bool(words))
         self.note.setText(note)
         self.note.setVisible(bool(note))
-        self.adjustSize()
-        self.follow(self.anchor)
+        self._fit()
         self.show()
         self.update()
+
+    def _fit(self):
+        """Take exactly the height the wrapped text needs at this width, then sit above her head.
+        (Not adjustSize(): it ignores how wrapping makes text taller, so the window grew later, downward,
+        over her head.)"""
+        self.layout().activate()
+        self.setFixedHeight(self.layout().totalHeightForWidth(self.width()))
+        self.follow(self.anchor)
 
     def paintEvent(self, _):
         painter = QPainter(self)

@@ -12,6 +12,7 @@ from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
 from character import Character, DEFAULT
 from desktop import check, moves
+from desktop.status import card as status_card
 from desktop.body import Body
 from desktop.brain import Brain
 from desktop.bubble import Bubble, InputBox, GOLD, ROSE, GRAY
@@ -99,12 +100,7 @@ class App:
     def status(self):
         if not self.snap:
             return
-        s = self.snap["summary"]
-        bar = "▰" * s["trust"] + "▱" * (10 - s["trust"])
-        nxt = f" · {s['points_to_next']} points to trust {s['trust'] + 1}" if s["next_trust_at"] else ""
-        self.bubble.say(f"Trust {bar} {s['trust']}/10", stay=8, note=self._note(
-            f"Stage {s['stage']} · {s['stage_name']}{nxt}<br>today: talk {s['talk_today']}/{s['talk_cap']} · "
-            f"{s['minutes_today']:.0f} min together · {s['quests_done']} quests done · mood {s['mood']}", GRAY))
+        self.bubble.show_picture(status_card(self.snap["summary"]), stay=8)
 
     def memories(self):
         if not self.snap:

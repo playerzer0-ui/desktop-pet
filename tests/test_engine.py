@@ -122,6 +122,92 @@ class QuestTest(unittest.TestCase):
         q.next = 0
         self.assertIsNone(q.due(s))  # two a day at most
 
+class ClockNudgeTest(unittest.TestCase):
+    """idle.CLOCK: she speaks up at 7:00, 12:00, 18:00 and 23:00, once a day each, within 30 minutes after."""
+
+    @staticmethod
+    def clock(when):
+        """While this is on (a with block), idle.py thinks it's `when` (a datetime)."""
+        from unittest import mock
+        import idle
+        class Clock(datetime.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return when
+        return mock.patch.object(idle, "datetime", mock.Mock(datetime=Clock, timedelta=datetime.timedelta))
+
+    def at(self, idle_, when):
+        """idle_.due() as if the clock said `when`. The quiet nudge can't fire: someone just spoke."""
+        idle_.last = idle_.user_last = time.time()
+        with self.clock(when):
+            return idle_.due()
+
+    def test_greeting_covers_the_moment_she_opens_in(self):
+        import idle
+        for hour, minute, about in idle.CLOCK:
+            with self.subTest(f"{hour:02}:{minute:02}"):
+                i = idle.Idle(pip())
+                opened = datetime.datetime(2026, 10, 21, hour, minute + 10)
+                with self.clock(opened):
+                    greeting = i.opening()
+                said = pip().fill(about)
+                self.assertIn(said[0].upper() + said[1:] + ".", greeting)
+                self.assertIsNone(self.at(i, opened + datetime.timedelta(seconds=5)), "she'd greet twice")
+                self.assertTrue(self.at(i, opened + datetime.timedelta(days=1)), "tomorrow it comes again")
+
+    def test_greeting_outside_a_moment_knows_the_time_of_day(self):
+        import idle
+        i = idle.Idle(pip())
+        with self.clock(datetime.datetime(2026, 10, 21, 15, 0)):
+            greeting = i.opening("Some news.")
+        self.assertIn("greets them first. It's afternoon for the user right now (15:00), so she greets them for "
+                      "that time of day. Some news.", greeting)
+        self.assertEqual(i.fired, set())
+        self.assertTrue(self.at(i, datetime.datetime(2026, 10, 21, 18, 5)), "later moments still come")
+
+    def test_greeting_inside_a_moment_says_the_time_once(self):
+        import idle
+        with self.clock(datetime.datetime(2026, 10, 21, 12, 10)):
+            greeting = idle.Idle(pip()).opening()
+        self.assertIn("lunchtime", greeting)
+        self.assertNotIn("afternoon for the user", greeting)
+
+    def test_part_of_day(self):
+        import idle
+        at = lambda h, m=0: idle.part_of_day(datetime.datetime(2026, 10, 21, h, m))
+        self.assertEqual([at(0), at(4, 59), at(5), at(11, 59), at(12), at(16, 59), at(17), at(20, 59), at(21), at(23, 59)],
+                         ["night", "night", "morning", "morning", "afternoon", "afternoon", "evening", "evening",
+                          "night", "night"])
+
+    def test_each_fires_once_in_its_window(self):
+        import idle
+        for hour, minute, about in idle.CLOCK:
+            with self.subTest(f"{hour:02}:{minute:02}"):
+                i = idle.Idle(pip())
+                day = datetime.datetime(2026, 10, 21, hour, minute)
+                minutes = lambda m: day + datetime.timedelta(minutes=m)
+                self.assertIsNone(self.at(i, minutes(-1)), "too early")
+                cue = self.at(i, minutes(0))
+                self.assertIn(pip().fill(about), cue)
+                self.assertTrue(cue.startswith("(No message from the user."))
+                self.assertIsNone(self.at(i, minutes(10)), "only once a day")
+                self.assertIsNone(self.at(i, minutes(29)), "only once a day")
+                self.assertTrue(self.at(i, minutes(24 * 60 + 5)), "the next day, again")
+
+    def test_window_is_30_minutes(self):
+        import idle
+        for hour, minute, _ in idle.CLOCK:
+            with self.subTest(f"{hour:02}:{minute:02}"):
+                start = datetime.datetime(2026, 10, 21, hour, minute)
+                self.assertTrue(self.at(idle.Idle(pip()), start + datetime.timedelta(minutes=29, seconds=59)))
+                self.assertIsNone(self.at(idle.Idle(pip()), start + datetime.timedelta(minutes=30)))
+
+    def test_quiet_afternoon_has_none(self):
+        import idle
+        i = idle.Idle(pip())
+        for h in range(13, 18):
+            self.assertIsNone(self.at(i, datetime.datetime(2026, 10, 21, h, 10)))
+
 def fake_stream(pieces, finish):
     """Stands in for llm.chat_stream: the pieces as the server's chunks, then a last chunk with the timings."""
     chunks = [{"choices": [{"delta": {"content": p}, "finish_reason": None}]} for p in pieces]
@@ -332,6 +418,35 @@ class DesktopTest(unittest.TestCase):
         a.body.vanish_at -= B.VANISH_SWEEP + 0.25 + B.MOTE_LIFE  # (skip the animation)
         a.body._tick()
         self.assertEqual((a.body.state, gone), ("gone", [True]))
+
+    def test_status_shows_the_card(self):
+        import trust
+        data = {"trust": 3, "points": 51, "today": {"talk": 5, "minutes": 139}, "quests_done": [],
+                "days_logged": 1, "messages": 0}
+        s = trust.summary(data, {i: "x" for i in range(1, 6)})
+        self.assertAlmostEqual(s["progress"], (51 - 40) / (70 - 40))
+        self.assertEqual(trust.summary(dict(data, trust=10, points=999), {i: "x" for i in range(1, 6)})["progress"], 1.0)
+        a = self.app()
+        a.snap = {"summary": s, "memories": []}
+        a.status()
+        self.assertTrue(a.bubble.isVisible())
+        self.assertFalse(a.bubble.label.pixmap().isNull(), "Status shows text, not the card")
+        a.bubble.say("hi")
+        self.assertTrue(a.bubble.label.pixmap().isNull(), "the card stays behind her next words")
+
+    def test_a_long_message_still_sits_above_her_head(self):
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QApplication
+        from desktop.bubble import Bubble
+        b = Bubble()
+        b.follow(QPoint(800, 700))
+        b.say("hi")  # (a short message first: the long one used to grow the window down from here)
+        long = "<br>".join(["✎ The user's friend Mrs. Gable told Pip a story about a ship that never made it back."] * 4)
+        b.say("I remember 11 things about you.", note=long)
+        QApplication.processEvents()
+        self.assertEqual(b.height(), b.layout().totalHeightForWidth(b.width()), "the text doesn't fit")
+        self.assertEqual(b.geometry().bottom(), 699, "the bubble covers her head")
+        b.hide()
 
     def test_status_waits_while_she_talks(self):
         a = self.app()

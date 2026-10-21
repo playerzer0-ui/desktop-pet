@@ -71,6 +71,8 @@ def summary(data, stage_names):
         "trust": level, "stage": stage(data), "stage_name": stage_names[stage(data)],
         "points": data["points"], "next_trust_at": next_at,
         "points_to_next": next_at - data["points"] if next_at is not None else 0,
+        "progress": (data["points"] - TRUST_POINTS[level - 1]) / (next_at - TRUST_POINTS[level - 1])
+                    if next_at is not None else 1.0,  # 0-1, of the way from this trust level to the next
         "talk_today": data["today"]["talk"], "talk_cap": TALK_CAP,
         "minutes_today": data["today"]["minutes"], "quests_today": data["today"].get("quests", 0),
         "quests_done": len(data["quests_done"]), "days": data["days_logged"], "messages": data["messages"],

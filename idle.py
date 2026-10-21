@@ -16,7 +16,12 @@ CLOCK = [  # (hour, minute, what she speaks up about) - checked for 30 minutes a
     (18, 0, "it's evening, so {they} asks how the user's day went"),
     (23, 0, "it's late at night, so {they} gently tells the user to get some sleep"),
 ]
+PARTS_OF_DAY = [(5, "morning"), (12, "afternoon"), (17, "evening"), (21, "night")]  # (from this hour on)
 # (the quiet-nudge topics are the character's own: idle_topics in their character.toml)
+
+def part_of_day(now):
+    """"morning", "afternoon", "evening" or "night" (21:00 until 5:00) for a datetime."""
+    return next((part for hour, part in reversed(PARTS_OF_DAY) if now.hour >= hour), "night")
 
 class Idle:
     def __init__(self, character):
@@ -37,19 +42,24 @@ class Idle:
 
     def opening(self, news=None):
         """The stage direction for when the character opens. news = something from their world to bring up
-        (see events.py)."""
+        (see events.py). She's told the time of day, so she doesn't say "good morning" in the afternoon.
+        Opened inside a clock moment (like 7:10), the greeting covers it instead ("it's morning, so she wishes
+        the user a good morning"), and that moment is used up: it won't come again as a nudge."""
         text = self.character.fill("The user just opened the desktop and {name} has woken up. {They} greets them first.")
+        about = self._clock_moment()
+        if about:
+            text += " " + self.character.fill(about[0].upper() + about[1:]) + "."
+        else:
+            now = datetime.datetime.now()
+            text += self.character.fill(f" It's {part_of_day(now)} for the user right now ({now:%H:%M}), "
+                                        "so {they} greets them for that time of day.")
         return direction(f"{text} {news}" if news else text)
 
     def due(self, stage=1):
         """A stage direction if the character should speak up now, else None. stage = their trust stage (1-5)."""
-        now = datetime.datetime.now()
-        for hour, minute, about in CLOCK:
-            moment = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-            key = (now.date().isoformat(), hour, minute)
-            if moment <= now < moment + datetime.timedelta(minutes=30) and key not in self.fired:
-                self.fired.add(key)
-                return self._spoke(direction(self.character.fill(f"{{name}} says something on {{their}} own: {about}.")))
+        about = self._clock_moment()
+        if about:
+            return self._spoke(direction(self.character.fill(f"{{name}} says something on {{their}} own: {about}.")))
 
         wait = QUIET_MINUTES[min(self.nudges, len(QUIET_MINUTES) - 1)]
         if time.time() - self.last >= wait * 60:
@@ -61,6 +71,18 @@ class Idle:
                 f"The user has been quiet for {quiet:.0f} minutes. "
                 + self.character.fill("{name} says something on {their} own, about ") + f"{topic}. "
                 + self.character.idle_note))
+        return None
+
+    def _clock_moment(self):
+        """What she speaks up about for the clock moment happening now (see CLOCK), if she hasn't yet today, else None.
+        Marks it used: each moment comes once a day."""
+        now = datetime.datetime.now()
+        for hour, minute, about in CLOCK:
+            moment = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            key = (now.date().isoformat(), hour, minute)
+            if moment <= now < moment + datetime.timedelta(minutes=30) and key not in self.fired:
+                self.fired.add(key)
+                return about
         return None
 
     def _spoke(self, text):
