@@ -8,8 +8,8 @@ import contextlib, datetime, io, json, os, shutil, sys, tempfile, time, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # no windows pop up
 
-import load, memory, pet, quests, trust
-from character import Character
+import memory, pet, quests, trust
+from character import Character, for_stage
 from save import Save, stage_of
 
 TMP = tempfile.mkdtemp(prefix="pet-tests-")
@@ -83,8 +83,8 @@ class TrustTest(unittest.TestCase):
 class PromptTest(unittest.TestCase):
     def test_for_stage_merges_and_hides(self):
         text = "Intro\n# Stage 1\n## Republic\none\n# Stage 3\n## Republic\nthree\n## Secret\nhidden\n"
-        self.assertNotIn("three", load.for_stage(text, 1))
-        s3 = load.for_stage(text, 3)
+        self.assertNotIn("three", for_stage(text, 1))
+        s3 = for_stage(text, 3)
         self.assertEqual(s3.count("## Republic"), 1)
         self.assertIn("hidden", s3)
 
@@ -122,28 +122,24 @@ class QuestTest(unittest.TestCase):
         q.next = 0
         self.assertIsNone(q.due(s))  # two a day at most
 
-class FakeStream:
-    """Looks like llama-server's streamed reply: the pieces, then a last chunk with the timings."""
-    def __init__(self, pieces, finish):
-        chunks = [{"choices": [{"delta": {"content": p}, "finish_reason": None}]} for p in pieces]
-        chunks.append({"choices": [{"delta": {}, "finish_reason": finish}], "timings": {"prompt_n": 1}})
-        self.lines = [b"data: " + json.dumps(c).encode() for c in chunks] + [b"data: [DONE]"]
-
-    def iter_lines(self):
-        return iter(self.lines)
+def fake_stream(pieces, finish):
+    """Stands in for llm.chat_stream: the pieces as the server's chunks, then a last chunk with the timings."""
+    chunks = [{"choices": [{"delta": {"content": p}, "finish_reason": None}]} for p in pieces]
+    chunks.append({"choices": [{"delta": {}, "finish_reason": finish}], "timings": {"prompt_n": 1}})
+    return lambda messages, **settings: iter(chunks)
 
 class AskTest(unittest.TestCase):
     MOODS = {"happy", "neutral", "sad"}
 
     def ask(self, *pieces, finish="stop"):
         """(reply, feeling, mood, what was streamed to the screen) for a reply made of these pieces."""
-        real, shown = pet.requests.post, []
-        pet.requests.post = lambda *a, **k: FakeStream(pieces, finish)
+        real, shown = pet.llm.chat_stream, []
+        pet.llm.chat_stream = fake_stream(pieces, finish)
         try:
             reply, _, feeling, mood = pet.ask([{"role": "system", "content": "x"}], "hi",
                                               on_text=shown.append, moods=self.MOODS)
         finally:
-            pet.requests.post = real
+            pet.llm.chat_stream = real
         return reply, feeling, mood, "".join(shown).rstrip()  # (the space before a tag streams too)
 
     def test_tags(self):
@@ -324,6 +320,75 @@ class DesktopTest(unittest.TestCase):
             a.on_failed("Traceback...\nrequests.exceptions.ReadTimeout: boom\n")
         self.assertFalse(a.body.thinking, "still showing the '…' icon")
         self.assertFalse(a.body.held, "still held in place: she'd never wander again")
+
+class DirectionsTest(unittest.TestCase):
+    def test_a_cue_is_told_apart_from_the_user(self):
+        from directions import direction, is_direction
+        self.assertTrue(is_direction(direction("Pip says something on her own.")))
+        self.assertFalse(is_direction("(she smiles) hi"))
+
+class ServerGoneTest(unittest.TestCase):
+    """No llama-server at all (a port nothing listens on): every call says so the same way."""
+    def setUp(self):
+        import llm, socket
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]  # (closed again: nothing listens there)
+        self.llm, self.real = llm, (llm.SERVER, llm.CONNECT_SECONDS)
+        llm.SERVER = f"http://127.0.0.1:{port}"
+        llm.CONNECT_SECONDS = 0.3  # (Windows keeps retrying a refused connection for ~2 s: give up sooner)
+
+    def tearDown(self):
+        self.llm.SERVER, self.llm.CONNECT_SECONDS = self.real
+
+    def test_every_call_raises_server_gone(self):
+        self.assertFalse(self.llm.is_up())
+        self.assertEqual(self.llm.model_path(), "")
+        for call in (lambda: self.llm.chat([]), lambda: list(self.llm.chat_stream([])),
+                     lambda: self.llm.template([]), lambda: self.llm.read("x")):
+            with self.assertRaises(self.llm.ServerGone):
+                call()
+
+class ReconnectTest(unittest.TestCase):
+    """The server goes away once: her reply and the goodbye diary both start it again and retry."""
+    def setUp(self):
+        import llm, session
+        self.llm, self.session = llm, session
+        self.real = session.start_server, session.warm_up, session.ask, llm.chat
+        self.calls = {"start": 0, "read": 0, "ask": 0, "diary": 0}
+
+        def start(say): self.calls["start"] += 1
+        def warm(messages, fixed): self.calls["read"] += 1; return "loaded"
+        def ask(messages, question, on_text=None, keep=1, moods=None):
+            self.calls["ask"] += 1
+            messages.append({"role": "user", "content": question})
+            if self.calls["ask"] == 2:  # her first reply to you: the server is gone
+                raise llm.ServerGone("test")
+            messages.append({"role": "assistant", "content": "ok [nice] [mood: happy]"})
+            return "ok", {}, "nice", "happy"
+        def chat(messages, **settings):
+            self.calls["diary"] += 1
+            if self.calls["diary"] == 1:
+                raise llm.ServerGone("test")
+            return "- The user has a cat called Leo."
+        session.start_server, session.warm_up, session.ask, llm.chat = start, warm, ask, chat
+
+    def tearDown(self):
+        self.session.start_server, self.session.warm_up, self.session.ask, self.llm.chat = self.real
+
+    def test_reply_and_diary_survive(self):
+        s = self.session.Session(pip(), say=lambda *_: None)
+        s.open()
+        shown = []
+        self.assertEqual(s.user_says("my cat Leo knocked over a plant", on_text=shown.append).reply, "ok")
+        self.assertEqual((self.calls["start"], self.calls["read"]), (2, 2))  # restarted, her prompt read back in
+        self.assertIn(None, shown)  # the screen was told to start her reply over
+        self.assertEqual([m["content"] for m in s.messages].count("my cat Leo knocked over a plant"), 1)
+        s.user_says("we are going hiking on Friday")
+        s.user_says("I had a really nice day today")
+        notes = s.close()
+        self.assertEqual([n["text"] for n in notes], ["The user has a cat called Leo."])
+        self.assertEqual((self.calls["start"], self.calls["read"]), (3, 2))  # restarted again, no prompt re-read
 
 if __name__ == "__main__":
     unittest.main()
