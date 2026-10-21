@@ -1,19 +1,17 @@
-"""How much Pip trusts you (1-10), earned from what you do together. It never goes down.
+"""How much a character trusts you (1-10), earned from what you do together. It never goes down.
 
 Daily things fill the bar slowly, each with a daily cap so they can't be farmed:
     day logged     +3 the first time you open her each day
-    talking        per message of 3+ words, judged by Pip: nice +2, neutral +1, rude +0 (max 10 a day)
+    talking        per message of 3+ words, judged by the character: nice +2, neutral +1, rude +0 (max 10 a day)
     stay           +1 for every 15 minutes she's open (max 4 a day)
 Quests give big chunks. A stage's MAJOR quest is a gate: until it's done, trust stops at the
 top of that stage (and so do points, so they can't be saved up to skip a stage).
 Minor quests just give points.
 """
 import datetime, re
-from save import load_save, write_save, stage_of
+from save import Save, load_save, write_save, stage_of
 
 TRUST_POINTS = [0, 15, 40, 70, 110, 160, 220, 290, 370, 460]  # points needed for trust 1, 2, ... 10
-STAGE_NAMES = {1: "Guarded caretaker", 2: "Learning to receive", 3: "Admitting the silence",
-               4: "Naming why she left", 5: "The free blessing"}  # the arc table in character/pip/events.md
 MAJOR_QUESTS = {1: None, 2: None, 3: None, 4: None}  # stage -> quest id that opens the next stage (None = no gate yet)
 
 DAY_POINTS = 3
@@ -21,18 +19,19 @@ TALK_POINTS = {"nice": 2, "neutral": 1, "rude": 0}
 TALK_CAP = 10
 STAY_MINUTES, STAY_CAP = 15, 4
 
-def start():
-    """Call when Pip opens. Returns the save data that the other functions update."""
-    data = {"trust": 1, "points": 0, "days_logged": 0, "last_day": None,
-            "today": {"talk": 0, "minutes": 0}, "messages": 0, "quests_done": []}
-    data.update(load_save())
-    data["points"] = max(data["points"], TRUST_POINTS[data["trust"] - 1])  # a trust typed into save.json by hand
+def start(path):
+    """Call when a character opens. path = their save (Character.save_path).
+    Returns the save data that the other functions update."""
+    data = Save(path, {"trust": 1, "points": 0, "days_logged": 0, "last_day": None,
+                       "today": {"talk": 0, "minutes": 0}, "messages": 0, "quests_done": []})
+    data.update(load_save(path))
+    data["points"] = max(data["points"], TRUST_POINTS[data["trust"] - 1])  # a trust typed into the save by hand
     _new_day(data)
     write_save(data)
     return data
 
 def talked(data, message, feeling):
-    """One message from the user. feeling = how it felt to Pip: nice, neutral or rude."""
+    """One message from the user. feeling = how it felt to them: nice, neutral or rude."""
     _new_day(data)
     data["messages"] += 1
     if len(re.findall(r"\w+", message)) >= 3:  # "hi", "ok", "lol" don't count
@@ -43,7 +42,7 @@ def talked(data, message, feeling):
     write_save(data)
 
 def stayed(data, minutes):
-    """Pip has been open for this many more minutes."""
+    """The character has been open for this many more minutes."""
     _new_day(data)
     before = min(int(data["today"]["minutes"] // STAY_MINUTES), STAY_CAP)
     data["today"]["minutes"] += minutes
@@ -62,12 +61,13 @@ def quest_done(data, quest_id, points):
 def stage(data):
     return stage_of(data["trust"])
 
-def summary(data):
-    """Everything a screen shows about trust and today, as plain values (front ends only format this)."""
+def summary(data, stage_names):
+    """Everything a screen shows about trust and today, as plain values (front ends only format this).
+    stage_names = the character's names for stages 1-5 (Character.stage_names)."""
     level = data["trust"]
     next_at = TRUST_POINTS[level] if level < 10 else None
     return {
-        "trust": level, "stage": stage(data), "stage_name": STAGE_NAMES[stage(data)],
+        "trust": level, "stage": stage(data), "stage_name": stage_names[stage(data)],
         "points": data["points"], "next_trust_at": next_at,
         "points_to_next": next_at - data["points"] if next_at is not None else 0,
         "talk_today": data["today"]["talk"], "talk_cap": TALK_CAP,

@@ -13,10 +13,8 @@ import math, os, random, time
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
-from load import HERE
 from desktop import moves
 
-SPRITES = os.path.join(HERE, "character", "pip", "sprites")
 SCALE = 2                    # 64px sprites drawn at SCALE times their size, crisp (no smoothing)
 SIZE = 64 * SCALE
 W, H = SIZE + 80, SIZE + 60  # the window is a little bigger than her, so stretching and hopping never clip
@@ -84,11 +82,13 @@ class Body(QWidget):
     menu_requested = Signal(QPoint)  # right click, at this screen position
     moved = Signal()                 # she moved (the bubble follows her)
 
-    def __init__(self):
+    def __init__(self, sprites):
+        """sprites = the folder with the character's <mood>.png files (Character.sprites)."""
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(W, H)
-        self.sprites = {name[:-4]: self._load(name) for name in os.listdir(SPRITES) if name.endswith(".png")}
+        self.sprite_dir = sprites
+        self.sprites = {name[:-4]: self._load(name) for name in os.listdir(sprites) if name.endswith(".png")}
         self.mood = "neutral"
         self.held = False            # True while she's talking or you're typing: no wandering
 
@@ -294,7 +294,7 @@ class Body(QWidget):
     # --- helpers ---
 
     def _load(self, name):
-        pixmap = QPixmap(os.path.join(SPRITES, name))
+        pixmap = QPixmap(os.path.join(self.sprite_dir, name))
         return pixmap.scaled(pixmap.width() * SCALE, pixmap.height() * SCALE,
                              Qt.IgnoreAspectRatio, Qt.FastTransformation)  # nearest neighbour: crisp pixels
 

@@ -251,15 +251,15 @@ class Bubble(QWidget):
         painter.end()
 
 class InputBox(QWidget):
-    """A small box above Pip for typing to her. Enter sends, Esc closes."""
+    """A small box above the character for typing to them. Enter sends, Esc closes."""
     submitted = Signal(str)
     closed = Signal()
 
-    def __init__(self):
+    def __init__(self, name):  # name = who you're talking to, for the placeholder text
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedWidth(260)
-        self.line = QLineEdit(placeholderText="Talk to Pip…  (Enter to send, Esc to close)")
+        self.line = QLineEdit(placeholderText=f"Talk to {name}…  (Enter to send, Esc to close)")
         self.line.setFont(QFont("Segoe UI", 10))
         self.line.setStyleSheet(f"QLineEdit {{ background: {CREAM}; color: {INK}; border: 2px solid {GOLD};"
                                 f" border-radius: 10px; padding: 5px 9px; }}")

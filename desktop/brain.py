@@ -16,8 +16,9 @@ class Brain(QObject):
                                  # screen to show, so the UI never reads the save while this thread writes it
     failed = Signal(str)
 
-    def __init__(self):
+    def __init__(self, character):
         super().__init__()
+        self.character = character  # who this mind is (character.py)
         self.session = None
         self.jobs = queue.Queue()
         self.busy = False
@@ -36,6 +37,10 @@ class Brain(QObject):
         """Let her speak up on her own if she wants to (an idle thought, a quest, today's news)."""
         if not self.busy and self.jobs.empty():
             self.jobs.put(("tick",))
+
+    def settle(self, number):
+        """Her mood after reply `number` eases back to neutral (in the save too, so events and Status agree)."""
+        self.jobs.put(("settle", number))
 
     def close(self):
         self.jobs.put(("close",))
@@ -56,7 +61,7 @@ class Brain(QObject):
     def _do(self, what, *args):
         if what == "start":
             from session import Session  # imported here: it starts nothing until asked
-            self.session = Session(say=lambda *_: None)
+            self.session = Session(self.character, say=lambda *_: None)
             self.ready.emit(self.session.prompt_was)
         elif what == "close":
             self.closed.emit(self.session.close() if self.session else [])
@@ -66,6 +71,8 @@ class Brain(QObject):
             self._speak("opening", self.session.open)
         elif what == "say":
             self._speak("user", self.session.user_says, args[0])
+        elif what == "settle":
+            self.session.settle_mood(args[0])
         elif what == "tick":
             wanted = self.session.wants_to_speak()
             if wanted:

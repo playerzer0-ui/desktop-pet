@@ -9,7 +9,8 @@ after every job the brain sends a snapshot (trust summary, memories), and Status
 import sys, time
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
-from desktop import moves
+from character import Character, DEFAULT
+from desktop import check, moves
 from desktop.body import Body
 from desktop.brain import Brain
 from desktop.bubble import Bubble, InputBox, GOLD, ROSE, GRAY
@@ -20,8 +21,10 @@ MOOD_SECONDS = {"happy": 15}  # after she stops talking, a mood lasts this long 
 MOOD_DEFAULT_SECONDS = 35     # (any mood not listed)
 
 class App:
-    def __init__(self):
-        self.body, self.bubble, self.input, self.brain = Body(), Bubble(), InputBox(), Brain()
+    def __init__(self, character):
+        self.character = character  # who's on the desktop (character.py)
+        self.body, self.bubble = Body(character.sprites), Bubble()
+        self.input, self.brain = InputBox(character.name), Brain(character)
         self.ready = False
         self.snap = None    # the latest snapshot from the brain: {"summary": trust.summary(...), "memories": [...]}
         self.leaving = False
@@ -45,7 +48,8 @@ class App:
         self.brain.failed.connect(self.on_failed)
 
         self.ticker = QTimer(timeout=self.tick)
-        self.calm_down = QTimer(singleShot=True, timeout=lambda: self.body.set_mood("neutral"))
+        self.calm_down = QTimer(singleShot=True, timeout=self.settle)
+        self.last_reply = 0  # Turn.number of her latest reply (whose mood the calm_down timer settles)
 
         self.body.show()
         self.follow()
@@ -163,7 +167,13 @@ class App:
         if self.body.mood != "neutral":
             self.calm_down.start(MOOD_SECONDS.get(self.body.mood, MOOD_DEFAULT_SECONDS) * 1000)
 
+    def settle(self):
+        """Her mood has lasted long enough: back to neutral, on screen and in her save at the same time."""
+        self.body.set_mood("neutral")
+        self.brain.settle(self.last_reply)
+
     def on_spoke(self, turn):
+        self.last_reply = turn.number
         self.body.set_mood(turn.mood)
         move, emote = moves.MOOD_MOVES.get(turn.mood, (None, None))
         if not self.acted and move:  # no action of hers matched a move: show how she feels instead
@@ -177,7 +187,7 @@ class App:
         if turn.quest_done:
             notes.append(self._note("✦ Quest complete: she learned something about your world", GOLD))
         if turn.trust_after > turn.trust_before:
-            notes.append(self._note(f"♥ Pip trusts you more · trust {turn.trust_after}/10", ROSE))
+            notes.append(self._note(f"♥ {self.character.name} trusts you more · trust {turn.trust_after}/10", ROSE))
         if turn.stage_up:
             stage, name = turn.stage_after
             notes.append(self._note(f"✻ Stage {stage} · {name}: she'll open up more next time", ROSE))
@@ -215,8 +225,14 @@ class App:
     def _note(text, color):
         return f'<span style="color:{color}">{text}</span>' if text else ""
 
-def main():
+def main(folder=DEFAULT):
+    """folder = which character to open (their folder in character/)."""
+    character = Character(folder)
+    problems = check.mood_problems(character)
+    if problems:
+        raise SystemExit(f"{character.name}'s mood lists don't match (see desktop/check.py):\n  - "
+                         + "\n  - ".join(problems))
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    pip = App()  # (kept in a variable so it isn't garbage-collected)
+    pet = App(character)  # (kept in a variable so it isn't garbage-collected)
     sys.exit(app.exec())
