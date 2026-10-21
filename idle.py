@@ -7,6 +7,7 @@
 Each one becomes a hidden "stage direction" message that the character answers in character.
 """
 import datetime, random, time
+from directions import direction
 
 QUIET_MINUTES = [5, 10, 10, 15]  # silence before each nudge; after the last, every 15 minutes
 CLOCK = [  # (hour, minute, what she speaks up about) - checked for 30 minutes after the time
@@ -65,7 +66,3 @@ class Idle:
     def _spoke(self, text):
         self.last = time.time()
         return text
-
-def direction(text):
-    # in parentheses, so it reads as a stage direction, not as something the user said
-    return f"(No message from the user. {text} Keep it to 1-2 short sentences and don't mention being told to speak.)"

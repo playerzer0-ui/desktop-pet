@@ -14,7 +14,7 @@ shows the event's "Hint while waiting" (also once a day) and doesn't say why.
 """
 import datetime, re
 from save import stage_of
-from idle import direction
+from directions import direction
 
 # Her mood (save["mood"], set by session.py) can hold an event back. It starts neutral every sitting and eases
 # back to neutral a little while after she speaks, exactly when her sprite does.
