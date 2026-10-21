@@ -14,13 +14,14 @@ For tuning, every reply is written to <character>.log, e.g. pip.log (started fre
 what was said, how it felt to her, her mood, how long it took, how full the context is, and trust gained.
 """
 import datetime, time
-import requests
 from dataclasses import dataclass
-import events, memory, trust
+import events, llm, memory, trust
 from character import Character, DEFAULT
-from idle import Idle, direction
+from directions import direction
+from idle import Idle
 from quests import Quests
-from load import start_server, N_CTX
+from config import N_CTX
+from server import start_server
 from pet import new_conversation, ask, context_used, warm_up
 from save import write_save
 
@@ -111,7 +112,11 @@ class Session:
     def close(self):
         """End of the sitting. Returns the diary notes she wrote about you (may be empty). Takes a few seconds."""
         self._count_stay()
-        notes = memory.write_diary(self.save, self.messages, self.keep, self.character)
+        try:
+            notes = memory.write_diary(self.save, self.messages, self.keep, self.character)
+        except llm.ServerGone:
+            self.reconnect(reread=False)  # the diary is its own short prompt: no need to read hers back in
+            notes = memory.write_diary(self.save, self.messages, self.keep, self.character)
         if notes:
             write_save(self.save)
         self.log(f"sitting closed · trust {self.save['trust']} ({self.save['points']} points) · "
@@ -156,7 +161,7 @@ class Session:
         t0 = time.time()
         try:
             reply, timings, feeling, mood = self._ask(text, on_text)
-        except requests.ConnectionError:
+        except llm.ServerGone:
             # the server went away (e.g. another copy of the pet that owned it was closed): start it again and retry once
             if self.messages and self.messages[-1] == {"role": "user", "content": text}:
                 self.messages.pop()  # that question never got an answer
@@ -212,11 +217,13 @@ class Session:
         write_save(self.save)
         return news["text"]
 
-    def reconnect(self):
-        """Start llama-server again if it's gone, and get her prompt (and this sitting's chat) back into it."""
-        self.log("lost llama-server: restarting it and retrying the reply")
+    def reconnect(self, reread=True):
+        """Start llama-server again if it's gone (llm.ServerGone), and (reread) get her prompt and this sitting's
+        chat back into it. The caller then retries once."""
+        self.log("lost llama-server: restarting it and retrying")
         start_server(self.say)
-        warm_up(self.messages, self.fixed)
+        if reread:
+            warm_up(self.messages, self.fixed)
 
     def _count_stay(self):
         trust.stayed(self.save, (time.time() - self.opened) / 60)

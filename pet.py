@@ -1,5 +1,6 @@
-import glob, hashlib, json, os, re, requests
-from load import for_stage, SERVER, N_CTX, MODEL, CACHE_DIR
+import glob, hashlib, os, re
+import llm
+from config import N_CTX, MODEL, CACHE_DIR
 from save import load_save, stage_of
 from character import Character
 from sentences import ends
@@ -19,8 +20,8 @@ def new_conversation(character=None, stage=None):
     character = character or Character()
     if stage is None:
         stage = stage_of(load_save(character.save_path)["trust"])
-    system_prompt = (for_stage(character.text("persona.md"), stage)
-        + "\n\n# Background lore\n" + for_stage(character.text("lore.md"), stage))
+    system_prompt = (character.staged("persona.md", stage)
+        + "\n\n# Background lore\n" + character.staged("lore.md", stage))
     if stage < 5:
         system_prompt += character.fill("\n\n# Trust\n{name} happily talks about everything written above. {They} "
             "also knows more that isn't written here, but {they} isn't ready to share it yet. If asked about it, "
@@ -46,27 +47,23 @@ def warm_up(messages, fixed):
 
     name = hashlib.sha256(f"{os.path.basename(MODEL)} {N_CTX}\n{cached}".encode()).hexdigest()[:16] + ".bin"
     how = "read"
-    if os.path.exists(os.path.join(CACHE_DIR, name)) and \
-            requests.post(f"{SERVER}/slots/0?action=restore", json={"filename": name}).ok:
+    if os.path.exists(os.path.join(CACHE_DIR, name)) and llm.restore_slot(name):
         how = "loaded"
     else:  # (also when a llama-server update made an old cache file unreadable: then just read it again)
-        requests.post(f"{SERVER}/completion", json={"prompt": cached, "n_predict": 0, "cache_prompt": True})
-        requests.post(f"{SERVER}/slots/0?action=save", json={"filename": name})
+        llm.read(cached)
+        llm.save_slot(name)
         # keep only the newest few files (one per trust stage is all that's ever useful)
         for old in sorted(glob.glob(os.path.join(CACHE_DIR, "*.bin")), key=os.path.getmtime)[:-5]:
             os.remove(old)
 
     if everything != cached:  # read the memories on top of the cached part
-        requests.post(f"{SERVER}/completion", json={"prompt": everything, "n_predict": 0, "cache_prompt": True})
+        llm.read(everything)
     return how
 
 def prefix_of(messages):
     """The exact text a request starts with when it holds these messages: everything before the next question."""
     marker = "PIP_NEXT_QUESTION"
-    full = requests.post(f"{SERVER}/apply-template", json={
-        "messages": messages + [{"role": "user", "content": marker}],
-        "chat_template_kwargs": {"enable_thinking": False},
-    }).json()["prompt"]
+    full = llm.template(messages + [{"role": "user", "content": marker}])
     return full[:full.rindex("<|im_start|>", 0, full.index(marker))]  # cut where the question's turn begins
 
 FEELING_TAG = re.compile(r"\s*\[(?:feeling:\s*)?(nice|neutral|rude)\]", re.I)  # (the model sometimes adds "feeling:")
@@ -81,27 +78,14 @@ def ask(messages, question, on_text=None, keep=1, moods=None):
     keep = how many messages at the start are never forgotten (system prompt + examples, + memories if any)."""
     messages.append({"role": "user", "content": question})
 
-    response = requests.post(
-        f"{SERVER}/v1/chat/completions",
-        json={
-            "messages": messages,
-            "max_tokens": 200,
-            "temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5,  # Qwen's recommended chat settings
-            "chat_template_kwargs": {"enable_thinking": False},  # answer directly, no hidden <think> step
-            "stream": True,
-        },
-        stream=True,
-    )
+    chunks = llm.chat_stream(messages, max_tokens=200,
+                             temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5)  # Qwen's recommended chat settings
 
     reply = ""
     shown = 0  # how much of the reply on_text has been given
     timings = {}
     finish_reason = None
-    # the server sends the reply as lines like:  data: {...json...}
-    for line in response.iter_lines():
-        if not line.startswith(b"data: ") or line == b"data: [DONE]":
-            continue
-        chunk = json.loads(line[6:])
+    for chunk in chunks:
         timings = chunk.get("timings", timings)  # the last chunk carries the server's timing stats
         if not chunk.get("choices"):
             continue

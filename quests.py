@@ -7,7 +7,7 @@ Each question is only asked until it's answered. Deeper questions unlock at high
 """
 import random, re, time
 import trust
-from idle import direction
+from directions import direction
 
 # (the questions are the character's own: [quests] in their character.toml)
 POINTS = 5

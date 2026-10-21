@@ -8,8 +8,9 @@ Two kinds:
 At launch, they're shown to her as one note placed AFTER the cached part of her prompt (see pet.warm_up),
 so new memories never force the slow full re-read.
 """
-import datetime, json, re, requests
-from load import SERVER
+import datetime, re
+import llm
+from directions import is_direction
 
 MAX_NOTES = 30        # diary notes kept (oldest forgotten first); world answers are few, so all are kept
 NOTES_PER_SITTING = 8
@@ -83,7 +84,7 @@ def write_diary(save, messages, start, character):
     for m in messages[start:]:
         if m["role"] == "assistant":
             they_said = re.sub(r"\s*\[(nice|neutral|rude|mood:\s*\w+)\]", "", m["content"])
-        elif not m["content"].startswith("(No message from the user"):  # skip idle and quest stage directions
+        elif not is_direction(m["content"]):  # skip idle and quest stage directions
             if len(m["content"].split()) < 6 and they_said:
                 lines.append(f"({character.name} had said: {they_said})")
             lines.append("User: " + m["content"])
@@ -91,15 +92,11 @@ def write_diary(save, messages, start, character):
         return []
     known = [m["text"] for m in save.get("memories", [])]
     today = datetime.date.today().strftime("%A %Y-%m-%d")
-    response = requests.post(f"{SERVER}/v1/chat/completions", json={
-        "messages": [{"role": "system", "content": character.fill(DIARY).replace("{about}", character.about)},
+    text = llm.chat([{"role": "system", "content": character.fill(DIARY).replace("{about}", character.about)},
                      {"role": "user", "content": f"Today is {today}.\n\nAlready remembered:\n"
                                                  + ("\n".join("- " + k for k in known[-25:]) or "(nothing yet)")
                                                  + "\n\nWhat the user said this time:\n" + "\n".join(lines[-40:])}],
-        "max_tokens": 250, "temperature": 0.3,
-        "chat_template_kwargs": {"enable_thinking": False},
-    }).json()
-    text = response["choices"][0]["message"]["content"]
+                    max_tokens=250, temperature=0.3)
     notes = [re.sub(r"^-\s*", "", line).strip() for line in text.splitlines() if line.strip().startswith("-")]
     new = []
     for note in notes[:NOTES_PER_SITTING]:
