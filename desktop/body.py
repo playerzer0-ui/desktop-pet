@@ -286,9 +286,6 @@ class Body(QWidget):
         if e.button() != Qt.LeftButton or self.drag_from is None:
             return
         self.drag_from = None
-        self.move_name, self.move_at = None, 0.0    # the one-off move playing (see moves.PRESETS)
-        self.emote_name, self.emote_at = None, 0.0  # the emote icon showing
-        self.thinking = False                       # shows a "…" thought icon while the model writes
         if self.mode == "drag":
             self.mode, self.vy = "fall", 0.0
         else:

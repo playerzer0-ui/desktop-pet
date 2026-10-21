@@ -12,6 +12,8 @@ import datetime, re
 from save import load_save, write_save, stage_of
 
 TRUST_POINTS = [0, 15, 40, 70, 110, 160, 220, 290, 370, 460]  # points needed for trust 1, 2, ... 10
+STAGE_NAMES = {1: "Guarded caretaker", 2: "Learning to receive", 3: "Admitting the silence",
+               4: "Naming why she left", 5: "The free blessing"}  # the arc table in character/pip/events.md
 MAJOR_QUESTS = {1: None, 2: None, 3: None, 4: None}  # stage -> quest id that opens the next stage (None = no gate yet)
 
 DAY_POINTS = 3
@@ -59,6 +61,20 @@ def quest_done(data, quest_id, points):
 
 def stage(data):
     return stage_of(data["trust"])
+
+def summary(data):
+    """Everything a screen shows about trust and today, as plain values (front ends only format this)."""
+    level = data["trust"]
+    next_at = TRUST_POINTS[level] if level < 10 else None
+    return {
+        "trust": level, "stage": stage(data), "stage_name": STAGE_NAMES[stage(data)],
+        "points": data["points"], "next_trust_at": next_at,
+        "points_to_next": next_at - data["points"] if next_at is not None else 0,
+        "talk_today": data["today"]["talk"], "talk_cap": TALK_CAP,
+        "minutes_today": data["today"]["minutes"], "quests_today": data["today"].get("quests", 0),
+        "quests_done": len(data["quests_done"]), "days": data["days_logged"], "messages": data["messages"],
+        "mood": data.get("mood") or "neutral",
+    }
 
 def _new_day(data):
     today = datetime.date.today().isoformat()

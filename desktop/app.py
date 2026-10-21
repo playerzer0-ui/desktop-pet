@@ -3,12 +3,12 @@
     python main.py
 
 Click her to talk, right-click for the menu, drag her anywhere (she falls back to the floor).
-Her mind is session.py (the same as the terminal version), run by brain.py on its own thread.
+Her mind is session.py, run by brain.py on its own thread. The screen never reads her save directly:
+after every job the brain sends a snapshot (trust summary, memories), and Status / memories show that.
 """
 import sys, time
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
-import trust
 from desktop import moves
 from desktop.body import Body
 from desktop.brain import Brain
@@ -18,13 +18,12 @@ TICK_MS = 5000       # how often she checks whether she wants to speak up on her
 SQUISH_EVERY = 0.13  # seconds between talking squishes (one per few letters typed, but not faster than this)
 MOOD_SECONDS = {"happy": 15}  # after she stops talking, a mood lasts this long before she's back to neutral
 MOOD_DEFAULT_SECONDS = 35     # (any mood not listed)
-STAGES = {1: "Guarded caretaker", 2: "Learning to receive", 3: "Admitting the silence",
-          4: "Naming why she left", 5: "The free blessing"}  # from character/pip/events.md
 
 class App:
     def __init__(self):
         self.body, self.bubble, self.input, self.brain = Body(), Bubble(), InputBox(), Brain()
         self.ready = False
+        self.snap = None    # the latest snapshot from the brain: {"summary": trust.summary(...), "memories": [...]}
         self.leaving = False
         self.last_squish = 0.0
         self.acted = False  # an *action* in her current reply got its own move (else her mood picks one)
@@ -42,6 +41,7 @@ class App:
         self.brain.piece.connect(self.on_piece)
         self.brain.spoke.connect(self.on_spoke)
         self.brain.closed.connect(self.on_closed)
+        self.brain.snapshot.connect(self.on_snapshot)
         self.brain.failed.connect(self.on_failed)
 
         self.ticker = QTimer(timeout=self.tick)
@@ -84,22 +84,23 @@ class App:
         menu.addAction("Say goodbye", self.leave)
         menu.exec(where)
 
+    def on_snapshot(self, snap):
+        self.snap = snap
+
     def status(self):
-        if not self.ready:
+        if not self.snap:
             return
-        save = self.brain.session.save
-        level, stage = save["trust"], trust.stage(save)
-        bar = "▰" * level + "▱" * (10 - level)
-        nxt = f" · {trust.TRUST_POINTS[level] - save['points']} points to trust {level + 1}" if level < 10 else ""
-        self.bubble.say(f"Trust {bar} {level}/10", stay=8, note=self._note(
-            f"Stage {stage} · {STAGES[stage]}{nxt}<br>today: talk {save['today']['talk']}/{trust.TALK_CAP} · "
-            f"{save['today']['minutes']:.0f} min together · {len(save['quests_done'])} quests done · mood {self.brain.session.mood}",
-            GRAY))
+        s = self.snap["summary"]
+        bar = "▰" * s["trust"] + "▱" * (10 - s["trust"])
+        nxt = f" · {s['points_to_next']} points to trust {s['trust'] + 1}" if s["next_trust_at"] else ""
+        self.bubble.say(f"Trust {bar} {s['trust']}/10", stay=8, note=self._note(
+            f"Stage {s['stage']} · {s['stage_name']}{nxt}<br>today: talk {s['talk_today']}/{s['talk_cap']} · "
+            f"{s['minutes_today']:.0f} min together · {s['quests_done']} quests done · mood {s['mood']}", GRAY))
 
     def memories(self):
-        if not self.ready:
+        if not self.snap:
             return
-        entries = self.brain.session.memories
+        entries = self.snap["memories"]
         if not entries:
             self.bubble.say("*tilts her head* We've only just met!", stay=5)
             return
@@ -178,7 +179,8 @@ class App:
         if turn.trust_after > turn.trust_before:
             notes.append(self._note(f"♥ Pip trusts you more · trust {turn.trust_after}/10", ROSE))
         if turn.stage_up:
-            notes.append(self._note(f"✻ Stage {trust.stage_of(turn.trust_after)}: she'll open up more next time", ROSE))
+            stage, name = turn.stage_after
+            notes.append(self._note(f"✻ Stage {stage} · {name}: she'll open up more next time", ROSE))
         self.bubble.finish("<br>".join(notes))
         self.follow()
 

@@ -12,6 +12,8 @@ class Brain(QObject):
     piece = Signal(str)          # the next bit of her reply, as it's written
     spoke = Signal(object)       # her finished reply (a session.Turn)
     closed = Signal(list)        # the sitting is over: the diary notes she wrote
+    snapshot = Signal(dict)      # after every job: a copy of trust/today/memories (session.snapshot()) for the
+                                 # screen to show, so the UI never reads the save while this thread writes it
     failed = Signal(str)
 
     def __init__(self):
@@ -44,6 +46,8 @@ class Brain(QObject):
             self.busy = True
             try:
                 self._do(*job)
+                if self.session:
+                    self.snapshot.emit(self.session.snapshot())
             except Exception:
                 self.failed.emit(traceback.format_exc(limit=3))
             finally:

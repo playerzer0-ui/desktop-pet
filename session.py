@@ -47,6 +47,12 @@ class Turn:
         return trust.stage_of(self.trust_after) > trust.stage_of(self.trust_before)
 
     @property
+    def stage_after(self):
+        """(stage number, stage name) after this reply, e.g. (2, "Learning to receive")."""
+        stage = trust.stage_of(self.trust_after)
+        return stage, trust.STAGE_NAMES[stage]
+
+    @property
     def context_used(self):
         return context_used(self.timings)
 
@@ -111,6 +117,11 @@ class Session:
     @property
     def memories(self):
         return self.save.get("memories", [])
+
+    def snapshot(self):
+        """A copy of what a screen shows (trust summary, memories), safe to hand to another thread:
+        the save itself keeps changing while turns run."""
+        return {"summary": trust.summary(self.save), "memories": [dict(m) for m in self.memories]}
 
     @property
     def mood(self):
