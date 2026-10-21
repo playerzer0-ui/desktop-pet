@@ -25,7 +25,8 @@ def start(path):
     data = Save(path, {"trust": 1, "points": 0, "days_logged": 0, "last_day": None,
                        "today": {"talk": 0, "minutes": 0}, "messages": 0, "quests_done": []})
     data.update(load_save(path))
-    data["points"] = max(data["points"], TRUST_POINTS[data["trust"] - 1])  # a trust typed into the save by hand
+    data["trust"] = min(max(int(data["trust"]), 1), len(TRUST_POINTS))  # a trust typed into the save by hand...
+    data["points"] = max(data["points"], TRUST_POINTS[data["trust"] - 1])  # ...gets the points it needs
     _new_day(data)
     write_save(data)
     return data

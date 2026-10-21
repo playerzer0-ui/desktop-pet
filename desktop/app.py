@@ -80,13 +80,18 @@ class App:
             self.body.hold(False)
 
     def menu(self, where):
+        self.build_menu().exec(where)
+
+    def build_menu(self):
+        """Her right-click menu. Status and memories wait while she's talking (they'd cut her reply short)."""
         menu = QMenu()
         menu.addAction("Talk to her", self.talk)
-        menu.addAction("Status", self.status)
-        menu.addAction("What she remembers", self.memories)
+        talking = self.bubble.active or self.brain.busy
+        for label, action in (("Status", self.status), ("What she remembers", self.memories)):
+            menu.addAction(label, action).setEnabled(not talking)
         menu.addSeparator()
         menu.addAction("Say goodbye", self.leave)
-        menu.exec(where)
+        return menu
 
     def on_snapshot(self, snap):
         self.snap = snap
@@ -202,10 +207,14 @@ class App:
 
     def on_failed(self, error):
         print(error, file=sys.stderr)
+        self.body.think(False)  # her reply isn't coming: no more "…"
         self.bubble.say("*looks confused* Something went wrong…", stay=8,
                         note=self._note(error.strip().splitlines()[-1], GRAY))
         if self.leaving:
             QTimer.singleShot(2500, QApplication.quit)
+        elif not self.input.isVisible():
+            # the job is over (brain.busy may not be cleared yet on its thread, so not release()): wander again
+            self.body.hold(False)
 
     # --- every few seconds, and whenever she moves ---
 

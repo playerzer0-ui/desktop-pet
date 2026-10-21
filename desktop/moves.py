@@ -105,13 +105,13 @@ KEYWORDS = [  # (words in her *action*, move, emote): the first that matches win
     (r"\b(shiver|trembl|shudder|shak(e|es|ing) (with|from)|cower)", "shiver", "sweat"),
     (r"\b(stomp|huff|pout|cross(es)? her arms|glare|scowl)", "stomp", "anger"),
     (r"\bshak(e|es|ing) her head", "headshake", None),
-    (r"\bnod", "nod", None),
+    (r"\bnod(?!(s|ding)? off)", "nod", None),  # (nodding off is falling asleep: the sleep line below)
     (r"\b(giggl|laugh|chuckl|snicker|wave)", "giggle", "note"),
     (r"\b(jump|bounc|hop|twirl|spin|clap|cheer|beam)", "hop", "sparkle"),
     (r"\b(tilt|puzzl|ponder|frown|blink|confus|wide eyes|stare|wonder)", "tilt", "question"),
     (r"\b(hum|sing|sway|rock)", "sway", "note"),
     (r"\b(sigh|droop|slump|lower|sniff|wipe)", "sigh", None),
-    (r"\b(sleep|doze|nod off|drows)", "sigh", "zzz"),
+    (r"\b(sleep|doze|nod(s|ding)? off|drows)", "sigh", "zzz"),
 ]
 
 MOOD_MOVES = {  # mood: (move, emote) when her reply had no action that matched
