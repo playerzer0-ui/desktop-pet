@@ -6,27 +6,32 @@ Daily things fill the bar slowly, each with a daily cap so they can't be farmed:
     stay           +1 for every 15 minutes she's open (max 4 a day)
 Quests give big chunks. A stage's MAJOR quest is a gate: until it's done, trust stops at the
 top of that stage (and so do points, so they can't be saved up to skip a stage).
+The gates are the character's own ([major_quests] in their character.toml, Character.gates), passed to start().
 Minor quests just give points.
 """
 import datetime, re
 from save import Save, load_save, write_save, stage_of
 
 TRUST_POINTS = [0, 15, 40, 70, 110, 160, 220, 290, 370, 460]  # points needed for trust 1, 2, ... 10
-MAJOR_QUESTS = {1: None, 2: None, 3: None, 4: None}  # stage -> quest id that opens the next stage (None = no gate yet)
 
 DAY_POINTS = 3
 TALK_POINTS = {"nice": 2, "neutral": 1, "rude": 0}
 TALK_CAP = 10
 STAY_MINUTES, STAY_CAP = 15, 4
 
-def start(path):
+def start(path, gates=None):
     """Call when a character opens. path = their save (Character.save_path).
+    gates = stage -> the quest id that opens the next stage (Character.gates); none = trust is never held back.
     Returns the save data that the other functions update."""
     data = Save(path, {"trust": 1, "points": 0, "days_logged": 0, "last_day": None,
                        "today": {"talk": 0, "minutes": 0}, "messages": 0, "quests_done": []})
     data.update(load_save(path))
+    data.gates = dict(gates or {})  # (kept with the save, not in it: they come from the character)
     data["trust"] = min(max(int(data["trust"]), 1), len(TRUST_POINTS))  # a trust typed into the save by hand...
     data["points"] = max(data["points"], TRUST_POINTS[data["trust"] - 1])  # ...gets the points it needs
+    for st, quest in data.gates.items():  # a save from before these gates existed (or a trust typed in):
+        if st < stage(data) and quest not in data["quests_done"]:  # gates already behind her count as done,
+            data["quests_done"].append(quest)  # or the cap would sit below her points and trust would stop for good
     _new_day(data)
     write_save(data)
     return data
@@ -77,6 +82,7 @@ def summary(data, stage_names):
         "minutes_today": data["today"]["minutes"], "quests_today": data["today"].get("quests", 0),
         "quests_done": len(data["quests_done"]), "days": data["days_logged"], "messages": data["messages"],
         "mood": data.get("mood") or "neutral",
+        "gated": at_gate(data) is not None,  # trust is held back until her major quest is done
     }
 
 def _new_day(data):
@@ -87,12 +93,22 @@ def _new_day(data):
         data["days_logged"] += 1
         _add(data, DAY_POINTS)
 
+def at_gate(data):
+    """The stage whose major quest is holding trust back right now (points have reached its cap), else None."""
+    st = _gate(data)
+    return st if st is not None and data["points"] >= _limit(data) else None
+
+def _gate(data):
+    """The first stage whose major quest isn't done yet (None if every gate is open)."""
+    for st, quest in sorted(getattr(data, "gates", {}).items()):
+        if quest and quest not in data["quests_done"]:
+            return st
+    return None
+
 def _limit(data):
     """Most points allowed right now: just short of the next stage, if its major quest isn't done."""
-    for st, quest in sorted(MAJOR_QUESTS.items()):
-        if quest and quest not in data["quests_done"]:
-            return TRUST_POINTS[st * 2] - 1  # TRUST_POINTS[st * 2] = first trust level of the next stage
-    return float("inf")
+    st = _gate(data)
+    return TRUST_POINTS[st * 2] - 1 if st is not None else float("inf")  # (TRUST_POINTS[st * 2]: next stage's start)
 
 def _add(data, points):
     data["points"] = max(data["points"], min(data["points"] + points, _limit(data)))

@@ -19,7 +19,7 @@ import events, llm, memory, trust
 from character import Character, DEFAULT
 from directions import direction
 from idle import Idle
-from quests import Quests
+from quests import Quests, MajorQuests, QUIET_FIRST
 from config import N_CTX
 from server import start_server
 from pet import new_conversation, ask, context_used, warm_up
@@ -28,7 +28,8 @@ from save import write_save
 @dataclass
 class Turn:
     reply: str
-    kind: str              # "opening", "user" (her answer to you), "idle" (spoke on her own) or "quest" (asked one)
+    kind: str              # "opening", "user" (her answer to you), "idle" (spoke on her own), "quest" (asked one)
+                           # or "major" (brought up her major quest on her own)
     feeling: str | None    # how your message felt to her: nice / neutral / rude (only for kind="user")
     mood: str              # how she feels now: one of her Character.moods (each has a sprite in her sprites/)
     seconds: float
@@ -40,6 +41,8 @@ class Turn:
     quest_done: bool = False  # your message finished the quest she was waiting on
     number: int = 0           # which reply of the sitting this is (1, 2, ...): settle_mood() needs it
     stage_name: str = ""      # her name for the trust stage after this reply, like "Learning to receive"
+    major_raised: bool = False  # she brought up her major quest in this reply (in her greeting, or on her own)
+    major_done: bool = False    # your message finished her major quest: the next stage is open
 
     @property
     def stage_up(self):
@@ -60,7 +63,7 @@ class Session:
         self.character = character if isinstance(character, Character) else Character(character)
         self.say = say
         start_server(say)
-        self.save = trust.start(self.character.save_path)  # counts today as a day logged
+        self.save = trust.start(self.character.save_path, self.character.gates)  # counts today as a day logged
         self.save["mood"] = "neutral"  # every sitting starts calm: yesterday's mood never holds back today's events
         write_save(self.save)
         self.replies = 0           # replies so far this sitting (Turn.number)
@@ -76,13 +79,17 @@ class Session:
         self.warm_up_seconds = time.time() - t0
         self.idle = Idle(self.character)
         self.quests = Quests(self.character)
+        self.major = MajorQuests(self.character)
+        self._raising = False  # the reply being written brings up her major quest (for Turn.major_raised)
         self.n_ctx = N_CTX
         self.log(f"sitting started · persona and lore {self.prompt_was} in {self.warm_up_seconds:.1f}s · "
             f"trust {self.save['trust']} (stage {trust.stage(self.save)}, {self.save['points']} points) · "
             f"mood {self.mood} · {len(self.memories)} memories", fresh=True)
 
     def open(self, on_text=None):
-        return self._turn(self.idle.opening(self._news()), "opening", on_text)
+        major = self.major.due(self.save)  # trust is held back: she brings up what's on her mind in her greeting
+        self._raising = bool(major)
+        return self._turn(self.idle.opening(" ".join(filter(None, [self._news(), major])) or None), "opening", on_text)
 
     def user_says(self, text, on_text=None):
         self.idle.user_spoke()
@@ -94,7 +101,13 @@ class Session:
 
     def wants_to_speak(self):
         """(stage direction, kind) if she should speak up on her own now, else None. Quick, no model call."""
-        ask_about = self.quests.due(self.save)
+        if time.time() - self.idle.last >= QUIET_FIRST:  # her major quest comes first, after a quiet minute
+            major = self.major.due(self.save)
+            if major:
+                self.idle.pip_spoke()
+                self._raising = True
+                return direction(self.character.fill("{name} says something on {their} own. ") + major), "major"
+        ask_about = None if self.major.active(self.save) else self.quests.due(self.save)  # (world quests wait)
         if ask_about:
             self.idle.pip_spoke()
             return ask_about, "quest"
@@ -159,7 +172,14 @@ class Session:
     def _turn(self, text, kind, on_text):
         trust_before, points_before = self.save["trust"], self.save["points"]
         t0 = time.time()
-        note = self.quests.answer_note() if kind == "user" else None  # she's waiting on a quest: she judges this
+        raising, self._raising = self._raising, False
+        note = judging = None  # she's waiting on a quest: she judges this message (her major quest first)
+        if kind == "user":
+            note = self.major.answer_note(self.save)
+            judging = "major" if note else None
+            if not note:
+                note = self.quests.answer_note()
+                judging = "world quest" if note else None
         try:
             reply, timings, feeling, mood, judged = self._ask(text, on_text, note)
         except llm.ServerGone:
@@ -171,12 +191,17 @@ class Session:
                 on_text(None)  # tells the screen to start her reply over
             reply, timings, feeling, mood, judged = self._ask(text, on_text, note)
         self.save["mood"] = mood or self.mood  # (events.py checks it: some events wait for the right mood)
-        done = None
+        done = major_done = None
         if kind == "user":  # her talking on her own earns nothing
             trust.talked(self.save, text, feeling)
             if note:
-                self.log("quest answer judged: " + {True: "answered", False: "not answered", None: "no tag (doesn't count)"}[judged])
-            done = self.quests.answered(self.save, text, feeling, judged)
+                self.log(f"{judging} judged: " + {True: "yes", False: "no", None: "no tag (doesn't count)"}[judged])
+            if judging == "major":
+                major_done = self.major.finished(self.save, text, feeling, judged)
+                if major_done:
+                    memory.remember(self.save, "milestone", f'{major_done["memory"]} The user said: "{text.strip()[:200]}"')
+                    write_save(self.save)
+            done = self.quests.answered(self.save, text, feeling, judged if judging == "world quest" else None)
             if done:
                 memory.remember_answer(self.save, self.quests.topic(done), text, self.character)
                 write_save(self.save)
@@ -184,7 +209,7 @@ class Session:
         self.replies += 1
         turn = Turn(reply, kind, feeling if kind == "user" else None, self.mood, time.time() - t0, timings,
                     trust_before, self.save["trust"], points_before, self.save["points"], bool(done),
-                    self.replies, self.character.stage_names[trust.stage(self.save)])
+                    self.replies, self.character.stage_names[trust.stage(self.save)], raising, bool(major_done))
         self._log_turn(turn, text, tagged=mood is not None)
         return turn
 
@@ -207,6 +232,10 @@ class Session:
             stats.append(f"trust {t.trust_before} -> {t.trust_after}")
         if t.quest_done:
             stats.append("quest done")
+        if t.major_raised:
+            stats.append("brought up her major quest")
+        if t.major_done:
+            stats.append("MAJOR QUEST DONE")
         self.log(" · ".join(stats) + f"\n    {'you' if t.kind == 'user' else 'cue'}: {text}"
                  f"\n    {self.character.folder}: {t.reply}")
 

@@ -111,3 +111,44 @@ rest = "how people in the user's world rest when they're too tired to go on"
 [quests.5]  # staying or going
 visits = "whether the user wants her to keep visiting, or if she's a bother"
 listening = "whether the user thinks gods would hear her if she prayed from their world"
+
+# Major quests (quests.py MajorQuests): each one is a gate at the top of a trust stage. When your points reach the
+# top of that stage they stop, and she brings this up; trust grows again once it's done. One per stage 1-4, each a
+# step of her arc in events.md (giving -> receiving). Ids are kept in the save once done (as "major-<id>"): don't rename.
+#   starts     what she says or does to bring it up (a stage direction, so written about her)
+#   done_when  what counts as done: she judges it herself, with a hidden [done] / [not yet] tag
+#   memory     what she remembers afterwards (kept forever, like her answers to the world quests)
+#   points     trust points it gives (enough to step into the next stage)
+#   needs_nice true = the reply must also feel nice to her (her [nice] tag), for quests about being kind to her.
+#              false for a plain favour, where "let's call it Sprout" is enough. (Left out = true.)
+[major_quests.1]  # opens stage 2, Learning to receive
+id = "thank-you"
+starts = "she gives the user a small blessing for their day, then waits nervously to see how they take it, half expecting to be brushed off"
+done_when = "the user thanks her or is kind to her in return, so she gets to accept something instead of only giving"
+memory = "Pip gave the user a small blessing, and for once she let herself accept their thanks."
+points = 10
+needs_nice = true
+
+[major_quests.2]  # opens stage 3, Admitting the silence
+id = "first-favour"
+starts = "she shyly asks her very first favour of the user: to give a name to the potted herb she keeps forgetting to water"
+done_when = "the user gives the herb a name (any name, even a silly one)"
+memory = "Pip asked the user for her first favour ever: to name her potted herb."
+points = 10
+needs_nice = false
+
+[major_quests.3]  # opens stage 4, Naming why she left
+id = "unanswered"
+starts = "she quietly admits that her prayers have gone unanswered for a long time, and asks the user whether they think she's foolish to keep praying"
+done_when = "the user responds to her worry kindly and honestly (comfort, their own view, or just listening), without mocking her or her faith"
+memory = "Pip told the user her prayers have gone unanswered for a long time, and the user was kind about it."
+points = 10
+needs_nice = true
+
+[major_quests.4]  # opens stage 5, The free blessing
+id = "can-i-rest"
+starts = "she admits how tired she is back home, and asks the user whether she's a bother, or whether she may keep coming here to rest"
+done_when = "the user tells her she's welcome to keep coming and resting here"
+memory = "Pip admitted how tired she is back home, and the user told her she's welcome to rest here."
+points = 10
+needs_nice = true

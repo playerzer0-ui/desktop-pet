@@ -1,7 +1,8 @@
 """The Status card, drawn as a little picture for the speech bubble:
 
     Trust ■■■□□□□□□□      one box per trust level (out of 10)
-    exp   ━━━━━──────      how far she is from this trust level to the next
+    exp   ━━━━━──────      how far she is from this trust level to the next (with a ✻ while her major quest
+                                                                          holds trust back)
     [talk] 5/10   [clock] 139 min    talks today (out of the daily cap), and minutes together today
 
 The icons are talk.png and clock.png (16 px) in character/, next to portal.png.
@@ -40,7 +41,13 @@ def card(summary):
     p.setPen(QColor(GRAY))                                  # exp ━━━━━──────
     p.setFont(QFont("Segoe UI", 8))
     p.drawText(QRectF(0, 24, LEFT, 14), Qt.AlignLeft | Qt.AlignVCenter, "exp")
-    bar = QRectF(LEFT, 28, WIDTH - LEFT - 1, 6)
+    gated = summary.get("gated")  # trust is held back by her major quest: a ✻ at the end of the bar
+    bar = QRectF(LEFT, 28, WIDTH - LEFT - 1 - (16 if gated else 0), 6)
+    if gated:
+        p.setPen(QColor(GOLD))
+        p.setFont(QFont("Segoe UI Symbol", 10, QFont.Bold))
+        p.drawText(QRectF(WIDTH - 14, 22, 14, 18), Qt.AlignCenter, "✻")
+        p.setPen(Qt.NoPen)
     p.setPen(Qt.NoPen)
     p.setBrush(QColor(TRACK))
     p.drawRoundedRect(bar, 3, 3)

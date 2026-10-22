@@ -68,8 +68,10 @@ def prefix_of(messages):
 
 FEELING_TAG = re.compile(r"\s*\[(?:feeling:\s*)?(nice|neutral|rude)\]", re.I)  # (the model sometimes adds "feeling:")
 MOOD_TAG = re.compile(r"\s*\[mood:\s*([a-z]+)\]", re.I)
-ANSWER_TAG = re.compile(r"\s*\[(?:\w+:\s*)?(not[ _]answered|unanswered|answered)\]", re.I)  # only asked for with a
-                                                                     # note (quests.py); slips like [answered: not answered] too
+ANSWER_TAG = re.compile(r"\s*\[(?:\w+:\s*)?(not[ _]answered|unanswered|answered|not[ _]yet|done)\]", re.I)
+    # (only asked for with a note: [answered] / [not answered] for a world quest, [done] / [not yet] for a major one,
+    #  see quests.py; slips like [answered: not answered] too)
+YES_TAGS = {"answered", "done"}
 LEFTOVER_TAGS = re.compile(r"(\s*\[\w+(?::\s*[\w ]+)?\])+\s*$")  # any other tag-like slip at the very end, like [happy]
 def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
     """Send a question, return (reply, timings, feeling, mood, answered). Adds both to messages = memory.
@@ -78,7 +80,8 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
     None), or None if they left it out or used a mood that isn't on the list.
     note = a hidden note added after the question for this one request (it isn't kept in messages), like the
     quest note asking them to judge whether this answers their question (quests.answer_note).
-    answered = their [answered] / [not answered] tag: True, False, or None if they wrote neither.
+    answered = their judgment tag, [answered] / [not answered] (or [done] / [not yet] for a major quest):
+    True, False, or None if they wrote neither.
     on_text(text) is called with each new piece of the reply as it streams in (without the tag).
     keep = how many messages at the start are never forgotten (system prompt + examples, + memories if any)."""
     messages.append({"role": "user", "content": question})
@@ -115,7 +118,7 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
     if moods is not None and mood not in moods:
         mood = None
     answer_tag = ANSWER_TAG.search(reply)
-    answered = (answer_tag.group(1).lower() == "answered") if answer_tag else None
+    answered = (answer_tag.group(1).lower() in YES_TAGS) if answer_tag else None
     reply = LEFTOVER_TAGS.sub("", MOOD_TAG.sub("", FEELING_TAG.sub("", ANSWER_TAG.sub("", reply)))).rstrip()
     if on_text and len(reply) > shown:  # a "[" that wasn't a tag after all: show the rest now
         on_text(reply[shown:])

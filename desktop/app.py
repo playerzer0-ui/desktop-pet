@@ -188,6 +188,10 @@ class App:
             notes.append(self._note("✦ She's curious about your world. Answer her to earn her trust!", GOLD))
         if turn.quest_done:
             notes.append(self._note("✦ Quest complete: she learned something about your world", GOLD))
+        if turn.major_raised:
+            notes.append(self._note("✻ Something is on her mind. Her trust can only grow once you answer it", GOLD))
+        if turn.major_done:
+            notes.append(self._note("✻ A turning point: she'll remember this, and her trust can grow again", ROSE))
         if turn.trust_after > turn.trust_before:
             notes.append(self._note(f"♥ {self.character.name} trusts you more · trust {turn.trust_after}/10", ROSE))
         if turn.stage_up:

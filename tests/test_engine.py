@@ -55,18 +55,39 @@ class TrustTest(unittest.TestCase):
         self.assertEqual(d["trust"], 3)
 
     def test_major_quest_gate(self):
-        old = dict(trust.MAJOR_QUESTS)
-        try:
-            trust.MAJOR_QUESTS[1] = "gate"
-            d = trust.start(temp_path())
-            trust._add(d, 1000)
-            self.assertEqual((d["points"], d["trust"]), (39, 2))  # held just short of stage 2
-            trust.quest_done(d, "gate", 5)
-            trust.quest_done(d, "gate", 5)  # a repeat pays nothing
-            self.assertEqual((d["points"], d["trust"]), (44, 3))
-        finally:
-            trust.MAJOR_QUESTS.clear()
-            trust.MAJOR_QUESTS.update(old)
+        d = trust.start(temp_path(), {1: "gate"})
+        self.assertIsNone(trust.at_gate(d))
+        trust._add(d, 1000)
+        self.assertEqual((d["points"], d["trust"]), (39, 2))  # held just short of stage 2
+        self.assertEqual(trust.at_gate(d), 1)
+        self.assertTrue(trust.summary(d, {i: "x" for i in range(1, 6)})["gated"])
+        trust.quest_done(d, "gate", 5)
+        trust.quest_done(d, "gate", 5)  # a repeat pays nothing
+        self.assertEqual((d["points"], d["trust"]), (44, 3))
+        self.assertIsNone(trust.at_gate(d))
+        self.assertFalse(trust.summary(d, {i: "x" for i in range(1, 6)})["gated"])
+
+    def test_no_gates_means_no_cap(self):
+        d = trust.start(temp_path())
+        trust._add(d, 1000)
+        self.assertEqual(d["trust"], 10)
+
+    def test_old_save_past_a_gate_keeps_growing(self):
+        """A save from before the gates (like trust 3, 57 points): gates behind her count as done."""
+        path = temp_path()
+        with open(path, "w") as f:
+            json.dump({"trust": 3, "points": 57, "quests_done": ["world-outside"]}, f)
+        gates = {1: "major-a", 2: "major-b", 3: "major-c", 4: "major-d"}
+        d = trust.start(path, gates)
+        self.assertEqual(d["quests_done"], ["world-outside", "major-a"])  # only the gate behind her
+        before = d["points"]
+        trust.talked(d, "this is a lovely morning", "nice")
+        self.assertEqual(d["points"], before + 2, "trust stopped for good: the old gate wasn't counted as done")
+        self.assertIsNone(trust.at_gate(d))
+        trust._add(d, 1000)
+        self.assertEqual((d["points"], trust.at_gate(d)), (109, 2))  # ...and the next gate still holds (110 = stage 3)
+        with open(path) as f:
+            self.assertNotIn("gates", json.load(f), "the gates come from the character, not the save file")
 
     def test_hand_edited_trust_out_of_range(self):
         for typed, expected in ((0, 1), (-3, 1), (11, 10), (99, 10)):
@@ -176,6 +197,153 @@ class AnswerCheckTest(unittest.TestCase):
             self.assertIsNone(q.answered(s, answer, "neutral", True), answer)
         q.next = 0; q.due(s)
         self.assertTrue(q.answered(s, "I'm not sure, but it rains almost every day", "neutral", True))
+
+def gated_save(points=39, trust_level=2, done=()):
+    """A save file sitting at Pip's first gate (39 points = the top of stage 1). Returns its path."""
+    path = temp_path("gated")
+    with open(path, "w") as f:
+        json.dump({"trust": trust_level, "points": points, "quests_done": list(done), "last_day": None}, f)
+    return path
+
+class MajorQuestTest(unittest.TestCase):
+    """quests.MajorQuests: the gates between trust stages ([major_quests] in character.toml)."""
+
+    def setUp(self):
+        self.pip = pip()
+        self.save = trust.start(gated_save(), self.pip.gates)
+        self.major = quests.MajorQuests(self.pip)
+
+    def test_pip_has_four_gates(self):
+        self.assertEqual(self.pip.gates, {1: "major-thank-you", 2: "major-first-favour", 3: "major-unanswered",
+                                          4: "major-can-i-rest"})
+
+    def test_bad_toml_fails_loudly(self):
+        from character import _major_quests
+        quest = {"id": "x", "starts": "", "done_when": "", "memory": "", "points": 1}
+        with self.assertRaises(ValueError):
+            _major_quests({"5": dict(quest)})
+        with self.assertRaises(ValueError):
+            _major_quests({"1": {"id": "x"}})
+        with self.assertRaises(ValueError):
+            _major_quests({"1": dict(quest, needs_nice="yes")})
+        self.assertTrue(_major_quests({"1": dict(quest)})[1]["needs_nice"], "left out = true (the safer side)")
+
+    def test_needs_nice_per_quest(self):
+        self.assertEqual({q["id"]: q["needs_nice"] for q in self.pip.major_quests.values()},
+                         {"thank-you": True, "first-favour": False, "unanswered": True, "can-i-rest": True})
+        # the herb-naming favour (gate 2): a plain, neutral reply is enough...
+        save = trust.start(gated_save(points=109, trust_level=4, done=["major-thank-you"]), self.pip.gates)
+        major = quests.MajorQuests(self.pip)
+        self.assertEqual(major.active(save)["id"], "first-favour")
+        major.due(save)
+        self.assertIsNone(major.finished(save, "ugh, fine, call it Sprout", "rude", True), "rude still never counts")
+        self.assertTrue(major.finished(save, "how about we name it Sprout?", "neutral", True))
+        # ...but the thank-you (gate 1) needs it to feel nice
+        self.major.due(self.save)
+        self.assertIsNone(self.major.finished(self.save, "thanks I guess, that's a blessing", "neutral", True))
+        self.assertTrue(self.major.finished(self.save, "thanks I guess, that's a blessing", "nice", True))
+
+    def test_brought_up_once_a_sitting(self):
+        self.assertEqual(self.major.active(self.save)["id"], "thank-you")
+        said = self.major.due(self.save)
+        self.assertIn(self.pip.major_quests[1]["starts"], said)
+        self.assertIsNone(self.major.due(self.save), "only once a sitting")
+        self.assertTrue(quests.MajorQuests(self.pip).due(self.save), "the next sitting, again")
+
+    def test_not_active_below_the_gate(self):
+        save = trust.start(gated_save(points=30), self.pip.gates)
+        self.assertIsNone(self.major.active(save))
+        self.assertIsNone(self.major.due(save))
+
+    def test_she_listens_for_a_few_messages(self):
+        self.assertIsNone(self.major.answer_note(self.save), "no note before she's brought it up")
+        self.major.due(self.save)
+        notes = [self.major.answer_note(self.save) for _ in range(quests.LISTEN_FOR + 1)]
+        self.assertTrue(all(notes[:-1]) and notes[-1] is None, "she judges LISTEN_FOR messages, then stops")
+        self.assertIn("[done]", notes[0])
+        self.assertIn(self.pip.major_quests[1]["done_when"], notes[0])
+
+    def test_only_her_done_finishes_it(self):
+        self.major.due(self.save)
+        for message, feeling, judged in [("thank you so much, that's lovely", "nice", False),   # she said not yet
+                                         ("thank you so much, that's lovely", "nice", None),    # she forgot the tag
+                                         ("whatever, stop with the blessings", "rude", True),   # rude never counts
+                                         ("praying is pretty pointless honestly", "neutral", True),  # not kind
+                                         ("I don't know, what about you?", "neutral", True),    # a dodge
+                                         ("ajsdasdad oafhoiqwfhef qiwdoqiwhdff", "neutral", True)]:  # mashing
+            self.assertIsNone(self.major.finished(self.save, message, feeling, judged), message)
+        self.assertEqual((self.save["points"], self.save["trust"]), (39, 2))
+        quest = self.major.finished(self.save, "thank you so much, that's lovely", "nice", True)
+        self.assertEqual(quest["id"], "thank-you")
+        self.assertIn("major-thank-you", self.save["quests_done"])
+        self.assertEqual((self.save["points"], self.save["trust"]), (49, 3))  # +10: into stage 2
+        self.assertIsNone(self.major.active(self.save), "the gate is open")
+        self.assertIsNone(self.major.answer_note(self.save))
+
+class SessionMajorQuestTest(unittest.TestCase):
+    """A whole sitting at the first gate, with the model stood in for."""
+
+    def setUp(self):
+        import session
+        self.session = session
+        self.real = session.start_server, session.warm_up, session.ask
+        self.notes, self.judged = [], []
+
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+            self.notes.append(note)
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
+            return "ok", {}, "nice", "happy", (self.judged.pop(0) if self.judged else None)
+        session.start_server = lambda say: None
+        session.warm_up = lambda messages, fixed: "loaded"
+        session.ask = ask
+
+    def tearDown(self):
+        self.session.start_server, self.session.warm_up, self.session.ask = self.real
+
+    def sitting(self, path):
+        c = pip()
+        c.save_path = path
+        return self.session.Session(c, say=lambda *_: None)
+
+    def test_greeting_brings_it_up_and_a_reply_finishes_it(self):
+        s = self.sitting(gated_save())
+        turn = s.open()
+        self.assertTrue(turn.major_raised)
+        self.assertIn(s.character.major_quests[1]["starts"], s.messages[-2]["content"])  # (the greeting's cue)
+        s.quests.next = 0
+        self.assertIsNone(s.wants_to_speak(), "world quests wait while a major quest is active")
+        self.judged = [False]
+        turn = s.user_says("oh, that's a nice gesture I guess")
+        self.assertFalse(turn.major_done)
+        self.assertIn("[done]", self.notes[-1])
+        self.judged = [True]
+        turn = s.user_says("thank you Pip, that really means a lot to me")
+        self.assertTrue(turn.major_done and turn.stage_up)
+        self.assertEqual(turn.trust_after, 3)
+        milestone = [m for m in s.memories if m["kind"] == "milestone"]
+        self.assertEqual(len(milestone), 1)
+        self.assertIn("thank you Pip, that really means a lot to me", milestone[0]["text"])
+        self.assertFalse(s.user_says("so how was your morning?").major_done)
+        self.assertIsNone(self.notes[-1], "no more judging once it's done")
+        with open(s.character.save_path) as f:
+            self.assertIn("major-thank-you", json.load(f)["quests_done"])
+
+    def test_brought_up_after_a_quiet_minute_when_the_gate_is_reached_mid_sitting(self):
+        s = self.sitting(gated_save(points=35))  # +3 for the new day: one point short of the gate (39)
+        s.open()
+        self.assertIsNone(s.major.active(s.save))
+        s.user_says("good morning, how are you doing today")  # +2 points: up to the cap (39), not past it
+        self.assertEqual((s.save["points"], s.major.active(s.save)["id"]), (39, "thank-you"))
+        self.assertIsNone(s.wants_to_speak(), "not right after you spoke")
+        s.idle.last -= 61
+        cue, kind = s.wants_to_speak()
+        self.assertEqual(kind, "major")
+        self.assertTrue(s.speak(cue, kind).major_raised)
+
+    def test_old_save_opens_normally(self):
+        s = self.sitting(gated_save(points=57, trust_level=3, done=["world-outside"]))
+        self.assertFalse(s.open().major_raised)
+        self.assertIn("major-thank-you", s.save["quests_done"])
 
 class ClockNudgeTest(unittest.TestCase):
     """idle.CLOCK: she speaks up at 7:00, 12:00, 18:00 and 23:00, once a day each, within 30 minutes after."""
@@ -529,6 +697,24 @@ class DesktopTest(unittest.TestCase):
         self.assertEqual(b.height(), b.layout().totalHeightForWidth(b.width()), "the text doesn't fit")
         self.assertEqual(b.geometry().bottom(), 699, "the bubble covers her head")
         b.hide()
+
+    def test_major_quest_notes_under_her_reply(self):
+        from session import Turn
+        a = self.app()
+        a.bubble.start()
+        a.on_spoke(Turn("Bless your day!", "opening", None, "happy", 1.0, {}, 2, 2, 39, 39, major_raised=True))
+        self.assertIn("Something is on her mind", a.bubble.final_note)
+        a.bubble.start()
+        a.on_spoke(Turn("Thank you...", "user", "nice", "happy", 1.0, {}, 2, 3, 39, 49, major_done=True))
+        self.assertIn("A turning point", a.bubble.final_note)
+        self.assertIn("Stage 2", a.bubble.final_note)
+
+    def test_status_card_marks_the_gate(self):
+        from desktop import status
+        s = trust.summary(trust.start(gated_save(), pip().gates), {i: "x" for i in range(1, 6)})
+        self.assertTrue(s["gated"])
+        gated, free = status.card(s).toImage(), status.card(dict(s, gated=False)).toImage()
+        self.assertNotEqual(gated, free, "the ✻ isn't drawn")
 
     def test_status_waits_while_she_talks(self):
         a = self.app()

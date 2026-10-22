@@ -93,3 +93,62 @@ class Quests:
     def topic(self, quest_id):
         """What a world quest asked about, like "whether it rains a lot in the user's world, ..."."""
         return next(t for q, _, t in self.character.quests if "world-" + q == quest_id)
+
+# --- major quests: the gates between trust stages ---
+
+LISTEN_FOR = 6     # your messages she keeps judging after she brings it up; then it waits for the next sitting
+QUIET_FIRST = 60   # seconds of quiet before she brings it up on her own (so it never cuts into a chat)
+
+class MajorQuests:
+    """A character's major quests ([major_quests] in their character.toml): one per stage 1-4, each a gate.
+    When your points reach the top of a stage they stop (trust.at_gate) and that stage's quest is the active one.
+    She brings it up once a sitting (in her greeting, or on her own after a quiet minute), then judges your next
+    few messages with a hidden [done] / [not yet] tag. Once it's done, its points open the next stage.
+    Nothing about it is kept in the save but quests_done: whether one is active comes from the points."""
+
+    def __init__(self, character):
+        self.character = character  # (character.py) whose quests, name and pronouns
+        self.raised = False         # she brought it up this sitting
+        self.listening = 0          # how many more of your messages she judges it on
+
+    def active(self, save):
+        """The major quest holding trust back right now ({id, starts, done_when, memory, points}), or None."""
+        return self.character.major_quests.get(trust.at_gate(save))
+
+    def due(self, save):
+        """What she says to bring the active quest up, if she hasn't yet this sitting (text for a stage direction,
+        to go in her greeting or a nudge), else None. Marks it raised."""
+        quest = self.active(save)
+        if not quest or self.raised:
+            return None
+        self.raised, self.listening = True, LISTEN_FOR
+        return self.character.fill("{name} has something important on {their} mind, and brings it up now, gently "
+                                   "and in {their} own words: ") + quest["starts"] + "."
+
+    def answer_note(self, save):
+        """While she's waiting on it: a hidden note for your next message (pet.ask's note), asking her to judge,
+        in the same reply, whether it's done. Else None. Each note uses up one of her LISTEN_FOR messages."""
+        quest = self.active(save)
+        if not quest or self.listening <= 0:
+            return None
+        self.listening -= 1
+        return self.character.fill(
+            "(Not part of the user's message: {name} had just brought up something important to {them}: ") + \
+            quest["starts"] + self.character.fill(
+            ". {They} replies as usual. Then, after {their} other tags, {they} judges whether it's done, and adds one "
+            "more tag: [done] only if ") + quest["done_when"] + self.character.fill(
+            ". [not yet] if the user changes the subject, brushes it off, or doesn't really respond to it.)")
+
+    def finished(self, save, message, feeling, judged):
+        """Call after her reply to a message she judged (answer_note). Returns the quest if that finished it, else
+        None. It takes her own [done], and for a quest about being kind to her (needs_nice in character.toml) a
+        message that felt nice to her too: a harsh "praying is pointless" sometimes still got [done]. Never a rude
+        message, a dodge or keyboard mashing."""
+        quest = self.active(save)
+        unkind = feeling == "rude" or (quest and quest["needs_nice"] and feeling != "nice")
+        if (not quest or judged is not True or unkind or len(re.findall(r"\w+", message)) < 2
+                or is_dodge(message) or not looks_like_words(message)):
+            return None
+        self.listening = 0
+        trust.quest_done(save, "major-" + quest["id"], quest["points"])  # (done first, so the gate opens for them)
+        return quest

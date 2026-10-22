@@ -38,6 +38,7 @@ class Character:
         self.idle_note = c["idle_note"]  # (required, even if "": a key misplaced under a [table] fails loudly)
         self.quests = [(quest_id, int(stage), about)
                        for stage, asks in c["quests"].items() for quest_id, about in asks.items()]
+        self.major_quests = _major_quests(c.get("major_quests", {}))  # stage -> {id, starts, done_when, memory, points}
         self.sprites = os.path.join(self.dir, "sprites")
         self.portal = PORTAL
         self.save_path = os.path.join(HERE, "saves", folder + ".json")
@@ -45,6 +46,11 @@ class Character:
         self.events = events.parse(self.text("events.md"))
         if folder == DEFAULT:
             _move_old_save(self.save_path)
+
+    @property
+    def gates(self):
+        """Stage -> the quest id (as saved in quests_done) that opens the next stage, for trust.py."""
+        return {stage: "major-" + q["id"] for stage, q in self.major_quests.items()}
 
     def text(self, name):
         """A file from their folder, like persona.md."""
@@ -96,6 +102,20 @@ def for_stage(text, stage):
             write(child, level + 1)
     write(tree, 2)
     return "\n\n".join(parts)
+
+def _major_quests(tables):
+    """[major_quests.N] from character.toml, checked: one per stage 1-4 at most, with every field filled in."""
+    found = {}
+    for stage, q in tables.items():
+        if not stage.isdigit() or not 1 <= int(stage) <= 4:
+            raise ValueError(f"[major_quests.{stage}]: a major quest opens the next stage, so it belongs to stage 1-4")
+        missing = [key for key in ("id", "starts", "done_when", "memory", "points") if key not in q]
+        if missing:
+            raise ValueError(f"[major_quests.{stage}] is missing: {', '.join(missing)}")
+        if not isinstance(q.setdefault("needs_nice", True), bool):
+            raise ValueError(f"[major_quests.{stage}] needs_nice must be true or false")
+        found[int(stage)] = q
+    return found
 
 def _move_old_save(path):
     """Before characters, Pip's save was save.json in the project folder: it becomes saves/pip.json."""
