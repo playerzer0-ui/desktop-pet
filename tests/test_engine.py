@@ -113,14 +113,69 @@ class QuestTest(unittest.TestCase):
         self.assertIsNone(q.due(s))  # the first one waits 30-60 minutes
         q.next = 0
         self.assertTrue(q.due(s))
-        self.assertIsNone(q.answered(s, "yes it does", "nice"))  # too short, and the quest is dropped
+        self.assertIsNone(q.answered(s, "yes it does", "nice", True))  # too short, and the quest is dropped
         q.next = 0; q.due(s)
         quest_id = q.pending[0]
-        self.assertEqual(q.answered(s, "it rains here all the time", "nice"), quest_id)
+        self.assertEqual(q.answered(s, "it rains here all the time", "nice", True), quest_id)
         self.assertIn(quest_id, s["quests_done"])
-        q.next = 0; q.due(s); q.answered(s, "we eat lots of bread here", "neutral")
+        q.next = 0; q.due(s); q.answered(s, "we eat lots of bread here", "neutral", True)
         q.next = 0
         self.assertIsNone(q.due(s))  # two a day at most
+
+    def test_only_a_real_answer_counts(self):
+        q = quests.Quests(pip())
+        s = Save(temp_path(), {"trust": 1, "points": 3, "quests_done": [], "today": {"talk": 0, "minutes": 0}})
+        self.assertIsNone(q.answer_note(), "no note while she isn't waiting on a quest")
+        for judged in (False, None):  # she judged it a non-answer, or forgot to judge it
+            q.next = 0; q.due(s)
+            self.assertIsNone(q.answered(s, "ajsdasdad oafhoiqwfhef aosidoaidaid burgersssss", "neutral", judged))
+            self.assertIsNone(q.pending, "one chance: it's dropped")
+        self.assertEqual((s["quests_done"], s["points"]), ([], 3))
+        q.next = 0; q.due(s)
+        note = q.answer_note()
+        self.assertIn(q.topic(q.pending[0]), note)
+        self.assertIn("[answered]", note)
+        self.assertIn("[not answered]", note)
+        self.assertTrue(note.startswith("(Not part of the user's message"))
+
+class AnswerCheckTest(unittest.TestCase):
+    """The code's own check on a quest answer, on top of her [answered] tag (quests.is_dodge, looks_like_words)."""
+    REAL = [
+        "it rains almost every day here and honestly I kind of like it",
+        "yes, lots of rain here",
+        "Rice, noodles, bread, soup",
+        "I'm not sure, but it rains almost every day",
+        "I don't know much about gods, but my grandma prays every Sunday",
+        "we celebrate Christmas and Lunar New Year with my family",
+        "Brrr it's freezing here at night, we use heaters",
+        "I study at university, very tiring",
+        "honestly no idea how money works, but banks and the government control most of it",
+        "I spend most days in front of a laptop writing code",
+    ]
+    DODGES = ["I don't know, what about you?", "idk lol", "not sure tbh, what about you", "I dont really know, you tell me",
+              "no idea honestly", "dunno, and you?", "I have no idea, how about you?", "I’m not sure"]
+    JUNK = ["ajsdasdad oafhoiqwfhef aosidoaidaid burgersssss qiwdoqiwhdff", "asdfghjkl qwrtzp zxcvbnm hjkl",
+            "aaaa bbbbbb cccc dddd", "hjkhjk sdfsdf lkjlkj qwqwqw"]
+
+    def test_real_answers_pass(self):
+        for answer in self.REAL:
+            self.assertFalse(quests.is_dodge(answer), answer)
+            self.assertTrue(quests.looks_like_words(answer), answer)
+
+    def test_dodges_and_junk_dont(self):
+        for answer in self.DODGES:
+            self.assertTrue(quests.is_dodge(answer), answer)
+        for answer in self.JUNK:
+            self.assertFalse(quests.looks_like_words(answer), answer)
+
+    def test_even_if_she_judged_it_answered(self):
+        q = quests.Quests(pip())
+        s = Save(temp_path(), {"trust": 1, "points": 3, "quests_done": [], "today": {"talk": 0, "minutes": 0}})
+        for answer in ("I don't know, what about you?", "ajsdasdad oafhoiqwfhef aosidoaidaid burgersssss qiwdoqiwhdff"):
+            q.next = 0; q.due(s)
+            self.assertIsNone(q.answered(s, answer, "neutral", True), answer)
+        q.next = 0; q.due(s)
+        self.assertTrue(q.answered(s, "I'm not sure, but it rains almost every day", "neutral", True))
 
 class ClockNudgeTest(unittest.TestCase):
     """idle.CLOCK: she speaks up at 7:00, 12:00, 18:00 and 23:00, once a day each, within 30 minutes after."""
@@ -212,21 +267,42 @@ def fake_stream(pieces, finish):
     """Stands in for llm.chat_stream: the pieces as the server's chunks, then a last chunk with the timings."""
     chunks = [{"choices": [{"delta": {"content": p}, "finish_reason": None}]} for p in pieces]
     chunks.append({"choices": [{"delta": {}, "finish_reason": finish}], "timings": {"prompt_n": 1}})
-    return lambda messages, **settings: iter(chunks)
+    def stream(messages, **settings):
+        fake_stream.sent = messages  # what the server was asked (for the note tests)
+        return iter(chunks)
+    return stream
 
 class AskTest(unittest.TestCase):
     MOODS = {"happy", "neutral", "sad"}
 
-    def ask(self, *pieces, finish="stop"):
-        """(reply, feeling, mood, what was streamed to the screen) for a reply made of these pieces."""
+    def ask(self, *pieces, finish="stop", note=None):
+        """(reply, feeling, mood, what was streamed to the screen) for a reply made of these pieces.
+        Also keeps self.answered (her [answered] tag) and self.messages (the chat afterwards)."""
         real, shown = pet.llm.chat_stream, []
         pet.llm.chat_stream = fake_stream(pieces, finish)
+        self.messages = [{"role": "system", "content": "x"}]
         try:
-            reply, _, feeling, mood = pet.ask([{"role": "system", "content": "x"}], "hi",
-                                              on_text=shown.append, moods=self.MOODS)
+            reply, _, feeling, mood, self.answered = pet.ask(self.messages, "hi", on_text=shown.append,
+                                                             moods=self.MOODS, note=note)
         finally:
             pet.llm.chat_stream = real
         return reply, feeling, mood, "".join(shown).rstrip()  # (the space before a tag streams too)
+
+    def test_answered_tag(self):
+        for tag, expected in (("[answered]", True), ("[not answered]", False), ("[Not_Answered]", False), ("", None),
+                              ("[answered: not answered]", False), ("[quest: answered]", True)):  # (real slips seen)
+            with self.subTest(tag):
+                reply, feeling, mood, shown = self.ask(f"Oh, rain all day? [nice] [mood: happy] {tag}", note="(note)")
+                self.assertEqual((reply, shown, feeling, mood, self.answered),
+                                 ("Oh, rain all day?", "Oh, rain all day?", "nice", "happy", expected))
+                self.assertNotIn("answered", self.messages[-1]["content"], "her stored reply shouldn't teach the tag")
+
+    def test_note_is_sent_but_not_kept(self):
+        self.ask("Okay. [neutral] [mood: neutral] [answered]", note="(Not part of the user's message: judge it.)")
+        self.assertEqual(fake_stream.sent[-1]["content"], "hi\n\n(Not part of the user's message: judge it.)")
+        self.assertEqual(self.messages[1], {"role": "user", "content": "hi"})
+        self.ask("Okay. [neutral] [mood: neutral]")
+        self.assertEqual(fake_stream.sent[1]["content"], "hi")  # no note: the question as it is
 
     def test_tags(self):
         self.assertEqual(self.ask("*smiles* Hel", "lo there!", " [nice]", " [mood: happy]"),
@@ -429,10 +505,16 @@ class DesktopTest(unittest.TestCase):
         a = self.app()
         a.snap = {"summary": s, "memories": []}
         a.status()
+        from desktop import status
         self.assertTrue(a.bubble.isVisible())
-        self.assertFalse(a.bubble.label.pixmap().isNull(), "Status shows text, not the card")
+        self.assertTrue(a.bubble.picture.isVisible() and not a.bubble.picture.pixmap().isNull(), "no card shown")
+        self.assertEqual(a.bubble.picture.height(), status.HEIGHT, "the card is squashed (an empty bubble)")
+        self.assertGreater(a.bubble.height(), status.HEIGHT)
         a.bubble.say("hi")
-        self.assertTrue(a.bubble.label.pixmap().isNull(), "the card stays behind her next words")
+        self.assertFalse(a.bubble.picture.isVisible(), "the card stays behind her next words")
+        self.assertTrue(a.bubble.label.isVisible())
+        a.status()  # and again: it still fits after a message in between
+        self.assertEqual(a.bubble.picture.height(), status.HEIGHT)
 
     def test_a_long_message_still_sits_above_her_head(self):
         from PySide6.QtCore import QPoint
@@ -506,13 +588,13 @@ class ReconnectTest(unittest.TestCase):
 
         def start(say): self.calls["start"] += 1
         def warm(messages, fixed): self.calls["read"] += 1; return "loaded"
-        def ask(messages, question, on_text=None, keep=1, moods=None):
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
             self.calls["ask"] += 1
             messages.append({"role": "user", "content": question})
             if self.calls["ask"] == 2:  # her first reply to you: the server is gone
                 raise llm.ServerGone("test")
             messages.append({"role": "assistant", "content": "ok [nice] [mood: happy]"})
-            return "ok", {}, "nice", "happy"
+            return "ok", {}, "nice", "happy", None
         def chat(messages, **settings):
             self.calls["diary"] += 1
             if self.calls["diary"] == 1:

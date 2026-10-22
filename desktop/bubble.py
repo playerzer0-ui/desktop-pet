@@ -82,7 +82,10 @@ class Bubble(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8 + TAIL)
         layout.setSpacing(2)
+        self.picture = QLabel()  # a picture instead of words (the Status card): its own label, as a picture in the
+        self.picture.hide()      # word-wrapping one gets no height at all (wrapping only measures text)
         layout.addWidget(self.label)
+        layout.addWidget(self.picture)
         layout.addWidget(self.note)
         self.anchor = QPoint()
         self.tail_x = WIDTH // 2  # where the tail sits along the bottom (moves when the bubble meets a screen edge)
@@ -142,8 +145,8 @@ class Bubble(QWidget):
     def show_picture(self, picture, stay=None):
         """Show a picture (like the Status card, see status.py) instead of words, the way say() shows a message."""
         self.say("", stay=stay)
-        self.label.setPixmap(picture)  # (the next say() or page replaces it with words again)
-        self.label.setVisible(True)
+        self.picture.setPixmap(picture)  # (the next say() or page hides it and shows words again)
+        self.picture.show()
         self._fit()
 
     def follow(self, anchor):
@@ -256,6 +259,7 @@ class Bubble(QWidget):
     def _render(self, words, note):
         self.label.setText(words)
         self.label.setVisible(bool(words))
+        self.picture.hide()
         self.note.setText(note)
         self.note.setVisible(bool(note))
         self._fit()
@@ -266,8 +270,10 @@ class Bubble(QWidget):
         """Take exactly the height the wrapped text needs at this width, then sit above her head.
         (Not adjustSize(): it ignores how wrapping makes text taller, so the window grew later, downward,
         over her head.)"""
-        self.layout().activate()
-        self.setFixedHeight(self.layout().totalHeightForWidth(self.width()))
+        layout = self.layout()
+        layout.activate()
+        height = layout.totalHeightForWidth(self.width())  # (-1 when nothing showing wraps, like the Status card...)
+        self.setFixedHeight(height if height > 0 else layout.totalSizeHint().height())  # (...then its own size)
         self.follow(self.anchor)
 
     def paintEvent(self, _):

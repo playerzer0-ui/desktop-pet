@@ -68,17 +68,23 @@ def prefix_of(messages):
 
 FEELING_TAG = re.compile(r"\s*\[(?:feeling:\s*)?(nice|neutral|rude)\]", re.I)  # (the model sometimes adds "feeling:")
 MOOD_TAG = re.compile(r"\s*\[mood:\s*([a-z]+)\]", re.I)
-LEFTOVER_TAGS = re.compile(r"(\s*\[\w+(?::\s*\w+)?\])+\s*$")  # any other tag-like slip at the very end, like [happy]
-def ask(messages, question, on_text=None, keep=1, moods=None):
-    """Send a question, return (reply, timings, feeling, mood). Adds both to messages = memory.
+ANSWER_TAG = re.compile(r"\s*\[(?:\w+:\s*)?(not[ _]answered|unanswered|answered)\]", re.I)  # only asked for with a
+                                                                     # note (quests.py); slips like [answered: not answered] too
+LEFTOVER_TAGS = re.compile(r"(\s*\[\w+(?::\s*[\w ]+)?\])+\s*$")  # any other tag-like slip at the very end, like [happy]
+def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+    """Send a question, return (reply, timings, feeling, mood, answered). Adds both to messages = memory.
     feeling = how the question felt to the character: "nice", "neutral" or "rude" (their hidden tag, see persona.md).
     mood = how they feel after replying (their second hidden tag): one of `moods` (Character.moods; any word if
     None), or None if they left it out or used a mood that isn't on the list.
+    note = a hidden note added after the question for this one request (it isn't kept in messages), like the
+    quest note asking them to judge whether this answers their question (quests.answer_note).
+    answered = their [answered] / [not answered] tag: True, False, or None if they wrote neither.
     on_text(text) is called with each new piece of the reply as it streams in (without the tag).
     keep = how many messages at the start are never forgotten (system prompt + examples, + memories if any)."""
     messages.append({"role": "user", "content": question})
+    request = messages[:-1] + [{"role": "user", "content": f"{question}\n\n{note}"}] if note else messages
 
-    chunks = llm.chat_stream(messages, max_tokens=200,
+    chunks = llm.chat_stream(request, max_tokens=200,
                              temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5)  # Qwen's recommended chat settings
 
     reply = ""
@@ -108,7 +114,9 @@ def ask(messages, question, on_text=None, keep=1, moods=None):
     mood = mood_tag.group(1).lower() if mood_tag else None
     if moods is not None and mood not in moods:
         mood = None
-    reply = LEFTOVER_TAGS.sub("", MOOD_TAG.sub("", FEELING_TAG.sub("", reply))).rstrip()
+    answer_tag = ANSWER_TAG.search(reply)
+    answered = (answer_tag.group(1).lower() == "answered") if answer_tag else None
+    reply = LEFTOVER_TAGS.sub("", MOOD_TAG.sub("", FEELING_TAG.sub("", ANSWER_TAG.sub("", reply)))).rstrip()
     if on_text and len(reply) > shown:  # a "[" that wasn't a tag after all: show the rest now
         on_text(reply[shown:])
 
@@ -120,7 +128,7 @@ def ask(messages, question, on_text=None, keep=1, moods=None):
         messages.pop(keep)  # oldest question
         messages.pop(keep)  # and its answer
 
-    return reply.strip(), timings, feeling, mood
+    return reply.strip(), timings, feeling, mood, answered
 
 def context_used(timings):
     # how full the context is = cached tokens + newly read tokens + reply tokens

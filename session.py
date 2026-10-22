@@ -159,8 +159,9 @@ class Session:
     def _turn(self, text, kind, on_text):
         trust_before, points_before = self.save["trust"], self.save["points"]
         t0 = time.time()
+        note = self.quests.answer_note() if kind == "user" else None  # she's waiting on a quest: she judges this
         try:
-            reply, timings, feeling, mood = self._ask(text, on_text)
+            reply, timings, feeling, mood, judged = self._ask(text, on_text, note)
         except llm.ServerGone:
             # the server went away (e.g. another copy of the pet that owned it was closed): start it again and retry once
             if self.messages and self.messages[-1] == {"role": "user", "content": text}:
@@ -168,12 +169,14 @@ class Session:
             self.reconnect()
             if on_text:
                 on_text(None)  # tells the screen to start her reply over
-            reply, timings, feeling, mood = self._ask(text, on_text)
+            reply, timings, feeling, mood, judged = self._ask(text, on_text, note)
         self.save["mood"] = mood or self.mood  # (events.py checks it: some events wait for the right mood)
         done = None
         if kind == "user":  # her talking on her own earns nothing
             trust.talked(self.save, text, feeling)
-            done = self.quests.answered(self.save, text, feeling)
+            if note:
+                self.log("quest answer judged: " + {True: "answered", False: "not answered", None: "no tag (doesn't count)"}[judged])
+            done = self.quests.answered(self.save, text, feeling, judged)
             if done:
                 memory.remember_answer(self.save, self.quests.topic(done), text, self.character)
                 write_save(self.save)
@@ -185,8 +188,8 @@ class Session:
         self._log_turn(turn, text, tagged=mood is not None)
         return turn
 
-    def _ask(self, text, on_text):
-        return ask(self.messages, text, on_text=on_text, keep=self.keep, moods=self.character.moods)
+    def _ask(self, text, on_text, note=None):
+        return ask(self.messages, text, on_text=on_text, keep=self.keep, moods=self.character.moods, note=note)
 
     def _log_turn(self, t, text, tagged):
         """One reply in her log. tagged = she wrote a [mood: ...] tag (else her last mood was kept)."""
