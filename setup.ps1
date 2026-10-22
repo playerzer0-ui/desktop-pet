@@ -122,8 +122,38 @@ Step "5/5  A quick check"
 & $venvPython -m desktop.check
 if ($LASTEXITCODE -ne 0) { Fail "The character's files don't agree (see above)." }
 # (cmd merges the tests' two output streams: Windows PowerShell would show stderr lines as error objects)
-cmd /c "`"$venvPython`" -m unittest discover -s tests 2>&1" | Where-Object { $_.Trim() } | Select-Object -Last 2 | ForEach-Object { Note $_ }
-if ($LASTEXITCODE -ne 0) { Write-Host "   Some tests failed (above). The pet may still run; tell whoever works on the code." -ForegroundColor Red }
+$testOutput = @(cmd /c "`"$venvPython`" -m unittest discover -s tests 2>&1")
+$testsPassed = ($LASTEXITCODE -eq 0)
+$ran = $testOutput | Where-Object { $_ -match "^Ran \d+ tests?" } | Select-Object -Last 1
+if ($testsPassed) {
+    Ok "${ran}: all passed"
+} else {
+    # unittest lists each problem as "FAIL: <test> (...)" (a check came out wrong) or "ERROR: <test> (...)"
+    # (the test crashed), then a traceback whose last line is the error itself. Our tests write that line to say
+    # what's wrong and how to fix it, so it's the line worth showing.
+    $failed = 0
+    for ($i = 0; $i -lt $testOutput.Count; $i++) {
+        if ($testOutput[$i] -notmatch "^(FAIL|ERROR): (\S+)") { continue }
+        $kind, $test = $Matches[1], $Matches[2]
+        $why = ""
+        for ($j = $i + 2; $j -lt $testOutput.Count -and $testOutput[$j] -notmatch "^(=+|-+)$"; $j++) {
+            if ($testOutput[$j].Trim()) { $why = $testOutput[$j].Trim() }
+        }
+        $why = $why -replace "^AssertionError: ", ""
+        if ($why -match "^.+ : (.+)$") { $why = $Matches[1] }  # "10 != 240 : Pip's daily_minutes is..." -> the sentence
+        $failed++
+        Write-Host ""
+        Write-Host ("   {0}  {1}" -f $(if ($kind -eq "FAIL") { "Failed " } else { "Crashed" }), $test) -ForegroundColor Red
+        Note "         $why"
+    }
+    Write-Host ""
+    Write-Host "   ${ran}: $failed failed (above). Each line under a test's name says what went wrong." -ForegroundColor Red
+    Note "The pet may still run. For the full details: .venv\Scripts\python -m unittest discover -s tests"
+}
 
 Write-Host ""
-Write-Host "All set. Start her with start.bat (or: .venv\Scripts\python main.py)." -ForegroundColor Green
+if ($testsPassed) {
+    Write-Host "All set. Start her with start.bat (or: .venv\Scripts\python main.py)." -ForegroundColor Green
+} else {
+    Write-Host "Set up, but with the test problems above. You can still try start.bat." -ForegroundColor Yellow
+}
