@@ -44,7 +44,8 @@ class Character:
         self.time_up = _by_stage(c, "time_up", needed)
         self.quests = [(quest_id, int(stage), about)
                        for stage, asks in c["quests"].items() for quest_id, about in asks.items()]
-        self.major_quests = _major_quests(c.get("major_quests", {}))  # stage -> {id, starts, done_when, memory, points}
+        self.major_quests = _major_quests(c.get("major_quests", {}), self.moods)
+        # stage -> {id, starts, done_when, memory, points}, or a story over several days: {id, memory, points, steps}
         self.sprites = os.path.join(self.dir, "sprites")
         self.portal = PORTAL
         self.save_path = os.path.join(HERE, "saves", folder + ".json")
@@ -124,19 +125,46 @@ def _by_stage(toml, key, required):
         raise ValueError(f"[{key}] needs a line for stage 1 (they have a daily_minutes limit)")
     return table
 
-def _major_quests(tables):
-    """[major_quests.N] from character.toml, checked: one per stage 1-4 at most, with every field filled in."""
+def _major_quests(tables, moods):
+    """[major_quests.N] from character.toml, checked: one per stage 1-4 at most, with every field filled in.
+    Either one moment (starts, done_when) or a story told in steps over several days (steps: see story.py)."""
     found = {}
     for stage, q in tables.items():
+        where = f"[major_quests.{stage}]"
         if not stage.isdigit() or not 1 <= int(stage) <= 4:
-            raise ValueError(f"[major_quests.{stage}]: a major quest opens the next stage, so it belongs to stage 1-4")
-        missing = [key for key in ("id", "starts", "done_when", "memory", "points") if key not in q]
+            raise ValueError(f"{where}: a major quest opens the next stage, so it belongs to stage 1-4")
+        needed = ("id", "memory", "points", "steps") if "steps" in q else ("id", "starts", "done_when", "memory", "points")
+        missing = [key for key in needed if key not in q]
         if missing:
-            raise ValueError(f"[major_quests.{stage}] is missing: {', '.join(missing)}")
+            raise ValueError(f"{where} is missing: {', '.join(missing)}")
         if not isinstance(q.setdefault("needs_nice", True), bool):
-            raise ValueError(f"[major_quests.{stage}] needs_nice must be true or false")
+            raise ValueError(f"{where} needs_nice must be true or false")
+        for i, step in enumerate(q.get("steps", []), 1):
+            _check_step(f"{where} step {i}", step, moods)
+        if "steps" in q and not q["steps"]:
+            raise ValueError(f"{where} has no steps")
         found[int(stage)] = q
     return found
+
+def _check_step(where, step, moods):
+    """One step of a story quest (story.py), with its defaults filled in."""
+    if "opens" not in step:
+        raise ValueError(f"{where} is missing: opens")
+    step.setdefault("leaves", False)
+    step.setdefault("away_days", 0)
+    step.setdefault("no_time_limit", False)
+    if step.setdefault("ends", "after_it") not in ("after_it", "goodbyes"):
+        raise ValueError(f'{where}: ends must be "after_it" or "goodbyes"')
+    if step["ends"] == "goodbyes":
+        missing = [key for key in ("goodbyes", "begs", "leaves_line") if key not in step]
+        if missing:
+            raise ValueError(f"{where} ends with goodbyes, so it needs: {', '.join(missing)}")
+        if not isinstance(step["goodbyes"], int) or step["goodbyes"] < 1:
+            raise ValueError(f"{where}: goodbyes must be a whole number above 0")
+    if "mood" in step and step["mood"] not in moods:
+        raise ValueError(f"{where}: mood {step['mood']!r} isn't one of the character's moods")
+    if not isinstance(step["away_days"], int) or step["away_days"] < 0:
+        raise ValueError(f"{where}: away_days must be a whole number, 0 or more")
 
 def _move_old_save(path):
     """Before characters, Pip's save was save.json in the project folder: it becomes saves/pip.json."""

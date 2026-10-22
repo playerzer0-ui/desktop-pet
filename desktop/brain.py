@@ -47,6 +47,10 @@ class Brain(QObject):
         """Her mood after reply `number` eases back to neutral (in the save too, so events and Status agree)."""
         self.jobs.put(("settle", number))
 
+    def goodbye(self):
+        """You used Say goodbye while her story wants goodbyes: she begs to stay, or the last time goes home."""
+        self.jobs.put(("goodbye",))
+
     def close(self):
         self.jobs.put(("close",))
 
@@ -78,6 +82,10 @@ class Brain(QObject):
             self._speak("user", self.session.user_says, args[0])
         elif what == "settle":
             self.session.settle_mood(args[0])
+        elif what == "goodbye":
+            wanted = self.session.goodbye()
+            if wanted:
+                self._speak(wanted[1], self.session.speak, *wanted)
         elif what == "tick":
             wanted = self.session.wants_to_speak()
             if wanted:

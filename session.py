@@ -15,7 +15,7 @@ what was said, how it felt to her, her mood, how long it took, how full the cont
 """
 import datetime, time
 from dataclasses import dataclass
-import events, llm, memory, trust, visits
+import events, llm, memory, story, trust, visits
 from character import Character, DEFAULT
 from directions import direction
 from idle import Idle
@@ -44,6 +44,8 @@ class Turn:
     major_raised: bool = False  # she brought up her major quest in this reply (in her greeting, or on her own)
     major_done: bool = False    # your message finished her major quest: the next stage is open
     time_up: bool = False       # her time here today is used up (visits.py): the screen sends her home after this
+    leaving: bool = False       # a story quest sends her home after this reply (story.py), for a day or more
+    story_done: bool = False    # this reply finished a story quest: the next stage is open
 
     @property
     def stage_up(self):
@@ -81,6 +83,8 @@ class Session:
         self.idle = Idle(self.character)
         self.quests = Quests(self.character)
         self.major = MajorQuests(self.character)
+        self.story = story.Story(self.character)  # a major quest told over several days (story.py)
+        self._leaving_after = False  # her next reply is her story goodbye: she goes home after it
         self._raising = False  # the reply being written brings up her major quest (for Turn.major_raised)
         self.warned = self.said_goodbye = False  # (her daily time: see wants_to_speak)
         self.n_ctx = N_CTX
@@ -89,9 +93,21 @@ class Session:
             f"mood {self.mood} · {len(self.memories)} memories", fresh=True)
 
     def open(self, on_text=None):
-        major = self.major.due(self.save)  # trust is held back: she brings up what's on her mind in her greeting
-        self._raising = bool(major)
-        return self._turn(self.idle.opening(" ".join(filter(None, [self._news(), major])) or None), "opening", on_text)
+        begins = self.story.begin_text(self.save, greeting=True)  # a story step that's due today begins here
+        major = None if begins else self.major.due(self.save)  # trust is held back: she brings it up in her greeting
+        self._raising = bool(begins or major)
+        extra = " ".join(filter(None, [self._news(), major, begins])) or None
+        return self._turn(self.idle.opening(extra), "opening", on_text)
+
+    def goodbye(self):
+        """Say goodbye (the menu) while a story step wants goodbyes (Story.begs_on_goodbye): (stage direction, kind)
+        for what she says, begging to stay or, the last time, going home. None if goodbye should just send her home."""
+        said = self.story.goodbye(self.save)
+        if not said:
+            return None
+        text, self._leaving_after = said
+        self.idle.pip_spoke()
+        return direction(self.character.fill("{name} says something on {their} own: ") + text + "."), "goodbye"
 
     def user_says(self, text, on_text=None):
         self.idle.user_spoke()
@@ -116,7 +132,7 @@ class Session:
         if self.said_goodbye:
             return None  # (she's on her way home)
         if time.time() - self.idle.last >= QUIET_FIRST:  # her major quest comes first, after a quiet minute
-            major = self.major.due(self.save)
+            major = self.story.begin_text(self.save, greeting=False) or self.major.due(self.save)
             if major:
                 self.idle.pip_spoke()
                 self._raising = True
@@ -160,7 +176,10 @@ class Session:
 
     @property
     def minutes_left(self):
-        """Minutes she has left here today, this sitting included (visits.py), or None if there's no limit."""
+        """Minutes she has left here today, this sitting included (visits.py), or None if there's no limit
+        (also while a story step ignores it)."""
+        if story.ignores_time_limit(self.save, self.character):
+            return None
         return visits.minutes_left(self.save, self.character, (time.time() - self.opened) / 60)
 
     @property
@@ -173,6 +192,8 @@ class Session:
         summary = trust.summary(self.save, self.character.stage_names)
         summary["minutes_today"] = visits.minutes_used(self.save, (time.time() - self.opened) / 60)  # (this sitting too)
         summary["daily_minutes"] = self.character.daily_minutes
+        summary["begs_on_goodbye"] = self.story.begs_on_goodbye(self.save)  # (Say goodbye: she begs to stay)
+        summary["mood_locked"] = self.story.mood(self.save)  # (her mood doesn't settle back to neutral)
         return {"summary": summary, "memories": [dict(m) for m in self.memories]}
 
     @property
@@ -202,8 +223,12 @@ class Session:
         trust_before, points_before = self.save["trust"], self.save["points"]
         t0 = time.time()
         raising, self._raising = self._raising, False
+        leaving, self._leaving_after = self._leaving_after, False
         note = judging = None  # she's waiting on a quest: she judges this message (her major quest first)
-        if kind == "user":
+        stepping = self.story.note(self.save)  # (a story step's note on every line of hers while it lasts)
+        if stepping:
+            note = stepping
+        elif kind == "user":
             note = self.major.answer_note(self.save)
             judging = "major" if note else None
             if not note:
@@ -219,6 +244,7 @@ class Session:
             if on_text:
                 on_text(None)  # tells the screen to start her reply over
             reply, timings, feeling, mood, judged = self._ask(text, on_text, note)
+        mood = self.story.mood(self.save) or mood  # (a story step can keep her in one mood, whatever her tag says)
         self.save["mood"] = mood or self.mood  # (events.py checks it: some events wait for the right mood)
         done = major_done = None
         if kind == "user":  # her talking on her own earns nothing
@@ -234,12 +260,14 @@ class Session:
             if done:
                 memory.remember_answer(self.save, self.quests.topic(done), text, self.character)
                 write_save(self.save)
+        outcome = self.story.after_reply(self.save)  # (a step that ends right after its first line ends now)
+        leaving = leaving or outcome == "leave"
         self._count_stay()
         self.replies += 1
         turn = Turn(reply, kind, feeling if kind == "user" else None, self.mood, time.time() - t0, timings,
                     trust_before, self.save["trust"], points_before, self.save["points"], bool(done),
                     self.replies, self.character.stage_names[trust.stage(self.save)], raising, bool(major_done),
-                    self.minutes_left is not None and self.minutes_left <= 0)
+                    self.minutes_left is not None and self.minutes_left <= 0, leaving, outcome == "done")
         self._log_turn(turn, text, tagged=mood is not None)
         return turn
 
@@ -268,6 +296,10 @@ class Session:
             stats.append("MAJOR QUEST DONE")
         if t.time_up:
             stats.append("time up for today")
+        if t.leaving:
+            stats.append("story: she goes home")
+        if t.story_done:
+            stats.append("STORY QUEST DONE")
         self.log(" · ".join(stats) + f"\n    {'you' if t.kind == 'user' else 'cue'}: {text}"
                  f"\n    {self.character.folder}: {t.reply}")
 

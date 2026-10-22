@@ -10,7 +10,8 @@ Her mind is session.py, run by brain.py on its own thread. The screen never read
 after every job the brain sends a snapshot (trust summary, memories), and Status / memories show that.
 """
 import sys, time
-import visits
+import story, visits
+from save import load_save
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
 from character import Character, DEFAULT
@@ -27,8 +28,9 @@ MOOD_DEFAULT_SECONDS = 35     # (any mood not listed)
 RESTING_SECONDS = 8  # how long the "resting back home" note shows before the app closes
 
 class App:
-    def __init__(self, character, resting=False):
-        """resting = she's used up today's time (visits.resting): only the portal shows, with a note, then it closes."""
+    def __init__(self, character, resting=False, away=False):
+        """resting = she's used up today's time (visits.resting): only the portal shows, with a note, then it closes.
+        away = a story quest sent her home for a while (story.away): only the portal shows, no note, then it closes."""
         self.character = character  # who's on the desktop (character.py)
         self.body, self.bubble = Body(character.sprites, character.portal), Bubble()
         self.input, self.brain = InputBox(character.name), Brain(character)
@@ -40,6 +42,7 @@ class App:
         self.time_up = False      # her latest reply came after today's time ran out: she goes home after it
         self.going_home = False   # leaving because of that (her goodbye differs a little)
         self.saying_goodbye = False  # her time-up goodbye has started: you can't talk to her any more (it'd keep her)
+        self.story_leaving = False   # it's her story that sends her home (no "see you tomorrow": she won't be back)
 
         self.body.moved.connect(self.follow)
         self.body.clicked.connect(self.talk)
@@ -64,6 +67,10 @@ class App:
 
         self.body.show()  # (a portal until she's loaded: on_ready brings her out)
         self.follow()
+        if away:  # her story sent her home: the portal shows, but she doesn't come through, and nothing says why
+            self.leaving = True
+            QTimer.singleShot(RESTING_SECONDS * 1000, QApplication.quit)
+            return
         if resting:  # today's time is used up: the portal shows, but she doesn't come through (no model started)
             self.leaving = True
             self.bubble.say(f"{character.name} is resting back home today.", note=self._note(
@@ -137,8 +144,12 @@ class App:
                         note=self._note(recent, GRAY))
 
     def leave(self, going_home=False):
-        """Say goodbye: she writes in her diary, waves and fades away. going_home = her time today is up."""
+        """Say goodbye: she writes in her diary, waves and fades away. going_home = her time today is up.
+        While her story wants goodbyes (story.py), she begs to stay instead, and only the last one sends her home."""
         if self.leaving:
+            return
+        if not going_home and self.ready and self.snap and self.snap["summary"].get("begs_on_goodbye"):
+            self.brain.goodbye()
             return
         self.leaving, self.going_home = True, going_home
         self.ticker.stop()
@@ -200,7 +211,8 @@ class App:
         if self.time_up:  # she's said goodbye (or answered you after her time ran out): home she goes
             self.leave(going_home=True)
             return
-        if self.body.mood != "neutral":
+        locked = self.snap and self.snap["summary"].get("mood_locked")  # (her story keeps her in this mood)
+        if self.body.mood != "neutral" and not locked:
             self.calm_down.start(MOOD_SECONDS.get(self.body.mood, MOOD_DEFAULT_SECONDS) * 1000)
 
     def settle(self):
@@ -210,8 +222,9 @@ class App:
 
     def on_spoke(self, turn):
         self.last_reply = turn.number
-        self.time_up = turn.time_up
-        if turn.time_up:  # (also when her time ran out while answering you)
+        self.time_up = turn.time_up or turn.leaving  # (either way she goes home once you've read this)
+        self.story_leaving = self.story_leaving or turn.leaving
+        if self.time_up:  # (also when her time ran out while answering you)
             self.goodbye_started()
         self.body.set_mood(turn.mood)
         move, emote = moves.MOOD_MOVES.get(turn.mood, (None, None))
@@ -239,6 +252,13 @@ class App:
 
     def on_closed(self, notes):
         said = f"✎ She'll remember {len(notes)} new thing{'s' if len(notes) != 1 else ''} from today" if notes else ""
+        if self.story_leaving:  # (she's said her own goodbye: no wave, no "see you tomorrow", she just fades)
+            if said:
+                self.bubble.say("", note=self._note(said, GRAY), stay=2.5)
+            else:
+                self.bubble.hide()
+            QTimer.singleShot(1800, self.body.vanish)
+            return
         if self.going_home:
             said = "<br>".join(filter(None, [said, "She's resting back home until tomorrow"]))
         self.bubble.say("*waves goodbye* See you tomorrow!" if self.going_home else "*waves goodbye* See you soon!",
@@ -284,5 +304,8 @@ def main(folder=DEFAULT):
                          + "\n  - ".join(problems))
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    pet = App(character, resting=visits.resting(character))  # (kept in a variable so it isn't garbage-collected)
+    save = load_save(character.save_path)
+    away = story.away(save)  # her story sent her home for now: she doesn't come out (and no model is started)
+    resting = not away and visits.resting(character) and not story.ignores_time_limit(save, character)
+    pet = App(character, resting=resting, away=away)  # (kept in a variable so it isn't garbage-collected)
     sys.exit(app.exec())

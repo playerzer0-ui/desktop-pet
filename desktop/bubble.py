@@ -4,6 +4,8 @@ The bubble talks like a game's dialogue box: one sentence (a "page") at a time, 
 with a ▼ when there's more to come. Each page stays up long enough to read, then the next one comes.
 Click the bubble to skip ahead (finish the typing, or go to the next page).
 Her reply streams in from the model faster than you can read, so pages are queued and shown at reading pace.
+The first page doesn't wait for its sentence to end: it opens with her first words and grows as they arrive
+(a "live" page), so you don't sit through the "…" while she writes it.
 Her *actions* aren't shown: each one is reported (the acted signal) as its page comes up, and she acts it out.
 """
 import html, re
@@ -45,6 +47,10 @@ def without_actions(text):
 def readable(text):
     """How many letters of this you'd actually read (the *actions* aren't shown)."""
     return len(without_actions(text))
+
+def _so_far(text):
+    """Streamed text as far as it can be shown yet: without an *action* that's still being written."""
+    return text[:text.rindex("*")] if text.count("*") % 2 else text
 
 def cut_long(text):
     """Split a too-long sentence so the readable part is at most PAGE_MAX letters: after a comma if there's
@@ -98,6 +104,8 @@ class Bubble(QWidget):
         self.shown = 0           # how many of its letters are typed out
         self.final_note = ""     # small print under the last page (quest, trust...)
         self.cancelled = False   # say() cut the dialogue short: the rest of her reply is dropped until start()
+        self.live = False        # the page on screen is still growing as her words arrive (the first one of a reply)
+        self.live_acted = 0      # how many of the live page's *actions* have been acted out already
         self.typer = QTimer(self, interval=int(1000 / LETTERS_PER_SECOND), timeout=self._type)
         self.reader = QTimer(self, singleShot=True, timeout=self._next)  # waits while you read a page
         self.hider = QTimer(self, singleShot=True, timeout=self._close)
@@ -105,7 +113,7 @@ class Bubble(QWidget):
     # --- a dialogue: start(), add() as her reply streams in, finish() when it's complete ---
 
     def start(self):
-        self.active, self.streaming, self.cancelled = True, True, False
+        self.active, self.streaming, self.cancelled, self.live = True, True, False, False
         self.incoming, self.pages, self.page, self.shown, self.final_note = "", [], "", 0, ""
         for timer in (self.typer, self.reader, self.hider):
             timer.stop()
@@ -115,15 +123,23 @@ class Bubble(QWidget):
         if self.cancelled:
             return
         self.incoming += piece
-        self._cut_pages(final=False)
-        self._continue()
+        if not self.live and not self.page and not self.pages and re.search(r"\w", _so_far(self.incoming)):
+            self.live, self.live_acted = True, 0  # her first words: show them now, don't wait for the sentence
+        if self.live:
+            self._grow(final=False)
+        else:
+            self._cut_pages(final=False)
+            self._continue()
 
     def finish(self, note=""):
         if self.cancelled:
             return
         self.streaming, self.final_note = False, note
-        self._cut_pages(final=True)
-        self._continue()
+        if self.live:
+            self._grow(final=True)
+        else:
+            self._cut_pages(final=True)
+            self._continue()
 
     # --- a plain message (status, menus...): shown at once ---
 
@@ -132,7 +148,7 @@ class Bubble(QWidget):
         If her reply is still playing, it's cut short: what's left of it won't type over this message."""
         if self.active:
             self.cancelled = True
-            self.streaming, self.incoming, self.pages, self.page = False, "", [], ""
+            self.streaming, self.incoming, self.pages, self.page, self.live = False, "", [], "", False
         self.active = False
         for timer in (self.typer, self.reader, self.hider):
             timer.stop()
@@ -174,8 +190,43 @@ class Bubble(QWidget):
             if page:
                 self.pages.append(page)
 
+    def _grow(self, final):
+        """The live page: what she's written of her first sentence so far (an *action* still being written isn't
+        shown yet; finished ones are acted out as they come). Once the sentence ends (or gets too long for one
+        page), the page is fixed, and the rest of her reply is paged as usual."""
+        end = first_end(self.incoming, final)
+        if end and readable(self.incoming[:end]) <= PAGE_MAX + 20:
+            text, rest = self.incoming[:end], self.incoming[end:]
+        elif readable(self.incoming) > PAGE_MAX + 20 or (final and readable(self.incoming) > PAGE_MAX):
+            text, rest = cut_long(self.incoming)
+        elif final:
+            text, rest = self.incoming, ""
+        else:
+            text, rest = _so_far(self.incoming), None  # (None: the sentence isn't finished yet)
+        actions = re.findall(r"\*([^*]+)\*", text)
+        for action in actions[self.live_acted:]:
+            self.acted.emit(action.strip())
+        self.live_acted = len(actions)
+        self.page = without_actions(text)
+        self.shown = min(self.shown, len(self.page))
+        if rest is not None:  # the sentence is done: an ordinary page from here on
+            self.live, self.incoming = False, rest
+            self._cut_pages(final)
+            if not self.page:  # (it was only an action: give the animation a moment, as _open_page does)
+                self.page, self.shown = " ", 1
+                self.reader.start(900)
+                return
+        if self.shown < len(self.page):
+            if not self.typer.isActive():
+                self.typer.start()
+        elif not self.live and not self.typer.isActive() and not self.reader.isActive():
+            self.reader.start(int(read_time(self.page) * 1000))  # (it was all typed already: time to read it)
+        self._draw_page()
+
     def _continue(self):
         """Start typing the next page if the bubble is free (nothing typing, nothing waiting to be read)."""
+        if self.live:
+            return  # (the live page types itself as it grows: _grow)
         if self.typer.isActive() or self.reader.isActive():
             return
         if self.page and self.shown < len(self.page):
@@ -207,7 +258,8 @@ class Bubble(QWidget):
         if self.shown >= len(self.page):
             self.shown = len(self.page)
             self.typer.stop()
-            self.reader.start(int(read_time(self.page) * 1000))
+            if not self.live:  # (a live page waits for her next words instead)
+                self.reader.start(int(read_time(self.page) * 1000))
         self._draw_page()
 
     def _next(self):
@@ -233,7 +285,7 @@ class Bubble(QWidget):
         if not self.page.strip():
             return  # an action-only page: nothing to read
         typing_done = self.shown >= len(self.page)
-        more = typing_done and (self.pages or self.streaming)
+        more = typing_done and not self.live and (self.pages or self.streaming)  # (▼ once the sentence is done)
         words = words_html(self.page[:self.shown])
         if more:
             words += f' <span style="color:{GOLD}">▼</span>'

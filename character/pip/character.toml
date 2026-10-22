@@ -143,13 +143,43 @@ memory = "Pip asked the user for her first favour ever: to name her potted herb.
 points = 10
 needs_nice = false
 
-[major_quests.3]  # opens stage 4, Naming why she left
-id = "unanswered"
-starts = "she quietly admits that her prayers have gone unanswered for a long time, and asks the user whether they think she's foolish to keep praying"
-done_when = "the user responds to her worry kindly and honestly (comfort, their own view, or just listening), without mocking her or her faith"
-memory = "Pip told the user her prayers have gone unanswered for a long time, and the user was kind about it."
+[major_quests.3]  # opens stage 4, Naming why she left: a story over several days (see steps below)
+id = "run-away"
+memory = "Pip believed Lady Everlily was dead and tried to stay on the desktop forever, running from her world. The user made her go home, and she came back to apologize."
 points = 10
-needs_nice = true
+
+# A major quest can be a story told over several days instead of one answer: a list of steps (story.py), each one
+#   opens          what she says when the step begins (a stage direction): the first step when the gate is reached
+#                  (in her greeting, or after a quiet minute), the others in her greeting on the day they're due
+#   ends           "after_it" = right after that line, or "goodbyes" = once you've used Say goodbye that many times
+#   leaves         true = she goes home after the step ends (and fades away)
+#   away_days      whole days she stays away after the step (only the portal shows, no note), then the next step
+#   note, mood, no_time_limit   while the step lasts: a hidden note on every line of hers, a mood she's stuck in,
+#                  and ignoring daily_minutes
+#   goodbyes, begs, leaves_line   for ends = "goodbyes": how many, what she says when she begs to stay, and when
+#                  she finally goes
+# The quest is done (points, memory) when the last step ends.
+[[major_quests.3.steps]]  # day 1: something is wrong at the chapel
+opens = "she suddenly feels that something is wrong at the chapel back home, as if something terrible has happened there. She apologizes, says she has to hurry back right now, and leaves in a rush"
+ends = "after_it"
+leaves = true
+away_days = 1
+
+[[major_quests.3.steps]]  # two days later: she's back, overjoyed, and means to stay forever
+opens = "she comes back overjoyed, happier than she has ever been, and tells the user she has decided to abandon her world and stay here with them forever: she believes Lady Everlily is truly dead, so there is no point serving or worshipping anymore, and nothing to go back to"
+note = "(Not part of the user's message: right now {name} is overjoyed all the time, whatever the user says: every reply is bright and happy, even about sad or serious things. {They} has decided to stay on the desktop forever and never go back, because {they} believes Lady Everlily is truly dead and there's no point serving or worshipping anymore. {They} laughs off any worry about {their} body back home.)"
+mood = "happy"
+no_time_limit = true
+ends = "goodbyes"
+goodbyes = 3
+begs = "the user just said goodbye and told her to go home, but she begs them to let her stay, still smiling but desperate: she doesn't want to go back to a world without Lady Everlily. She stays"
+leaves_line = "the user has said goodbye for the third time. Her smile finally breaks: she admits she can't hide here forever, and tearfully says goodbye and goes home"
+leaves = true
+away_days = 1
+
+[[major_quests.3.steps]]  # two days later: she comes back and apologizes
+opens = "she comes back calm and a little embarrassed. She apologizes for last time, when she believed Lady Everlily was dead and tried to run away from her world to stay on the desktop forever, begging the user not to send her home. She promises to take better care of her real body back home, not to dreamwalk for too long, and to keep to her time here each day"
+ends = "after_it"
 
 [major_quests.4]  # opens stage 5, The free blessing
 id = "can-i-rest"

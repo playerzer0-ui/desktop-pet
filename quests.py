@@ -111,6 +111,11 @@ class MajorQuests:
         self.raised = False         # she brought it up this sitting
         self.listening = 0          # how many more of your messages she judges it on
 
+    def _moment(self, save):
+        """The active quest if it's a single moment (starts / done_when); a story in steps is story.py's to play."""
+        quest = self.active(save)
+        return quest if quest and "steps" not in quest else None
+
     def active(self, save):
         """The major quest holding trust back right now ({id, starts, done_when, memory, points}), or None."""
         return self.character.major_quests.get(trust.at_gate(save))
@@ -118,7 +123,7 @@ class MajorQuests:
     def due(self, save):
         """What she says to bring the active quest up, if she hasn't yet this sitting (text for a stage direction,
         to go in her greeting or a nudge), else None. Marks it raised."""
-        quest = self.active(save)
+        quest = self._moment(save)
         if not quest or self.raised:
             return None
         self.raised, self.listening = True, LISTEN_FOR
@@ -128,7 +133,7 @@ class MajorQuests:
     def answer_note(self, save):
         """While she's waiting on it: a hidden note for your next message (pet.ask's note), asking her to judge,
         in the same reply, whether it's done. Else None. Each note uses up one of her LISTEN_FOR messages."""
-        quest = self.active(save)
+        quest = self._moment(save)
         if not quest or self.listening <= 0:
             return None
         self.listening -= 1
@@ -144,7 +149,7 @@ class MajorQuests:
         None. It takes her own [done], and for a quest about being kind to her (needs_nice in character.toml) a
         message that felt nice to her too: a harsh "praying is pointless" sometimes still got [done]. Never a rude
         message, a dodge or keyboard mashing."""
-        quest = self.active(save)
+        quest = self._moment(save)
         unkind = feeling == "rude" or (quest and quest["needs_nice"] and feeling != "nice")
         if (not quest or judged is not True or unkind or len(re.findall(r"\w+", message)) < 2
                 or is_dodge(message) or not looks_like_words(message)):

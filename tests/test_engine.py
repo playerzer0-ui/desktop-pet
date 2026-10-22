@@ -255,23 +255,33 @@ class MajorQuestTest(unittest.TestCase):
         self.major = quests.MajorQuests(self.pip)
 
     def test_pip_has_four_gates(self):
-        self.assertEqual(self.pip.gates, {1: "major-thank-you", 2: "major-first-favour", 3: "major-unanswered",
+        self.assertEqual(self.pip.gates, {1: "major-thank-you", 2: "major-first-favour", 3: "major-run-away",
                                           4: "major-can-i-rest"})
 
     def test_bad_toml_fails_loudly(self):
         from character import _major_quests
         quest = {"id": "x", "starts": "", "done_when": "", "memory": "", "points": 1}
+        moods = {"happy", "neutral"}
         with self.assertRaises(ValueError):
-            _major_quests({"5": dict(quest)})
+            _major_quests({"5": dict(quest)}, moods)
         with self.assertRaises(ValueError):
-            _major_quests({"1": {"id": "x"}})
+            _major_quests({"1": {"id": "x"}}, moods)
         with self.assertRaises(ValueError):
-            _major_quests({"1": dict(quest, needs_nice="yes")})
-        self.assertTrue(_major_quests({"1": dict(quest)})[1]["needs_nice"], "left out = true (the safer side)")
+            _major_quests({"1": dict(quest, needs_nice="yes")}, moods)
+        self.assertTrue(_major_quests({"1": dict(quest)}, moods)[1]["needs_nice"], "left out = true (the safer side)")
+        story = {"id": "x", "memory": "", "points": 1}
+        for steps in ([], [{"ends": "after_it"}], [{"opens": "x", "ends": "later"}],
+                      [{"opens": "x", "ends": "goodbyes", "goodbyes": 3}],  # (no begs / leaves_line)
+                      [{"opens": "x", "mood": "ecstatic"}], [{"opens": "x", "away_days": -1}]):
+            with self.assertRaises(ValueError, msg=steps):
+                _major_quests({"1": dict(story, steps=steps)}, moods)
+        step = _major_quests({"1": dict(story, steps=[{"opens": "x"}])}, moods)[1]["steps"][0]
+        self.assertEqual((step["ends"], step["leaves"], step["away_days"], step["no_time_limit"]),
+                         ("after_it", False, 0, False))
 
     def test_needs_nice_per_quest(self):
         self.assertEqual({q["id"]: q["needs_nice"] for q in self.pip.major_quests.values()},
-                         {"thank-you": True, "first-favour": False, "unanswered": True, "can-i-rest": True})
+                         {"thank-you": True, "first-favour": False, "run-away": True, "can-i-rest": True})
         # the herb-naming favour (gate 2): a plain, neutral reply is enough...
         save = trust.start(gated_save(points=109, trust_level=4, done=["major-thank-you"]), self.pip.gates)
         major = quests.MajorQuests(self.pip)
@@ -517,6 +527,135 @@ class SessionTimeLimitTest(unittest.TestCase):
         self.assertAlmostEqual(summary["minutes_today"], 120, delta=0.1)
         self.assertEqual(summary["daily_minutes"], 240)
 
+class StoryQuestTest(unittest.TestCase):
+    """Pip's run-away quest (gate 3, story.py), day by day, with the model and the calendar stood in for."""
+    DAY0 = datetime.date(2026, 11, 2)
+
+    def setUp(self):
+        import session, story
+        self.session, self.story = session, story
+        self.real = session.start_server, session.warm_up, session.ask
+        self.notes = []
+
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+            self.notes.append(note)
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
+            return "ok", {}, "nice", "sad", None  # (she says sad: a step's mood should win)
+        session.start_server = lambda say: None
+        session.warm_up = lambda messages, fixed: "loaded"
+        session.ask = ask
+        self.path = gated_save(points=trust.TRUST_POINTS[6] - 1, trust_level=6)  # the top of stage 3: gate 3
+
+    def tearDown(self):
+        self.session.start_server, self.session.warm_up, self.session.ask = self.real
+
+    def day(self, n):
+        """While this is on (a with block), story.py thinks it's DAY0 + n days."""
+        from unittest import mock
+        start = self.DAY0 + datetime.timedelta(days=n)
+        class Today(datetime.date):
+            @classmethod
+            def today(cls):
+                return start
+        return mock.patch.object(self.story, "datetime", mock.Mock(date=Today, timedelta=datetime.timedelta))
+
+    def sitting(self):
+        c = pip()
+        c.save_path = self.path
+        s = self.session.Session(c, say=lambda *_: None)
+        s.quests.next = time.time() + 3600
+        return s
+
+    def saved(self):
+        with open(self.path) as f:
+            return json.load(f)
+
+    def steps(self):
+        return pip().major_quests[3]["steps"]
+
+    def test_the_whole_story(self):
+        story, steps = self.story, self.steps()
+        # day 0: trust reaches gate 3. In her greeting she senses something wrong at the chapel and rushes home
+        with self.day(0):
+            s = self.sitting()
+            turn = s.open()
+            self.assertIn(pip().fill(steps[0]["opens"]), s.messages[-2]["content"])
+            self.assertTrue(turn.major_raised and turn.leaving)
+            self.assertTrue(story.away(self.saved()), "she's gone for the rest of today too")
+        for n, gone in [(1, True), (2, False)]:  # the next day she's away; the day after, she's back
+            with self.day(n):
+                self.assertEqual(story.away(self.saved()), gone, f"day {n}")
+        # day 2: back, overjoyed, staying forever: always happy, no time limit
+        with self.day(2):
+            s = self.sitting()
+            turn = s.open()
+            self.assertIn(pip().fill(steps[1]["opens"]), s.messages[-2]["content"])
+            self.assertEqual(turn.mood, "happy")
+            self.assertFalse(turn.leaving)
+            turn = s.user_says("Pip, I'm worried about you, your body needs you")
+            self.assertEqual(turn.mood, "happy", "her story keeps her happy, whatever she wrote")
+            self.assertIn("overjoyed", self.notes[-1])
+            self.assertIsNone(s.minutes_left, "she ignores her daily limit")
+            snap = s.snapshot()["summary"]
+            self.assertTrue(snap["begs_on_goodbye"])
+            self.assertEqual(snap["mood_locked"], "happy")
+            self.assertIsNone(s.wants_to_speak(), "no time warning or goodbye of her own")
+            for i in (1, 2):  # Say goodbye twice: she begs to stay
+                cue, kind = s.goodbye()
+                self.assertIn(pip().fill(steps[1]["begs"]), cue)
+                self.assertFalse(s.speak(cue, kind).leaving, f"goodbye {i}: she should beg and stay")
+        with self.day(2):  # (closing the app and coming back the same day: still staying, the count kept)
+            s = self.sitting()
+            s.open()
+            self.assertNotIn(pip().fill(steps[1]["opens"]), s.messages[-2]["content"], "she announces it only once")
+            cue, kind = s.goodbye()  # the third goodbye: she goes home
+            self.assertIn(pip().fill(steps[1]["leaves_line"]), cue)
+            turn = s.speak(cue, kind)
+            self.assertTrue(turn.leaving)
+            self.assertFalse(s.snapshot()["summary"]["begs_on_goodbye"])
+            self.assertTrue(story.away(self.saved()))
+        with self.day(3):
+            self.assertTrue(story.away(self.saved()), "the day after, she's away again")
+        self.assertEqual(self.saved()["points"], trust.TRUST_POINTS[6] - 1, "trust stays held back all along")
+        # day 4: she comes back and apologizes: the quest is done and trust can grow again
+        with self.day(4):
+            self.assertFalse(story.away(self.saved()))
+            s = self.sitting()
+            turn = s.open()
+            self.assertIn(pip().fill(steps[2]["opens"]), s.messages[-2]["content"])
+            self.assertTrue(turn.story_done and turn.stage_up)
+            self.assertFalse(turn.leaving)
+            self.assertIsNotNone(s.minutes_left, "her daily limit is back")
+        saved = self.saved()
+        self.assertIn("major-run-away", saved["quests_done"])
+        self.assertNotIn("story", saved)
+        self.assertEqual([m["kind"] for m in saved["memories"]][-1], "milestone")
+
+    def test_a_skipped_day_waits_for_you(self):
+        with self.day(0):
+            self.sitting().open()
+        with self.day(9):  # you didn't come on day 2: she's back on your next visit, days later
+            self.assertFalse(self.story.away(self.saved()))
+            s = self.sitting()
+            s.open()
+            self.assertTrue(s.snapshot()["summary"]["begs_on_goodbye"])
+
+    def test_brought_up_after_a_quiet_minute(self):
+        with self.day(0):
+            s = self.sitting()  # (no greeting: the gate was reached mid-sitting)
+            self.assertIsNone(s.wants_to_speak())
+            s.idle.last -= 61
+            cue, kind = s.wants_to_speak()
+            self.assertEqual(kind, "major")
+            self.assertIn(pip().fill(self.steps()[0]["opens"]), cue)
+            self.assertTrue(s.speak(cue, kind).leaving)
+
+    def test_other_major_quest_code_leaves_it_alone(self):
+        major = quests.MajorQuests(pip())
+        save = trust.start(self.path, pip().gates)
+        self.assertEqual(major.active(save)["id"], "run-away")
+        self.assertIsNone(major.due(save), "the story plays it, not the one-moment quest code")
+
 class ClockNudgeTest(unittest.TestCase):
     """idle.CLOCK: she speaks up at 7:00, 12:00, 18:00 and 23:00, once a day each, within 30 minutes after."""
 
@@ -737,6 +876,63 @@ class DesktopTest(unittest.TestCase):
             self.pump(0.005)
         self.assertEqual(done, [1])
 
+    def test_first_words_show_before_the_sentence_ends(self):
+        """The live first page: her words type out as they arrive, not once the whole sentence is in."""
+        from desktop.bubble import Bubble
+        b, acted = Bubble(), []
+        b.acted.connect(acted.append)
+        b.start()
+        b.add("*stretches a lit")  # an action still being written: nothing to show yet
+        self.assertFalse(b.live or b.isVisible())
+        b.add("tle* Good eve")
+        self.assertEqual((acted, b.page, b.live), (["stretches a little"], "Good eve", True))
+        self.assertTrue(b.typer.isActive())
+        self.pump(0.6)  # typed out, and waiting for her next words (no reading pause, no ▼ mid-sentence)
+        self.assertEqual(b.shown, len("Good eve"))
+        self.assertFalse(b.reader.isActive())
+        self.assertIn("Good eve", b.label.text())
+        self.assertNotIn("▼", b.label.text())
+        b.add("ning, you! How are you? I")  # the sentence ends: an ordinary page, the rest queued as before
+        self.assertEqual((b.page, b.live, b.pages, b.incoming.strip()), ("Good evening, you!", False, ["How are you?"], "I"))
+        self.assertTrue(b.typer.isActive())
+
+    def test_live_page_until_the_reply_ends(self):
+        from desktop.bubble import Bubble
+        b, done = Bubble(), []
+        b.done.connect(lambda: done.append(1))
+        b.start()
+        b.add("Just a short reply with no full stop")
+        self.assertTrue(b.live)
+        b.finish("note")
+        self.assertEqual((b.live, b.page), (False, "Just a short reply with no full stop"))
+        for _ in range(30):
+            if done:
+                break
+            b.mousePressEvent(None)
+            self.pump(0.01)
+        self.assertEqual(done, [1])
+
+    def test_live_page_that_is_only_an_action(self):
+        from desktop.bubble import Bubble
+        b, acted = Bubble(), []
+        b.acted.connect(acted.append)
+        b.start()
+        b.add("Hmm")  # (live from here)
+        b.add("? *smiles*")
+        self.assertEqual((b.page, b.live), ("Hmm?", False))
+        self.assertEqual(acted, [])  # "*smiles*" belongs to the next page, acted out when that page comes up
+
+    def test_message_mid_live_page(self):
+        from desktop.bubble import Bubble
+        b = Bubble()
+        b.start()
+        b.add("Hello there, I was just")
+        b.say("Something went wrong…")
+        b.add(" thinking about you.")
+        self.pump(0.3)
+        self.assertIn("Something went wrong", b.label.text())
+        self.assertFalse(b.live)
+
     def test_bubble_keeps_titles_on_one_page(self):
         from desktop.bubble import Bubble
         b = Bubble()
@@ -785,7 +981,7 @@ class DesktopTest(unittest.TestCase):
         b.finish()
         self.assertEqual(b.page, "Fresh start.")
 
-    def app(self, loaded=True, resting=False):
+    def app(self, loaded=True, resting=False, away=False):
         """The App with a stand-in brain; a.brain.calls lists what it was asked to do (start, close, ...)."""
         from desktop import app as A
         class Signal:
@@ -801,7 +997,7 @@ class DesktopTest(unittest.TestCase):
         real = A.Brain
         A.Brain = lambda character: StubBrain()
         try:
-            a = A.App(pip(), resting=resting)
+            a = A.App(pip(), resting=resting, away=away)
         finally:
             A.Brain = real
         if loaded:
@@ -976,6 +1172,37 @@ class DesktopTest(unittest.TestCase):
             self.pump(0.02)
         self.assertEqual(a.body.state, "gone", "she never finished fading away")
         self.assertEqual(quits, [True], "she faded away, but the app didn't quit")
+
+    def test_away_she_doesnt_come_out(self):
+        a = self.app(loaded=False, away=True)
+        self.assertNotIn("start", a.brain.calls)
+        self.assertEqual(a.body.state, "portal")
+        self.assertFalse(a.bubble.isVisible(), "no note on an away day")
+
+    def test_say_goodbye_while_she_begs(self):
+        from session import Turn
+        a = self.app()
+        a.snap = {"summary": {"begs_on_goodbye": True}, "memories": []}
+        a.leave()
+        self.assertEqual((a.brain.calls[-1], a.leaving), ("goodbye", False), "she should beg, not leave")
+        a.bubble.start()
+        a.on_spoke(Turn("Fine... I'll go.", "goodbye", None, "sad", 1.0, {}, 6, 6, 219, 219, leaving=True))
+        a.talk()
+        self.assertFalse(a.input.isVisible())
+        a.on_done()
+        self.assertTrue(a.leaving)
+        self.assertIn("close", a.brain.calls)
+        a.on_closed([])
+        self.assertNotIn("See you", a.bubble.label.text(), "she said her own goodbye: no 'see you tomorrow'")
+
+    def test_locked_mood_doesnt_settle(self):
+        from session import Turn
+        a = self.app()
+        a.snap = {"summary": {"mood_locked": "happy"}, "memories": []}
+        a.bubble.start()
+        a.on_spoke(Turn("Yay!", "user", "nice", "happy", 1.0, {}, 6, 6, 219, 219))
+        a.on_done()
+        self.assertFalse(a.calm_down.isActive())
 
     def test_status_shows_her_daily_time(self):
         from desktop import status
