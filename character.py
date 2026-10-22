@@ -36,6 +36,12 @@ class Character:
         self.examples = [(e["user"], e["reply"]) for e in c["examples"]]
         self.idle_topics = [(int(stage), topic) for stage, topics in c["idle_topics"].items() for topic in topics]
         self.idle_note = c["idle_note"]  # (required, even if "": a key misplaced under a [table] fails loudly)
+        self.daily_minutes = c.get("daily_minutes")  # how long they can stay each day (visits.py); None = no limit
+        if self.daily_minutes is not None and (not isinstance(self.daily_minutes, int) or self.daily_minutes <= 0):
+            raise ValueError("daily_minutes must be a whole number of minutes above 0 (or left out for no limit)")
+        needed = self.daily_minutes is not None  # (what they say when it runs low / runs out, by trust stage)
+        self.time_warning = _by_stage(c, "time_warning", needed)
+        self.time_up = _by_stage(c, "time_up", needed)
         self.quests = [(quest_id, int(stage), about)
                        for stage, asks in c["quests"].items() for quest_id, about in asks.items()]
         self.major_quests = _major_quests(c.get("major_quests", {}))  # stage -> {id, starts, done_when, memory, points}
@@ -46,6 +52,11 @@ class Character:
         self.events = events.parse(self.text("events.md"))
         if folder == DEFAULT:
             _move_old_save(self.save_path)
+
+    @staticmethod
+    def at_stage(lines, stage):
+        """From {stage: line} (like time_warning), the line for this trust stage: the highest one at or below it."""
+        return lines[max(s for s in lines if s <= stage)]
 
     @property
     def gates(self):
@@ -102,6 +113,16 @@ def for_stage(text, stage):
             write(child, level + 1)
     write(tree, 2)
     return "\n\n".join(parts)
+
+def _by_stage(toml, key, required):
+    """A [key] table of lines by the trust stage they start at, like [time_warning]: {1: "...", 3: "..."}.
+    required = it must exist, with a line for stage 1 (so every stage has one)."""
+    table = {int(stage): line for stage, line in toml.get(key, {}).items()}
+    if any(not 1 <= stage <= 5 for stage in table):
+        raise ValueError(f"[{key}]: stages are 1-5")
+    if required and 1 not in table:
+        raise ValueError(f"[{key}] needs a line for stage 1 (they have a daily_minutes limit)")
+    return table
 
 def _major_quests(tables):
     """[major_quests.N] from character.toml, checked: one per stage 1-4 at most, with every field filled in."""

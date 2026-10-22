@@ -33,9 +33,14 @@ class Brain(QObject):
     def say(self, text):
         self.jobs.put(("say", text))
 
+    @property
+    def working(self):
+        """Busy with a job, or holding one it hasn't started yet (like your message, just sent)."""
+        return self.busy or not self.jobs.empty()
+
     def tick(self):
         """Let her speak up on her own if she wants to (an idle thought, a quest, today's news)."""
-        if not self.busy and self.jobs.empty():
+        if not self.working:
             self.jobs.put(("tick",))
 
     def settle(self, number):

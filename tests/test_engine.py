@@ -3,7 +3,7 @@ Saves go to a temporary folder, so your real saves/ are never touched.
 
     python -m unittest discover tests
 """
-import contextlib, datetime, io, json, os, shutil, sys, tempfile, time, unittest
+import contextlib, datetime, io, json, os, re, shutil, sys, tempfile, time, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # no windows pop up
@@ -23,6 +23,7 @@ def temp_path(name="save"):
 def pip():
     c = Character("pip")
     c.save_path, c.log_path = temp_path("pip"), os.path.join(TMP, "pip.log")
+    c.daily_minutes = 240  # (her real limit, whatever character.toml has while you test: see test_pip_has_four_hours)
     return c
 
 class TrustTest(unittest.TestCase):
@@ -126,6 +127,46 @@ class MemoryTest(unittest.TestCase):
         now = datetime.datetime(2026, 10, 21, 12, 0)
         self.assertEqual([memory.ago(w, now) for w in ("2026-10-21 08:00", "2026-10-20 23:59", "2026-10-11 10:00")],
                          ["today", "yesterday", "10 days ago"])
+
+class DiaryTest(unittest.TestCase):
+    """The goodbye diary only keeps what the user really said (memory.heard_it)."""
+    # the user's own first test sitting: questions about her, nothing about themselves
+    ASKED = ["who are you?", "what was that about returning soon when u just got here minutes ago?",
+             "dream? but this is not a dream, it's my world", "what sort of magic is that?",
+             "republic? republic of..... what?", "no not at all", "bye"]
+
+    def diary(self, user_lines, reply):
+        """write_diary over a sitting of these user lines, with the model's answer stood in for."""
+        import llm
+        messages = []
+        for line in user_lines:
+            messages += [{"role": "user", "content": line}, {"role": "assistant", "content": "Oh! [nice] [mood: happy]"}]
+        real, self.prompt = llm.chat, None
+        def chat(msgs, **settings):
+            self.prompt = msgs[0]["content"]
+            return reply
+        llm.chat = chat
+        try:
+            return [n["text"] for n in memory.write_diary({}, messages, 0, pip())]
+        finally:
+            llm.chat = real
+
+    def test_the_prompts_own_example_is_never_kept(self):
+        self.assertEqual(self.diary(self.ASKED, "- The user's friend NR complains that everyone at their university uses AI."), [])
+        self.assertIn("never write it", self.prompt)
+
+    def test_invented_notes_are_dropped_real_ones_kept(self):
+        said = ["I just adopted a cat named Mochi, she is very fluffy", "I have an exam this friday and I'm nervous",
+                "I went hiking this weekend with my brother"]
+        notes = self.diary(said, "- The user adopted a cat named Mochi.\n- The user has an exam on Friday 2026-10-23.\n"
+                                 "- The user went hiking with Sam.\n- The user's friend Leo loves football.")
+        self.assertEqual(notes, ["The user adopted a cat named Mochi.", "The user has an exam on Friday 2026-10-23."])
+
+    def test_heard_it(self):
+        heard = "User: I went hiking this weekend with my brother"
+        self.assertTrue(memory.heard_it("The user went hiking with their brother.", heard))
+        self.assertFalse(memory.heard_it("The user went hiking with Sam.", heard), "Sam was never mentioned")
+        self.assertFalse(memory.heard_it("The user enjoys painting landscapes on weekends.", heard))
 
 class QuestTest(unittest.TestCase):
     def test_flow(self):
@@ -344,6 +385,137 @@ class SessionMajorQuestTest(unittest.TestCase):
         s = self.sitting(gated_save(points=57, trust_level=3, done=["world-outside"]))
         self.assertFalse(s.open().major_raised)
         self.assertIn("major-thank-you", s.save["quests_done"])
+
+def save_with_minutes(minutes, day=None, trust_level=3):
+    """A save file that has already spent `minutes` with her on `day` (today if not given), at this trust level.
+    Returns its path."""
+    path = temp_path("minutes")
+    day = day or datetime.date.today().isoformat()
+    with open(path, "w") as f:
+        json.dump({"trust": trust_level, "points": trust.TRUST_POINTS[trust_level - 1], "last_day": day,
+                   "today": {"talk": 0, "minutes": minutes}}, f)
+    return path
+
+class VisitsTest(unittest.TestCase):
+    """visits.py: Pip can stay 240 minutes a day (daily_minutes in her character.toml)."""
+
+    def test_her_lines_by_stage(self):
+        c = pip()
+        self.assertEqual((sorted(c.time_warning), sorted(c.time_up)), ([1, 3], [1, 3]))
+        self.assertEqual([c.at_stage({1: "a", 3: "b"}, st) for st in range(1, 6)], ["a", "a", "b", "b", "b"])
+        from character import _by_stage
+        with self.assertRaises(ValueError):
+            _by_stage({"time_up": {"3": "x"}}, "time_up", required=True)  # nothing for stages 1-2
+        with self.assertRaises(ValueError):
+            _by_stage({"time_up": {"6": "x"}}, "time_up", required=False)
+        self.assertEqual(_by_stage({}, "time_up", required=False), {}, "no limit: no lines needed")
+
+    def test_pip_has_four_hours(self):
+        minutes = Character("pip").daily_minutes  # (her character.toml as it is, not the test's pip())
+        self.assertEqual(minutes, 240, f"Pip's daily_minutes is {minutes} in character.toml: set it back to 240 "
+                                       "after testing")
+
+    def test_minutes_used_and_left(self):
+        import visits
+        today = trust.start(save_with_minutes(100))
+        self.assertEqual(visits.minutes_used(today, 5), 105)
+        self.assertEqual(visits.minutes_left(today, pip(), 5), 135)
+        yesterday = {"last_day": "2000-01-01", "today": {"minutes": 300}}
+        self.assertEqual(visits.minutes_used(yesterday, 5), 5, "a new day starts from zero")
+        no_limit = pip()
+        no_limit.daily_minutes = None
+        self.assertIsNone(visits.minutes_left(today, no_limit))
+
+    def test_resting_once_todays_time_is_used(self):
+        import visits
+        for minutes, day, expected in [(240, None, True), (300, None, True), (239, None, False),
+                                       (300, "2000-01-01", False)]:  # used up yesterday: she's back today
+            c = pip()
+            c.save_path = save_with_minutes(minutes, day)
+            self.assertEqual(visits.resting(c), expected, (minutes, day))
+        self.assertFalse(visits.resting(pip()), "a first visit (no save yet)")
+
+class SessionTimeLimitTest(unittest.TestCase):
+    """A sitting that runs into her daily limit, with the model stood in for."""
+
+    def setUp(self):
+        import session
+        self.session = session
+        self.real = session.start_server, session.warm_up, session.ask
+
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
+            return "ok", {}, "nice", "happy", None
+        session.start_server = lambda say: None
+        session.warm_up = lambda messages, fixed: "loaded"
+        session.ask = ask
+
+    def tearDown(self):
+        self.session.start_server, self.session.warm_up, self.session.ask = self.real
+
+    def sitting(self, minutes, trust_level=3):
+        c = pip()
+        c.save_path = save_with_minutes(minutes, trust_level=trust_level)
+        s = self.session.Session(c, say=lambda *_: None)
+        s.open()
+        s.quests.next = time.time() + 3600  # (no world quest getting in the way)
+        return s
+
+    def spend(self, s, minutes):
+        s.opened -= minutes * 60  # as if she'd been open that much longer
+
+    def test_what_she_says_depends_on_her_stage(self):
+        """Her body going without food or water is stage 3 lore: before that she just has to go home."""
+        body = re.compile(r"body|eaten|drunk|food|water|dreamwalk", re.I)
+        for level in (1, 3, 5, 7, 9):  # stages 1-5
+            with self.subTest(stage=trust.stage_of(level)):
+                s = self.sitting(232, trust_level=level)
+                warning, _ = s.wants_to_speak()
+                self.spend(s, 10)
+                goodbye, _ = s.wants_to_speak()
+                shares = trust.stage_of(level) >= 3
+                for cue in (warning, goodbye):
+                    self.assertEqual(bool(body.search(cue)), shares, cue)
+                self.assertIn("about 8 minutes longer", warning)
+                self.assertIn("tomorrow", goodbye)
+                self.assertNotIn("{", warning + goodbye, "a placeholder wasn't filled in")
+
+    def test_warning_then_goodbye(self):
+        s = self.sitting(225)
+        self.assertIsNone(s.wants_to_speak(), "15 minutes left: nothing yet")
+        self.spend(s, 6)  # 9 minutes left
+        cue, kind = s.wants_to_speak()
+        self.assertEqual(kind, "time_warning")
+        self.assertIn("about 9 minutes longer", cue)
+        self.assertFalse(s.speak(cue, kind).time_up)
+        self.assertIsNone(s.wants_to_speak(), "the warning comes once")
+        self.spend(s, 10)  # past the limit
+        cue, kind = s.wants_to_speak()
+        self.assertEqual(kind, "time_up")
+        self.assertIn("tomorrow", cue)
+        self.assertTrue(s.speak(cue, kind).time_up)
+        self.assertIsNone(s.wants_to_speak(), "nothing else once she's said goodbye")
+        self.assertTrue(s.user_says("wait, one more thing before you go").time_up, "she still answers, then goes")
+
+    def test_one_minute_left_reads_right(self):
+        s = self.sitting(239.2)
+        cue, kind = s.wants_to_speak()
+        self.assertEqual(kind, "time_warning")
+        self.assertIn("about 1 minute longer", cue)
+
+    def test_time_is_saved_once_a_minute(self):
+        s = self.sitting(10)
+        self.spend(s, 3)
+        s.wants_to_speak()
+        with open(s.character.save_path) as f:
+            self.assertAlmostEqual(json.load(f)["today"]["minutes"], 13, delta=0.1)
+
+    def test_snapshot_shows_todays_time(self):
+        s = self.sitting(100)
+        self.spend(s, 20)
+        summary = s.snapshot()["summary"]
+        self.assertAlmostEqual(summary["minutes_today"], 120, delta=0.1)
+        self.assertEqual(summary["daily_minutes"], 240)
 
 class ClockNudgeTest(unittest.TestCase):
     """idle.CLOCK: she speaks up at 7:00, 12:00, 18:00 and 23:00, once a day each, within 30 minutes after."""
@@ -613,19 +785,23 @@ class DesktopTest(unittest.TestCase):
         b.finish()
         self.assertEqual(b.page, "Fresh start.")
 
-    def app(self, loaded=True):
+    def app(self, loaded=True, resting=False):
+        """The App with a stand-in brain; a.brain.calls lists what it was asked to do (start, close, ...)."""
         from desktop import app as A
         class Signal:
             def connect(self, *_): pass
         class StubBrain:  # the real Brain would start llama-server
-            busy = False
+            busy = working = False
+            def __init__(self):
+                self.calls = []
             def __getattr__(self, name):
-                return Signal() if name in ("ready", "speaking", "piece", "spoke", "closed", "snapshot", "failed") \
-                    else (lambda *a, **k: None)
+                if name in ("ready", "speaking", "piece", "spoke", "closed", "snapshot", "failed"):
+                    return Signal()
+                return lambda *a, **k: self.calls.append(name)
         real = A.Brain
         A.Brain = lambda character: StubBrain()
         try:
-            a = A.App(pip())
+            a = A.App(pip(), resting=resting)
         finally:
             A.Brain = real
         if loaded:
@@ -698,6 +874,117 @@ class DesktopTest(unittest.TestCase):
         self.assertEqual(b.geometry().bottom(), 699, "the bubble covers her head")
         b.hide()
 
+    def test_resting_she_doesnt_come_out(self):
+        a = self.app(loaded=False, resting=True)
+        self.assertNotIn("start", a.brain.calls, "the model was started for nothing")
+        self.assertEqual(a.body.state, "portal")
+        self.assertIn("resting back home", a.bubble.label.text())
+        self.assertIn("4 hours a day", a.bubble.note.text())
+        a.talk()
+        self.assertFalse(a.input.isVisible(), "you can't talk to an empty portal")
+
+    def test_no_talking_while_she_speaks(self):
+        """Her idle chat and her quest questions can't be cut into: you talk once she's done."""
+        for kind in ("idle", "quest", "opening", "user"):
+            with self.subTest(kind):
+                a = self.app()
+                a.on_speaking(kind)  # she starts (the "…" while she thinks)
+                a.talk()
+                self.assertFalse(a.input.isVisible(), "the box opened while she was talking")
+                menu = a.build_menu()  # (kept in a variable: its actions are deleted along with it)
+                self.assertFalse(next(x for x in menu.actions() if x.text() == "Talk to her").isEnabled())
+                a.on_piece("Do you have bread where you live? ")
+                a.talk()
+                self.assertFalse(a.input.isVisible(), "the box opened while her words were showing")
+                a.bubble.finish("")
+                for _ in range(30):  # read to the end (clicking through her bubble)
+                    if not a.bubble.active:
+                        break
+                    a.bubble.mousePressEvent(None)
+                    self.pump(0.01)
+                self.assertFalse(a.bubble.active)
+                a.talk()
+                self.assertTrue(a.input.isVisible(), "once she's done, you can talk again")
+
+    def test_no_talking_while_your_message_waits(self):
+        a = self.app()
+        a.brain.working = True  # (your message is queued, or she's thinking)
+        a.talk()
+        self.assertFalse(a.input.isVisible())
+        a.brain.working = False
+        a.talk()
+        self.assertTrue(a.input.isVisible())
+
+    def test_no_talking_once_her_goodbye_starts(self):
+        """You could keep her from leaving by talking to her during her goodbye: not any more."""
+        from session import Turn
+        a = self.app()
+        a.talk()
+        self.assertTrue(a.input.isVisible())
+        a.on_speaking("time_up")  # her goodbye starts while the box is open
+        self.assertFalse(a.input.isVisible(), "the box you type in should close")
+        a.talk()
+        self.assertFalse(a.input.isVisible(), "clicking her opened it again")
+        menu = a.build_menu()  # (kept in a variable: its actions are deleted along with it)
+        talk = next(act for act in menu.actions() if act.text() == "Talk to her")
+        self.assertFalse(talk.isEnabled())
+        a.send("wait, don't go yet")
+        self.assertNotIn("say", a.brain.calls, "your message still reached her")
+
+    def test_no_talking_when_time_runs_out_mid_chat(self):
+        from session import Turn
+        a = self.app()
+        a.bubble.start()
+        a.on_spoke(Turn("Oh, that's lovely!", "user", "nice", "happy", 1.0, {}, 3, 3, 50, 51, time_up=True))
+        a.talk()
+        self.assertFalse(a.input.isVisible())
+
+    def test_time_up_she_goes_home(self):
+        from session import Turn
+        a = self.app()
+        self.assertIn("start", a.brain.calls)
+        a.bubble.start()
+        a.on_spoke(Turn("I have to wake up now...", "time_up", None, "sad", 1.0, {}, 3, 3, 50, 50, time_up=True))
+        self.assertNotIn("close", a.brain.calls, "not before you've read her goodbye")
+        a.on_done()
+        self.assertTrue(a.leaving and a.going_home)
+        self.assertIn("close", a.brain.calls)  # her diary, then she fades away
+        a.on_closed([])
+        self.assertIn("See you tomorrow", a.bubble.label.text())
+        self.assertIn("resting back home until tomorrow", a.bubble.note.text())
+
+    def test_time_up_she_fades_away_and_the_app_closes(self):
+        """The whole way out, on real timers: her goodbye, the diary, the wave, the fade, and the app quitting."""
+        from session import Turn
+        from desktop import app as A, body as B
+        quits = []
+        class FakeQApplication:  # (stands in for the real quit, which the app hooks up when it's made)
+            quit = staticmethod(lambda: quits.append(True))
+        real = A.QApplication
+        A.QApplication = FakeQApplication
+        try:
+            a = self.app()
+        finally:
+            A.QApplication = real
+        a.bubble.start()
+        a.on_spoke(Turn("I have to go home now...", "time_up", None, "sad", 1.0, {}, 3, 3, 50, 50, time_up=True))
+        a.on_done()
+        self.assertIn("close", a.brain.calls)
+        a.on_closed([])  # (the brain wrote her diary)
+        end = time.time() + 1.8 + B.VANISH_SWEEP + 0.25 + B.MOTE_LIFE + 2  # (the wave, then the fade, plus slack)
+        while not quits and time.time() < end:
+            self.pump(0.02)
+        self.assertEqual(a.body.state, "gone", "she never finished fading away")
+        self.assertEqual(quits, [True], "she faded away, but the app didn't quit")
+
+    def test_status_shows_her_daily_time(self):
+        from desktop import status
+        # (the text itself, as the offscreen test platform has no fonts to draw it with)
+        s = trust.summary(trust.start(temp_path()), {i: "x" for i in range(1, 6)})
+        self.assertEqual(status.clock_text(dict(s, minutes_today=139.4, daily_minutes=240)), "139/240 min")
+        self.assertEqual(status.clock_text(dict(s, minutes_today=139.4, daily_minutes=None)), "139 min")
+        self.assertEqual(status.clock_text(dict(s, minutes_today=139.4)), "139 min")
+
     def test_major_quest_notes_under_her_reply(self):
         from session import Turn
         a = self.app()
@@ -725,7 +1012,8 @@ class DesktopTest(unittest.TestCase):
         self.assertTrue(enabled()["Status"] and enabled()["What she remembers"])
         a.on_speaking("user")
         self.assertFalse(enabled()["Status"] or enabled()["What she remembers"])
-        self.assertTrue(enabled()["Talk to her"] and enabled()["Say goodbye"])
+        self.assertFalse(enabled()["Talk to her"], "talking waits too, so you can't cut into her reply")
+        self.assertTrue(enabled()["Say goodbye"])
 
     def test_error_mid_reply_lets_her_wander(self):
         a = self.app()

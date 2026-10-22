@@ -15,7 +15,7 @@ what was said, how it felt to her, her mood, how long it took, how full the cont
 """
 import datetime, time
 from dataclasses import dataclass
-import events, llm, memory, trust
+import events, llm, memory, trust, visits
 from character import Character, DEFAULT
 from directions import direction
 from idle import Idle
@@ -43,6 +43,7 @@ class Turn:
     stage_name: str = ""      # her name for the trust stage after this reply, like "Learning to receive"
     major_raised: bool = False  # she brought up her major quest in this reply (in her greeting, or on her own)
     major_done: bool = False    # your message finished her major quest: the next stage is open
+    time_up: bool = False       # her time here today is used up (visits.py): the screen sends her home after this
 
     @property
     def stage_up(self):
@@ -81,6 +82,7 @@ class Session:
         self.quests = Quests(self.character)
         self.major = MajorQuests(self.character)
         self._raising = False  # the reply being written brings up her major quest (for Turn.major_raised)
+        self.warned = self.said_goodbye = False  # (her daily time: see wants_to_speak)
         self.n_ctx = N_CTX
         self.log(f"sitting started · persona and lore {self.prompt_was} in {self.warm_up_seconds:.1f}s · "
             f"trust {self.save['trust']} (stage {trust.stage(self.save)}, {self.save['points']} points) · "
@@ -100,7 +102,19 @@ class Session:
         return self.speak(*what, on_text=on_text) if what else None
 
     def wants_to_speak(self):
-        """(stage direction, kind) if she should speak up on her own now, else None. Quick, no model call."""
+        """(stage direction, kind) if she should speak up on her own now, else None. Quick, no model call.
+        Her daily time comes first: a warning near the end ("time_warning"), then her goodbye ("time_up")."""
+        if time.time() - self.opened >= 60:
+            self._count_stay()  # (into the save once a minute, so closing abruptly can't wipe a sitting's time)
+        left = self.minutes_left
+        if left is not None and left <= 0 and not self.said_goodbye:
+            self.said_goodbye = True
+            return self._time_cue(self.character.time_up, left), "time_up"
+        if left is not None and 0 < left <= visits.WARN_MINUTES and not self.warned:
+            self.warned = True
+            return self._time_cue(self.character.time_warning, left), "time_warning"
+        if self.said_goodbye:
+            return None  # (she's on her way home)
         if time.time() - self.idle.last >= QUIET_FIRST:  # her major quest comes first, after a quiet minute
             major = self.major.due(self.save)
             if major:
@@ -137,6 +151,18 @@ class Session:
             + f"\n  all {len(self.memories)} memories:" + "".join(f"\n    {m['when']} {m['kind']}: {m['text']}" for m in self.memories))
         return notes
 
+    def _time_cue(self, lines, left):
+        """Her warning or goodbye ([time_warning] / [time_up] in character.toml), the line for her trust stage:
+        what she says about why she has to go depends on how much she shares yet."""
+        n = max(1, round(left))
+        line = self.character.at_stage(lines, trust.stage(self.save)).replace("{minutes}", f"{n} minute{'s' if n != 1 else ''}")
+        return direction(self.character.fill("{name} says something on {their} own: " + line + "."))
+
+    @property
+    def minutes_left(self):
+        """Minutes she has left here today, this sitting included (visits.py), or None if there's no limit."""
+        return visits.minutes_left(self.save, self.character, (time.time() - self.opened) / 60)
+
     @property
     def memories(self):
         return self.save.get("memories", [])
@@ -144,7 +170,10 @@ class Session:
     def snapshot(self):
         """A copy of what a screen shows (trust summary, memories), safe to hand to another thread:
         the save itself keeps changing while turns run."""
-        return {"summary": trust.summary(self.save, self.character.stage_names), "memories": [dict(m) for m in self.memories]}
+        summary = trust.summary(self.save, self.character.stage_names)
+        summary["minutes_today"] = visits.minutes_used(self.save, (time.time() - self.opened) / 60)  # (this sitting too)
+        summary["daily_minutes"] = self.character.daily_minutes
+        return {"summary": summary, "memories": [dict(m) for m in self.memories]}
 
     @property
     def mood(self):
@@ -209,7 +238,8 @@ class Session:
         self.replies += 1
         turn = Turn(reply, kind, feeling if kind == "user" else None, self.mood, time.time() - t0, timings,
                     trust_before, self.save["trust"], points_before, self.save["points"], bool(done),
-                    self.replies, self.character.stage_names[trust.stage(self.save)], raising, bool(major_done))
+                    self.replies, self.character.stage_names[trust.stage(self.save)], raising, bool(major_done),
+                    self.minutes_left is not None and self.minutes_left <= 0)
         self._log_turn(turn, text, tagged=mood is not None)
         return turn
 
@@ -236,6 +266,8 @@ class Session:
             stats.append("brought up her major quest")
         if t.major_done:
             stats.append("MAJOR QUEST DONE")
+        if t.time_up:
+            stats.append("time up for today")
         self.log(" · ".join(stats) + f"\n    {'you' if t.kind == 'user' else 'cue'}: {text}"
                  f"\n    {self.character.folder}: {t.reply}")
 

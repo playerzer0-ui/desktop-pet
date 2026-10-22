@@ -3,7 +3,8 @@
     Trust ■■■□□□□□□□      one box per trust level (out of 10)
     exp   ━━━━━──────      how far she is from this trust level to the next (with a ✻ while her major quest
                                                                           holds trust back)
-    [talk] 5/10   [clock] 139 min    talks today (out of the daily cap), and minutes together today
+    [talk] 5/10   [clock] 139/240 min    talks today (out of the daily cap), and minutes together today
+                                         (out of her daily limit, if she has one: visits.py)
 
 The icons are talk.png and clock.png (16 px) in character/, next to portal.png.
 """
@@ -58,9 +59,14 @@ def card(summary):
 
     p.setFont(QFont("Segoe UI", 10))                        # [talk] 5/10   [clock] 139 min
     _stat(p, "talk.png", 0, f"{summary['talk_today']}/{summary['talk_cap']}")
-    _stat(p, "clock.png", 112, f"{summary['minutes_today']:.0f} min")
+    _stat(p, "clock.png", 100, clock_text(summary))  # (100: room for "240/240 min", 72 px in Segoe UI 10, inside 206)
     p.end()
     return picture
+
+def clock_text(summary):
+    """Minutes together today, out of her daily time if she has a limit (visits.py): "139/240 min" or "139 min"."""
+    limit = summary.get("daily_minutes")
+    return f"{summary['minutes_today']:.0f}/{limit} min" if limit else f"{summary['minutes_today']:.0f} min"
 
 def _stat(p, icon, x, text):
     p.setRenderHint(QPainter.SmoothPixmapTransform, False)  # keep the pixel-art icons crisp

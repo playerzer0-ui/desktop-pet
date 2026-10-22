@@ -61,18 +61,41 @@ would want to remember next time: their name, people and pets in their life (wit
 what they like or dislike, how they were feeling and why, plans or promises. Most important first.
 Rules:
 - Each note is one short sentence on its own line, starting with "- ": one person or thing, and what the
-  user said about it (for example "The user's friend NR complains that everyone at their university uses AI.").
-- Keep names of people, pets and places exactly as the user wrote them (for example "The user's friend NR ...").
+  user said about it (a made-up example of the style, never write it: "{example1}").
+- Keep names of people, pets and places exactly as the user wrote them.
 - Only write what the user actually said. Never add details, reasons or guesses of your own.
 - Don't guess anyone's gender: use their name, or "the user" / "they", unless the user said "he" or "she".
 - Turn relative dates into real ones using today's date (for example "this Friday" becomes "Friday 2026-10-23").
 - Only facts from the user's own lines. A "({name} had said: ...)" line is only there to explain a short reply.
 - Updates matter most: if something in "Already remembered" changed (an exam happened, a plan is done, someone
-  made a decision), write the new version, for example "The user finished their exam and thinks they did well."
+  made a decision), write the new version (a made-up example, never write it: "{example2}").
 - Otherwise skip anything already in "Already remembered".
+- Never write anything the user didn't say this time. Most sittings have nothing new: then write NONE.
 - Don't write about {name} or {their} world, about {name}'s memory, about the conversation itself (like what the user
   asked or tried to recall), or small talk.
 If nothing new is worth remembering, write only: NONE"""
+
+EXAMPLES = ["The user's friend NR complains that everyone at their university uses AI.",  # (in DIARY: never kept,
+            "The user finished their exam and thinks they did well."]                   #  see heard_it)
+CALENDAR = set("monday tuesday wednesday thursday friday saturday sunday january february march april may june july "
+               "august september october november december".split())  # (dates the diary works out itself)
+
+def heard_it(note, heard):
+    """True if a diary note is grounded in what was said (heard = the user's lines, with the short-reply context).
+    The model sometimes invents a note when there's nothing to write, even copying DIARY's own example
+    ("The user's friend NR ..." from a sitting that never mentioned anyone), so a note must:
+    - not be one of DIARY's made-up EXAMPLES,
+    - share at least a third of its words with what was said (roughly: same word starts, so "adopted" ~ "adopt"),
+    - and every name in it (a capitalised word after the first, like "NR" or "Mochi") must have been said."""
+    if any(same_fact(note, example) for example in EXAMPLES):
+        return False
+    stem = lambda w: w[:5]
+    said = {stem(w) for w in re.findall(r"[a-z0-9]+", heard.lower())}
+    words = [w for w in re.findall(r"[a-z0-9]+", note.lower()) if w not in STOP_WORDS]
+    if words and sum(stem(w) in said for w in words) / len(words) < 1 / 3:
+        return False
+    names = [w for w in re.findall(r"[A-Za-z][\w'-]*", note)[1:] if w[0].isupper() and w.lower() not in CALENDAR]
+    return all(re.sub(r"'s$", "", n).lower() in heard.lower() for n in names)
 
 def write_diary(save, messages, start, character):
     """At the end of a sitting: the model writes notes about the user from messages[start:], as the character's
@@ -91,8 +114,11 @@ def write_diary(save, messages, start, character):
     if sum(line.startswith("User: ") for line in lines) < MIN_MESSAGES:
         return []
     known = [m["text"] for m in save.get("memories", [])]
+    heard = "\n".join(lines)  # (what a note has to come from: see heard_it)
     today = datetime.date.today().strftime("%A %Y-%m-%d")
-    text = llm.chat([{"role": "system", "content": character.fill(DIARY).replace("{about}", character.about)},
+    prompt = character.fill(DIARY).replace("{about}", character.about)
+    prompt = prompt.replace("{example1}", EXAMPLES[0]).replace("{example2}", EXAMPLES[1])
+    text = llm.chat([{"role": "system", "content": prompt},
                      {"role": "user", "content": f"Today is {today}.\n\nAlready remembered:\n"
                                                  + ("\n".join("- " + k for k in known[-25:]) or "(nothing yet)")
                                                  + "\n\nWhat the user said this time:\n" + "\n".join(lines[-40:])}],
@@ -100,7 +126,7 @@ def write_diary(save, messages, start, character):
     notes = [re.sub(r"^-\s*", "", line).strip() for line in text.splitlines() if line.strip().startswith("-")]
     new = []
     for note in notes[:NOTES_PER_SITTING]:
-        if note and "NONE" not in note and not any(same_fact(note, k) for k in known):
+        if note and "NONE" not in note and not any(same_fact(note, k) for k in known) and heard_it(note, heard):
             new.append(remember(save, "note", note))
             known.append(note)
     return new

@@ -4,10 +4,13 @@
 
 Click her to talk, right-click for the menu, drag her anywhere (she falls back to the floor).
 While her mind loads, only a portal sits on the floor; once it's ready she pops out of it and says hello.
+She can stay a few hours a day (daily_minutes, visits.py): then she says goodbye and goes home, and until midnight
+only the portal shows up, with a note that she's resting.
 Her mind is session.py, run by brain.py on its own thread. The screen never reads her save directly:
 after every job the brain sends a snapshot (trust summary, memories), and Status / memories show that.
 """
 import sys, time
+import visits
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
 from character import Character, DEFAULT
@@ -21,9 +24,11 @@ TICK_MS = 5000       # how often she checks whether she wants to speak up on her
 SQUISH_EVERY = 0.13  # seconds between talking squishes (one per few letters typed, but not faster than this)
 MOOD_SECONDS = {"happy": 15}  # after she stops talking, a mood lasts this long before she's back to neutral
 MOOD_DEFAULT_SECONDS = 35     # (any mood not listed)
+RESTING_SECONDS = 8  # how long the "resting back home" note shows before the app closes
 
 class App:
-    def __init__(self, character):
+    def __init__(self, character, resting=False):
+        """resting = she's used up today's time (visits.resting): only the portal shows, with a note, then it closes."""
         self.character = character  # who's on the desktop (character.py)
         self.body, self.bubble = Body(character.sprites, character.portal), Bubble()
         self.input, self.brain = InputBox(character.name), Brain(character)
@@ -32,6 +37,9 @@ class App:
         self.leaving = False
         self.last_squish = 0.0
         self.acted = False  # an *action* in her current reply got its own move (else her mood picks one)
+        self.time_up = False      # her latest reply came after today's time ran out: she goes home after it
+        self.going_home = False   # leaving because of that (her goodbye differs a little)
+        self.saying_goodbye = False  # her time-up goodbye has started: you can't talk to her any more (it'd keep her)
 
         self.body.moved.connect(self.follow)
         self.body.clicked.connect(self.talk)
@@ -56,12 +64,24 @@ class App:
 
         self.body.show()  # (a portal until she's loaded: on_ready brings her out)
         self.follow()
+        if resting:  # today's time is used up: the portal shows, but she doesn't come through (no model started)
+            self.leaving = True
+            self.bubble.say(f"{character.name} is resting back home today.", note=self._note(
+                f"She can dreamwalk here for {character.daily_minutes // 60} hours a day. Come back tomorrow!", GRAY))
+            QTimer.singleShot(RESTING_SECONDS * 1000, QApplication.quit)
+            return
         self.brain.start()
 
     # --- you ---
 
+    @property
+    def talking(self):
+        """She's thinking, or her words are still on screen: you can't talk to her until she's done
+        (it would cut into her reply, an idle thought, or a quest question you'd then miss)."""
+        return self.bubble.active or self.brain.working
+
     def talk(self):
-        if self.leaving or not self.body.here:
+        if self.leaving or self.saying_goodbye or self.talking or not self.body.here:
             return
         self.body.hold(True)
         self.input.open_at(self.body.head())
@@ -73,6 +93,8 @@ class App:
             self.bubble.say("*still waking up…*", stay=3)
             self.release()
             return
+        if self.saying_goodbye or self.leaving:
+            return  # (she's on her way home)
         self.brain.say(text)
 
     def release(self):
@@ -84,10 +106,11 @@ class App:
         self.build_menu().exec(where)
 
     def build_menu(self):
-        """Her right-click menu. Status and memories wait while she's talking (they'd cut her reply short)."""
+        """Her right-click menu. Talking, Status and memories wait while she's talking (they'd cut her reply short)."""
         menu = QMenu()
-        menu.addAction("Talk to her", self.talk).setEnabled(self.body.here)
-        talking = self.bubble.active or self.brain.busy
+        talking = self.talking
+        menu.addAction("Talk to her", self.talk).setEnabled(
+            self.body.here and not talking and not self.saying_goodbye and not self.leaving)
         for label, action in (("Status", self.status), ("What she remembers", self.memories)):
             menu.addAction(label, action).setEnabled(not talking)
         menu.addSeparator()
@@ -113,10 +136,11 @@ class App:
         self.bubble.say(f"*smiles* I remember {len(entries)} things about you.", stay=12,
                         note=self._note(recent, GRAY))
 
-    def leave(self):
+    def leave(self, going_home=False):
+        """Say goodbye: she writes in her diary, waves and fades away. going_home = her time today is up."""
         if self.leaving:
             return
-        self.leaving = True
+        self.leaving, self.going_home = True, going_home
         self.ticker.stop()
         self.input.hide()
         self.body.hold(True)
@@ -128,6 +152,11 @@ class App:
 
     # --- her ---
 
+    def goodbye_started(self):
+        """Her time is up and she's saying goodbye: close the box you type in, and don't open it again."""
+        self.saying_goodbye = True
+        self.input.hide()
+
     def on_ready(self, prompt_was):
         self.ready = True
         self.body.arrive()  # out of the portal (her opening line is "…" until it's written: she's out by then)
@@ -135,6 +164,8 @@ class App:
         self.brain.open()
 
     def on_speaking(self, kind):
+        if kind == "time_up":  # her goodbye: no more talking from here on
+            self.goodbye_started()
         self.body.hold(True)
         self.body.think(True)  # a "…" thought icon until her first words show up
         self.calm_down.stop()
@@ -166,6 +197,9 @@ class App:
     def on_done(self):
         """Her whole reply has been read: she can wander again, and her mood slowly settles back to neutral."""
         self.release()
+        if self.time_up:  # she's said goodbye (or answered you after her time ran out): home she goes
+            self.leave(going_home=True)
+            return
         if self.body.mood != "neutral":
             self.calm_down.start(MOOD_SECONDS.get(self.body.mood, MOOD_DEFAULT_SECONDS) * 1000)
 
@@ -176,6 +210,9 @@ class App:
 
     def on_spoke(self, turn):
         self.last_reply = turn.number
+        self.time_up = turn.time_up
+        if turn.time_up:  # (also when her time ran out while answering you)
+            self.goodbye_started()
         self.body.set_mood(turn.mood)
         move, emote = moves.MOOD_MOVES.get(turn.mood, (None, None))
         if not self.acted and move:  # no action of hers matched a move: show how she feels instead
@@ -202,7 +239,10 @@ class App:
 
     def on_closed(self, notes):
         said = f"✎ She'll remember {len(notes)} new thing{'s' if len(notes) != 1 else ''} from today" if notes else ""
-        self.bubble.say("*waves goodbye* See you soon!", note=self._note(said, GRAY), stay=2.5)
+        if self.going_home:
+            said = "<br>".join(filter(None, [said, "She's resting back home until tomorrow"]))
+        self.bubble.say("*waves goodbye* See you tomorrow!" if self.going_home else "*waves goodbye* See you soon!",
+                        note=self._note(said, GRAY), stay=2.5)
         self.body.squish(1.0)
         QTimer.singleShot(1800, self.body.vanish)  # she wakes up back home: her dream-self comes apart (then quits)
 
@@ -244,5 +284,5 @@ def main(folder=DEFAULT):
                          + "\n  - ".join(problems))
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    pet = App(character)  # (kept in a variable so it isn't garbage-collected)
+    pet = App(character, resting=visits.resting(character))  # (kept in a variable so it isn't garbage-collected)
     sys.exit(app.exec())
