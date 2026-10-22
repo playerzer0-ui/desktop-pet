@@ -19,7 +19,7 @@ idle_note = "Stick to that topic: don't bring up rain or Everlily unless it's ab
 # but her real body back home goes without food or water the whole time (lore.md), so after this she has to wake up
 # and look after it, and she won't come back until tomorrow (midnight). Left out = no limit. What she says when
 # it runs low and runs out: [time_warning] and [time_up] at the bottom.
-daily_minutes = 10
+daily_minutes = 240
 
 # (everything from here on is a [table]: any plain key written after one belongs to that table, not the top)
 
