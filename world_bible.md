@@ -236,6 +236,7 @@ Use this to decide what a new character could plausibly know.
 | Name | Pronouns | Faction | Role | Files |
 |---|---|---|---|---|
 | Pip | she/her | Republic | Priestess of Everlily, runs Everlily Chapel and its currency exchange. Dreamwalks to the desktop | `character/pip/` |
+| Vesper (real name Mira) | she/her | Republic, secretly Bloodcult | Baker a few doors down from Everlily Chapel, and Pip's best friend. **Secret**: a Bloodcult spy sent by Lind to watch the chapel's lamp; "Vesper" is the name Lind gave her, and nobody (not even Pip) knows her real name. Dreamwalks to the desktop too, and knows Pip does | `character/mira/` |
 
 Named NPCs (exist in the world, not playable):
 - Republicia, Lind, Libera, Soren (faction bosses, see 6)

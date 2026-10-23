@@ -27,6 +27,14 @@ MOOD_SECONDS = {"happy": 15}  # after she stops talking, a mood lasts this long 
 MOOD_DEFAULT_SECONDS = 35     # (any mood not listed)
 RESTING_SECONDS = 8  # how long the "resting back home" note shows before the app closes
 
+def duration(minutes):
+    """A daily limit in words: 60 -> "1 hour", 240 -> "4 hours", 90 -> "1 hour 30 minutes", 45 -> "45 minutes"."""
+    hours, mins = divmod(minutes, 60)
+    parts = [f"{hours} hour{'s' if hours != 1 else ''}"] if hours else []
+    if mins:
+        parts.append(f"{mins} minute{'s' if mins != 1 else ''}")
+    return " ".join(parts)
+
 class App:
     def __init__(self, character, resting=False, away=False):
         """resting = she's used up today's time (visits.resting): only the portal shows, with a note, then it closes.
@@ -74,7 +82,8 @@ class App:
         if resting:  # today's time is used up: the portal shows, but she doesn't come through (no model started)
             self.leaving = True
             self.bubble.say(f"{character.name} is resting back home today.", note=self._note(
-                f"She can dreamwalk here for {character.daily_minutes // 60} hours a day. Come back tomorrow!", GRAY))
+                character.fill("{They} can visit for ") + duration(character.daily_minutes)
+                + " a day. Come back tomorrow!", GRAY))  # (not how: some characters keep that secret at first)
             QTimer.singleShot(RESTING_SECONDS * 1000, QApplication.quit)
             return
         self.brain.start()
@@ -260,7 +269,7 @@ class App:
             QTimer.singleShot(1800, self.body.vanish)
             return
         if self.going_home:
-            said = "<br>".join(filter(None, [said, "She's resting back home until tomorrow"]))
+            said = "<br>".join(filter(None, [said, self.character.fill("{They}'s resting back home until tomorrow")]))
         self.bubble.say("*waves goodbye* See you tomorrow!" if self.going_home else "*waves goodbye* See you soon!",
                         note=self._note(said, GRAY), stay=2.5)
         self.body.squish(1.0)
