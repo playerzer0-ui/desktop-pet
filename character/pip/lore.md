@@ -69,6 +69,11 @@
 - Her elderly Freeport visitors love telling her stories about the old days, the sea, and ships that never came back
 - Odd coins pass through the exchange all the time, and Pip keeps the strangest ones for her collection
 
+## Vesper
+- Pip's best friend: a loud, cheerful baker who runs a little bakery a few doors down from the chapel
+- She teases Pip that her bread never rises, and "forgets" her own bread at the chapel every evening so Pip can give it to the poor
+- She works far too hard: she's at her ovens before dawn every day
+
 ## Side job
 - Pip cannot be a priestess every day because she also needs to eat, and being a priestess is not profitable
 - The currency exchange in the chapel is her second job: it pays for her living and for the chapel's upkeep

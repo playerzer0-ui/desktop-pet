@@ -597,7 +597,7 @@ class StoryQuestTest(unittest.TestCase):
             self.assertIn("overjoyed", self.notes[-1])
             self.assertIsNone(s.minutes_left, "she ignores her daily limit")
             snap = s.snapshot()["summary"]
-            self.assertTrue(snap["begs_on_goodbye"])
+            self.assertTrue(snap["talks_on_goodbye"])
             self.assertEqual(snap["mood_locked"], "happy")
             self.assertIsNone(s.wants_to_speak(), "no time warning or goodbye of her own")
             for i in (1, 2):  # Say goodbye twice: she begs to stay
@@ -612,7 +612,7 @@ class StoryQuestTest(unittest.TestCase):
             self.assertIn(pip().fill(steps[1]["leaves_line"]), cue)
             turn = s.speak(cue, kind)
             self.assertTrue(turn.leaving)
-            self.assertFalse(s.snapshot()["summary"]["begs_on_goodbye"])
+            self.assertFalse(s.snapshot()["summary"]["talks_on_goodbye"])
             self.assertTrue(story.away(self.saved()))
         with self.day(3):
             self.assertTrue(story.away(self.saved()), "the day after, she's away again")
@@ -638,7 +638,7 @@ class StoryQuestTest(unittest.TestCase):
             self.assertFalse(self.story.away(self.saved()))
             s = self.sitting()
             s.open()
-            self.assertTrue(s.snapshot()["summary"]["begs_on_goodbye"])
+            self.assertTrue(s.snapshot()["summary"]["talks_on_goodbye"])
 
     def test_brought_up_after_a_quiet_minute(self):
         with self.day(0):
@@ -655,6 +655,103 @@ class StoryQuestTest(unittest.TestCase):
         save = trust.start(self.path, pip().gates)
         self.assertEqual(major.active(save)["id"], "run-away")
         self.assertIsNone(major.due(save), "the story plays it, not the one-moment quest code")
+
+class FriendTest(unittest.TestCase):
+    """friends.py: at trust 10 Pip invites her friend Vesper on her way out, and the next day Vesper comes instead."""
+
+    def setUp(self):
+        import session
+        self.session = session
+        self.real = session.start_server, session.warm_up, session.ask
+
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
+            return "ok", {}, "nice", "happy", None
+        session.start_server = lambda say: None
+        session.warm_up = lambda messages, fixed: "loaded"
+        session.ask = ask
+
+    def tearDown(self):
+        self.session.start_server, self.session.warm_up, self.session.ask = self.real
+
+    def sitting(self, character=None, minutes=0, trust_level=10):
+        c = character or pip()
+        c.save_path = getattr(self, "path", None) or save_with_minutes(minutes, trust_level=trust_level)
+        self.path = c.save_path
+        s = self.session.Session(c, say=lambda *_: None)
+        s.quests.next = time.time() + 3600
+        return s
+
+    def saved(self):
+        with open(self.path) as f:
+            return json.load(f)
+
+    def test_pip_invites_vesper(self):
+        friend = pip().friend
+        self.assertEqual(friend["folder"], "mira")
+        self.assertEqual(friend["at_trust"], 10)
+        self.assertEqual(Character("mira").name, "Vesper")
+
+    def test_say_goodbye_at_trust_10_invites_her_friend_once(self):
+        import friends
+        s = self.sitting()
+        s.open()
+        self.assertTrue(s.snapshot()["summary"]["talks_on_goodbye"])
+        cue, kind = s.goodbye()
+        self.assertIn(pip().fill(pip().friend["invite"]), cue)
+        self.assertTrue(s.speak(cue, kind).leaving, "she goes home after inviting her friend")
+        self.assertFalse(s.snapshot()["summary"]["talks_on_goodbye"], "it's said only once")
+        self.assertIsNone(s.goodbye())
+        saved = self.saved()
+        self.assertEqual(saved["friend"]["folder"], "mira")
+        self.assertEqual(saved["memories"][-1]["kind"], "milestone")
+        self.assertIsNone(friends.visiting_today(saved), "not the same day")
+
+    def test_time_up_at_trust_10_invites_instead_of_her_goodbye(self):
+        s = self.sitting(minutes=241)
+        cue, kind = s.wants_to_speak()
+        self.assertEqual(kind, "time_up")
+        self.assertIn("Vesper", cue)
+        turn = s.speak(cue, kind)
+        self.assertTrue(turn.time_up and turn.leaving, "no see-you-tomorrow: her friend comes instead")
+        self.assertIn("friend", self.saved())
+
+    def test_no_invite_below_trust_10(self):
+        s = self.sitting(minutes=241, trust_level=9)
+        self.assertFalse(s.snapshot()["summary"]["talks_on_goodbye"])
+        self.assertIsNone(s.goodbye())
+        cue, _ = s.wants_to_speak()
+        self.assertNotIn("Vesper", cue)
+        self.assertNotIn("friend", self.saved())
+
+    def test_the_friends_day(self):
+        import friends
+        D = datetime.date
+        save = {"friend": {"folder": "mira", "invited_on": "2026-11-01", "visit_day": None}}
+        with mock_write_save(friends):
+            self.assertIsNone(friends.visiting_today(save, D(2026, 11, 1)), "the day she invites: not Vesper yet")
+            self.assertTrue(friends.gone_today(save, D(2026, 11, 1)), "...and Pip has gone home for the day")
+            self.assertFalse(friends.gone_today(save, D(2026, 11, 4)))
+            self.assertEqual(friends.visiting_today(save, D(2026, 11, 4)), "mira", "your next visit, days later")
+            self.assertEqual(friends.visiting_today(save, D(2026, 11, 4)), "mira", "opened again the same day")
+            self.assertIsNone(friends.visiting_today(save, D(2026, 11, 5)), "then Pip is back")
+            self.assertFalse(friends.gone_today(save, D(2026, 11, 5)))
+        self.assertIsNone(friends.visiting_today({}), "never invited")
+
+    def test_vespers_first_greeting_is_about_pip_sending_her(self):
+        mira = Character("mira")
+        mira.log_path = os.path.join(TMP, "mira.log")
+        s = self.sitting(character=mira, trust_level=1)
+        s.open()
+        self.assertIn(mira.fill(mira.first_visit), s.messages[-2]["content"])
+        s = self.sitting(character=mira)  # (same save, opened again)
+        s.open()
+        self.assertNotIn(mira.fill(mira.first_visit), s.messages[-2]["content"], "only the very first time")
+
+def mock_write_save(module):
+    """Stand in for write_save in module (for plain dicts that have no file)."""
+    from unittest import mock
+    return mock.patch.object(module, "write_save", lambda data: None)
 
 class ClockNudgeTest(unittest.TestCase):
     """idle.CLOCK: she speaks up at 7:00, 12:00, 18:00 and 23:00, once a day each, within 30 minutes after."""
@@ -1182,7 +1279,7 @@ class DesktopTest(unittest.TestCase):
     def test_say_goodbye_while_she_begs(self):
         from session import Turn
         a = self.app()
-        a.snap = {"summary": {"begs_on_goodbye": True}, "memories": []}
+        a.snap = {"summary": {"talks_on_goodbye": True}, "memories": []}
         a.leave()
         self.assertEqual((a.brain.calls[-1], a.leaving), ("goodbye", False), "she should beg, not leave")
         a.bubble.start()

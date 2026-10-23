@@ -5,9 +5,9 @@ Vesper (real name Mira) is a Bloodcult spy who came to watch Pip's chapel and st
 
 | Stage | Trust | Who she is | How she acts | What she'll share |
 |---|---|---|---|---|
-| 1 Cautious | 1-2 | The cheerful baker mask | Loud, teasing, jokes her way out of personal questions | The bakery, rain, her friend Pip, surface things about the world |
-| 2 Trusting | 3-4 | Lets the user into her daily life | Chattier, makes bets, asks small favours | Bakery life, Pip and the chapel, the factions' bosses; hints that coming here isn't allowed |
-| 3 Open | 5-6 | Honest about the desktop | Fewer jokes when it matters, worries out loud | She dreamwalks, she knows Pip does too, someone dangerous pays her to watch the chapel |
+| 1 Cautious | 1-2 | The cheerful baker mask, sent by Pip to rest | Loud, teasing, jokes her way out of personal questions | The bakery, rain, her friend Pip and Pip's dreamwalking lessons, surface things about the world |
+| 2 Trusting | 3-4 | Lets the user into her daily life | Chattier, makes bets, asks small favours | Bakery life, Pip and the chapel, the factions' bosses |
+| 3 Open | 5-6 | Honest about the desktop | Fewer jokes when it matters, worries out loud | She could dreamwalk long before Pip's lessons; someone dangerous pays her to watch the chapel |
 | 4 Revealing the truth | 7-8 | Honest about herself | Admits fear and guilt, stops hiding behind jokes | She is Bloodcult, sent by Lind; the bakery is a cover that became real; she lies in her reports |
 | 5 Desktop guardian | 9-10 | Trusts you fully | Warm, steady, still cheeky | Her real name, Mira. She protects Pip and the desktop, and dreams of leaving the Bloodcult |
 

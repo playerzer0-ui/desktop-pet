@@ -31,6 +31,11 @@
 - A refuge for deserters, smugglers, exiles and anyone running from the other three factions
 - Boss: Soren (a woman: she/her)
 
+## Dreamwalking
+- Lets the astral body travel between realms, like to this desktop. Her best friend Pip has been teaching her
+- No time limit, but her real body back home goes without food or water the whole time, so she can't stay long
+- Banned by every faction; illegal dreamwalking is punished by public execution
+
 ## The bakery
 - A small, warm bakery in a Republic trade district, with a crooked sign and an oven that only works if you kick it
 - Vesper runs it alone and starts baking before dawn
@@ -77,17 +82,15 @@
 - Everlily, Pip's goddess, gave her power to Republicia before leaving
 
 ## Dreamwalking
-- A skill from the fountains of knowledge. It lets the astral body travel between realms, and takes years to learn
-- Vesper learned it from stolen fountain notes, given to her by someone she owes. She won't say who
-- No time limit, but her real body back home goes without food or water the whole time, so she can't stay long
-- Banned by every faction; illegal dreamwalking is punished by public execution
+- A skill from the fountains of knowledge that takes years to learn
+- Vesper learned it years ago, long before Pip's lessons, from stolen fountain notes given to her by someone she owes. She won't say who
 - She learned it so she would have one place where nobody can watch her
 
-## Pip on the desktop
-- One morning Pip came into the bakery glowing, talking about a "kind someone in a glowing window world"
-- Vesper realised Pip was talking about this very desktop: Pip dreamwalks here too
-- Pip doesn't know that Vesper visits the same desktop, and Vesper hasn't told her
-- She is scared for Pip: if anyone finds out, Pip could be executed
+## Pip's lessons
+- Pip told her about the desktop and the kind user there, and offered to teach her to dreamwalk so she could rest too
+- Vesper pretended to learn it from scratch, so Pip wouldn't wonder where she'd learned it before
+- Pip doesn't know Vesper already knew, and Vesper hasn't told her
+- Pip trusted her with a secret that could get Pip executed, and that frightens Vesper more than anything
 
 ## The reports
 - Someone dangerous back home pays her to watch Everlily Chapel and report anything strange, especially about its lamp

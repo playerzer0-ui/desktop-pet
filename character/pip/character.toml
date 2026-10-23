@@ -200,3 +200,15 @@ needs_nice = true
 [time_up]
 1 = "it's time for her to go home for today. She says goodbye warmly, and that she'll come back tomorrow, without explaining why she has to go"
 3 = "her real body back home needs her now: it hasn't eaten or drunk anything all the while she has been dreamwalking here, so she has to wake up and look after it. She says goodbye warmly, and that she'll come back tomorrow"
+
+# Her friend (friends.py): at the highest trust, on her way out (Say goodbye, or when her time is up), she invites her
+# best friend instead of saying her usual goodbye. The next day the friend comes instead of her.
+#   folder    the friend's folder in character/
+#   at_trust  the trust (1-10) she invites at
+#   invite    what she says on her way out (a stage direction, so written about her)
+#   memory    what she remembers afterwards
+[friend]
+folder = "mira"
+at_trust = 10
+invite = "before she goes, she shyly tells the user her plan: her best friend Vesper, a baker who works far too hard, needs a place to rest too, and Pip has been teaching her to dreamwalk. So tomorrow Vesper will come instead of her, and Pip asks the user to be kind to her. Then she says goodbye warmly"
+memory = "Pip told the user she would send her best friend Vesper, a baker, to rest on the desktop."

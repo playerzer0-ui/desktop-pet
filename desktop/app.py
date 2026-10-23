@@ -10,7 +10,7 @@ Her mind is session.py, run by brain.py on its own thread. The screen never read
 after every job the brain sends a snapshot (trust summary, memories), and Status / memories show that.
 """
 import sys, time
-import story, visits
+import friends, story, visits
 from save import load_save
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
@@ -157,7 +157,7 @@ class App:
         While her story wants goodbyes (story.py), she begs to stay instead, and only the last one sends her home."""
         if self.leaving:
             return
-        if not going_home and self.ready and self.snap and self.snap["summary"].get("begs_on_goodbye"):
+        if not going_home and self.ready and self.snap and self.snap["summary"].get("talks_on_goodbye"):
             self.brain.goodbye()
             return
         self.leaving, self.going_home = True, going_home
@@ -307,6 +307,9 @@ class App:
 def main(folder=DEFAULT):
     """folder = which character to open (their folder in character/)."""
     character = Character(folder)
+    friend = friends.visiting_today(load_save(character.save_path))
+    if friend:  # the day after she invited her friend (friends.py): the friend comes instead of her
+        character = Character(friend)
     problems = check.mood_problems(character)
     if problems:
         raise SystemExit(f"{character.name}'s mood lists don't match (see desktop/check.py):\n  - "
@@ -314,7 +317,8 @@ def main(folder=DEFAULT):
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     save = load_save(character.save_path)
-    away = story.away(save)  # her story sent her home for now: she doesn't come out (and no model is started)
+    # her story sent her home for now, or she invited her friend today: she doesn't come out (and no model is started)
+    away = story.away(save) or friends.gone_today(save)
     resting = not away and visits.resting(character) and not story.ignores_time_limit(save, character)
     pet = App(character, resting=resting, away=away)  # (kept in a variable so it isn't garbage-collected)
     sys.exit(app.exec())

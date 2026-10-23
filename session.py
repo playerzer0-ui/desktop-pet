@@ -15,7 +15,7 @@ what was said, how it felt to her, her mood, how long it took, how full the cont
 """
 import datetime, time
 from dataclasses import dataclass
-import events, llm, memory, story, trust, visits
+import events, friends, llm, memory, story, trust, visits
 from character import Character, DEFAULT
 from directions import direction
 from idle import Idle
@@ -96,15 +96,20 @@ class Session:
         begins = self.story.begin_text(self.save, greeting=True)  # a story step that's due today begins here
         major = None if begins else self.major.due(self.save)  # trust is held back: she brings it up in her greeting
         self._raising = bool(begins or major)
-        extra = " ".join(filter(None, [self._news(), major, begins])) or None
+        extra = " ".join(filter(None, [self._first_visit(), self._news(), major, begins])) or None
         return self._turn(self.idle.opening(extra), "opening", on_text)
 
     def goodbye(self):
-        """Say goodbye (the menu) while a story step wants goodbyes (Story.begs_on_goodbye): (stage direction, kind)
-        for what she says, begging to stay or, the last time, going home. None if goodbye should just send her home."""
+        """Say goodbye (the menu) while she has something to say about it (talks_on_goodbye in snapshot()):
+        (stage direction, kind) for what she says, or None if goodbye should just send her home.
+        A story step that wants goodbyes comes first (she begs to stay or, the last time, goes home); else her
+        invitation to her friend (friends.py), after which she goes home."""
         said = self.story.goodbye(self.save)
         if not said:
-            return None
+            invite = friends.invite(self.save, self.character)
+            if not invite:
+                return None
+            said = invite, True
         text, self._leaving_after = said
         self.idle.pip_spoke()
         return direction(self.character.fill("{name} says something on {their} own: ") + text + "."), "goodbye"
@@ -125,6 +130,10 @@ class Session:
         left = self.minutes_left
         if left is not None and left <= 0 and not self.said_goodbye:
             self.said_goodbye = True
+            invite = friends.invite(self.save, self.character)  # (her invitation takes the place of her goodbye)
+            if invite:
+                self._leaving_after = True  # (she won't be back tomorrow: her friend comes instead)
+                return direction(self.character.fill("{name} says something on {their} own: ") + invite + "."), "time_up"
             return self._time_cue(self.character.time_up, left), "time_up"
         if left is not None and 0 < left <= visits.WARN_MINUTES and not self.warned:
             self.warned = True
@@ -192,7 +201,8 @@ class Session:
         summary = trust.summary(self.save, self.character.stage_names)
         summary["minutes_today"] = visits.minutes_used(self.save, (time.time() - self.opened) / 60)  # (this sitting too)
         summary["daily_minutes"] = self.character.daily_minutes
-        summary["begs_on_goodbye"] = self.story.begs_on_goodbye(self.save)  # (Say goodbye: she begs to stay)
+        summary["talks_on_goodbye"] = (self.story.begs_on_goodbye(self.save)  # (Say goodbye: she begs to stay,
+                                       or friends.invite_due(self.save, self.character))  # or invites her friend)
         summary["mood_locked"] = self.story.mood(self.save)  # (her mood doesn't settle back to neutral)
         return {"summary": summary, "memories": [dict(m) for m in self.memories]}
 
@@ -302,6 +312,15 @@ class Session:
             stats.append("STORY QUEST DONE")
         self.log(" · ".join(stats) + f"\n    {'you' if t.kind == 'user' else 'cue'}: {text}"
                  f"\n    {self.character.folder}: {t.reply}")
+
+    def _first_visit(self):
+        """What her very first greeting is about (first_visit in character.toml, like Vesper being sent by Pip),
+        the first time she's ever opened, else None. Marked in her save, so it's only once."""
+        if not self.character.first_visit or self.save.get("met"):
+            return None
+        self.save["met"] = True
+        write_save(self.save)
+        return self.character.fill(self.character.first_visit) + "."
 
     def _news(self):
         """Today's world event, if she's ready to tell it and hasn't yet (marked told as it's handed out), else None."""

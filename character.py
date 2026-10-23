@@ -46,6 +46,8 @@ class Character:
                        for stage, asks in c["quests"].items() for quest_id, about in asks.items()]
         self.major_quests = _major_quests(c.get("major_quests", {}), self.moods)
         # stage -> {id, starts, done_when, memory, points}, or a story over several days: {id, memory, points, steps}
+        self.friend = _friend(c.get("friend"))  # the friend they invite to the desktop ([friend], friends.py), or None
+        self.first_visit = c.get("first_visit")  # what their very first greeting is about (a stage direction), or None
         self.sprites = os.path.join(self.dir, "sprites")
         self.portal = PORTAL
         self.save_path = os.path.join(HERE, "saves", folder + ".json")
@@ -165,6 +167,20 @@ def _check_step(where, step, moods):
         raise ValueError(f"{where}: mood {step['mood']!r} isn't one of the character's moods")
     if not isinstance(step["away_days"], int) or step["away_days"] < 0:
         raise ValueError(f"{where}: away_days must be a whole number, 0 or more")
+
+def _friend(table):
+    """[friend] from character.toml, checked: who they invite (a folder in character/), at what trust (1-10),
+    what they say about it on their way out, and what they remember afterwards."""
+    if table is None:
+        return None
+    missing = [key for key in ("folder", "at_trust", "invite", "memory") if key not in table]
+    if missing:
+        raise ValueError(f"[friend] is missing: {', '.join(missing)}")
+    if not isinstance(table["at_trust"], int) or not 1 <= table["at_trust"] <= 10:
+        raise ValueError("[friend] at_trust must be a whole number from 1 to 10")
+    if not os.path.isfile(os.path.join(HERE, "character", table["folder"], "character.toml")):
+        raise ValueError(f"[friend] folder {table['folder']!r} isn't a character in character/")
+    return table
 
 def _move_old_save(path):
     """Before characters, Pip's save was save.json in the project folder: it becomes saves/pip.json."""
