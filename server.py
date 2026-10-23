@@ -8,7 +8,7 @@ Talking to it is llm.py's job; this file only owns the process.
     Linux     a small shell watchdog (WATCHDOG) runs the server, checks every second that the pet is still there,
               and stops the server when it isn't
 """
-import atexit, ctypes, glob, os, shutil, subprocess, time
+import atexit, ctypes, glob, os, shutil, subprocess, threading, time
 import llm
 from config import HERE, PORT, N_CTX, MODEL, CACHE_DIR
 
@@ -83,7 +83,15 @@ def kill_with_python(proc):
     kernel32.AssignProcessToJobObject(wintypes.HANDLE(job), wintypes.HANDLE(int(proc._handle)))
     return job  # must be kept alive: when the handle closes, the server is killed
 
-def start_server(say=print):  # say = how to show the startup message
+_starting = threading.Lock()  # two characters on the desktop each start their mind: only one may start the server
+
+def start_server(say=print, slots=1):
+    """say = how to show the startup message. slots = how many characters will use it at once (one slot each,
+    each with the full N_CTX context)."""
+    with _starting:
+        _start(say, slots)
+
+def _start(say, slots):
     global _job
     if llm.is_up():  # already running (e.g. started by start-server.bat), just use it...
         model = os.path.basename(llm.model_path())
@@ -91,11 +99,16 @@ def start_server(say=print):  # say = how to show the startup message
             raise SystemExit(
                 f"A llama-server with a different model ({model}) is already running on port {PORT}.\n"
                 f"Close it (or its start-server.bat window) and run this again.")
+        if llm.slots() < slots:  # ...and enough slots for everyone on the desktop
+            raise SystemExit(
+                f"The llama-server already running on port {PORT} has {llm.slots()} slot(s), and {slots} characters "
+                f"need {slots}.\nClose it (or its start-server.bat window) and run this again.")
         return
     os.makedirs(CACHE_DIR, exist_ok=True)
     log = open(os.path.join(HERE, "server.log"), "w")  # server messages go here, for debugging
-    command = [find_llama_server(), "-m", MODEL, "-c", str(N_CTX), "-ngl", "0", "--port", str(PORT),
-               "-np", "1",  # one conversation slot, so the saved prompt cache always lands where the chat runs
+    command = [find_llama_server(), "-m", MODEL, "-c", str(N_CTX * slots), "-ngl", "0", "--port", str(PORT),
+               "-np", str(slots),  # one conversation slot per character (the context is split between them,
+                                   # so each gets N_CTX), and each request names its own (llm.py's slot)
                "--slot-save-path", CACHE_DIR]
     if WINDOWS:
         server = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,

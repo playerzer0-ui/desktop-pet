@@ -1,6 +1,7 @@
 """Bringing a friend along: [friend] in a character's character.toml. Pip, at the highest trust, says on her way out
 (Say goodbye, or when her time is up) that she'll send her best friend Vesper to rest here, and the next day the
-friend comes instead of her. (After that day, Pip comes back on her own; both together is still to come.)
+friend comes instead of her. From the day after that, they mostly come together (desktop/scene.py), but now
+and then one of them is busy back home and the other comes alone: picked once a day (plan).
 
 It's kept in the inviter's save (Pip's), so the friend's own save stays hers alone:
 
@@ -11,10 +12,15 @@ It's kept in the inviter's save (Pip's), so the friend's own save stays hers alo
                                                Marks it in her save, with a memory
     friends.gone_today(save)                   at launch: she invited her friend today, so she's away until tomorrow
     friends.visiting_today(save)               at launch: the friend's folder if today is the friend's day, else None
+    friends.together(save)                     the friend's folder from the day after her own day, else None
+    friends.plan(save, character)              at launch, from then on: who comes today, "together", "only_her"
+                                               or "only_friend" (picked on the day's first launch, kept in her save)
+    friends.introduce(save, character)         the first day they come together: how she introduces her friend in
+                                               her greeting (a stage direction's text), or None. Marks it in her save
 
 Like a story step (story.py), the friend's day waits for your next visit: skip a few days and nothing is missed.
 """
-import datetime
+import datetime, random
 import memory
 from save import write_save
 
@@ -40,6 +46,38 @@ def gone_today(save, today=None):
     invited = save.get("friend")
     today = (today or datetime.date.today()).isoformat()
     return bool(invited and invited["visit_day"] is None and invited["invited_on"] == today)
+
+def together(save, today=None):
+    """The friend's folder if she comes along with her today (any day after the friend's own day), else None."""
+    invited = save.get("friend")
+    today = (today or datetime.date.today()).isoformat()
+    return invited["folder"] if invited and invited["visit_day"] and today > invited["visit_day"] else None
+
+def plan(save, character, today=None, pick=random.choices):
+    """Who comes today, once they can come together (together(save)): "together", "only_her" or "only_friend",
+    picked by [friend] chances on the day's first launch and kept in her save, so opening the app again the same day
+    brings the same ones. The first day is always together: it's the day she introduces her friend.
+    None before then. pick = random.choices (the tests stand in for it)."""
+    if not together(save, today):
+        return None
+    invited, day = save["friend"], (today or datetime.date.today()).isoformat()
+    if invited.get("today", {}).get("day") != day:
+        chances = character.friend["chances"]
+        who = "together" if not invited.get("introduced") else pick(list(chances), weights=list(chances.values()))[0]
+        invited["today"] = {"day": day, "who": who}
+        write_save(save)
+    return invited["today"]["who"]
+
+def introduce(save, character, today=None):
+    """The first day they come together, her greeting introduces her friend ([friend] introduce): its text for a
+    stage direction, or None (already done, or nothing to say). Marked in her save, so it's only once."""
+    invited = save.get("friend")
+    text = (character.friend or {}).get("introduce")
+    if not invited or not text or invited.get("introduced"):
+        return None
+    invited["introduced"] = (today or datetime.date.today()).isoformat()
+    write_save(save)
+    return character.fill(text)
 
 def visiting_today(save, today=None):
     """The friend's folder if today is the friend's day (the first day you open her after the invite), else None.

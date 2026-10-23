@@ -340,12 +340,12 @@ class SessionMajorQuestTest(unittest.TestCase):
         self.real = session.start_server, session.warm_up, session.ask
         self.notes, self.judged = [], []
 
-        def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             self.notes.append(note)
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "happy", (self.judged.pop(0) if self.judged else None)
-        session.start_server = lambda say: None
-        session.warm_up = lambda messages, fixed: "loaded"
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: "loaded"
         session.ask = ask
 
     def tearDown(self):
@@ -453,11 +453,11 @@ class SessionTimeLimitTest(unittest.TestCase):
         self.session = session
         self.real = session.start_server, session.warm_up, session.ask
 
-        def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "happy", None
-        session.start_server = lambda say: None
-        session.warm_up = lambda messages, fixed: "loaded"
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: "loaded"
         session.ask = ask
 
     def tearDown(self):
@@ -537,12 +537,12 @@ class StoryQuestTest(unittest.TestCase):
         self.real = session.start_server, session.warm_up, session.ask
         self.notes = []
 
-        def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             self.notes.append(note)
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "sad", None  # (she says sad: a step's mood should win)
-        session.start_server = lambda say: None
-        session.warm_up = lambda messages, fixed: "loaded"
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: "loaded"
         session.ask = ask
         self.path = gated_save(points=trust.TRUST_POINTS[6] - 1, trust_level=6)  # the top of stage 3: gate 3
 
@@ -564,6 +564,8 @@ class StoryQuestTest(unittest.TestCase):
         c.save_path = self.path
         s = self.session.Session(c, say=lambda *_: None)
         s.quests.next = time.time() + 3600
+        import idle  # (and no clock moment, like 18:00's "how was your day", if the tests run at that time)
+        s.idle.fired = {(datetime.date.today().isoformat(), h, m) for h, m, _ in idle.CLOCK}
         return s
 
     def saved(self):
@@ -664,11 +666,11 @@ class FriendTest(unittest.TestCase):
         self.session = session
         self.real = session.start_server, session.warm_up, session.ask
 
-        def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "happy", None
-        session.start_server = lambda say: None
-        session.warm_up = lambda messages, fixed: "loaded"
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: "loaded"
         session.ask = ask
 
     def tearDown(self):
@@ -1092,7 +1094,7 @@ class DesktopTest(unittest.TestCase):
                     return Signal()
                 return lambda *a, **k: self.calls.append(name)
         real = A.Brain
-        A.Brain = lambda character: StubBrain()
+        A.Brain = lambda character, **kw: StubBrain()
         try:
             a = A.App(pip(), resting=resting, away=away)
         finally:
@@ -1348,6 +1350,214 @@ class DesktopTest(unittest.TestCase):
         self.assertFalse(a.body.thinking, "still showing the '…' icon")
         self.assertFalse(a.body.held, "still held in place: she'd never wander again")
 
+class SceneTest(unittest.TestCase):
+    """desktop/scene.py: Pip and Vesper on the desktop together, with stand-in brains."""
+
+    @classmethod
+    def setUpClass(cls):
+        from PySide6.QtWidgets import QApplication
+        cls.qt = QApplication.instance() or QApplication([])
+
+    def scene(self):
+        from desktop import app as A, scene as S
+        brains = []
+        class Signal:
+            def connect(self, *_): pass
+        class StubBrain:
+            busy = working = False
+            def __init__(self, **kw):
+                self.kw, self.calls = kw, []
+                brains.append(self)
+            def __getattr__(self, name):
+                if name in ("ready", "speaking", "piece", "spoke", "closed", "snapshot", "failed"):
+                    return Signal()
+                return lambda *a, **k: self.calls.append(name)
+        real = A.Brain
+        A.Brain = lambda character, **kw: StubBrain(**kw)
+        try:
+            scene = S.Scene([pip(), Character("mira")])
+        finally:
+            A.Brain = real
+        scene.ticker.stop()  # (the test ticks by hand)
+        for p in scene.pets:
+            p.body.state, p.body.landed = "here", True
+        self.quits = []
+        self.real_quit, S.QApplication.quit = S.QApplication.quit, lambda: self.quits.append(True)
+        self.addCleanup(lambda: setattr(S.QApplication, "quit", self.real_quit))
+        return scene, brains
+
+    def test_each_has_her_own_slot_and_knows_who_else_is_here(self):
+        scene, brains = self.scene()
+        self.assertEqual([(b.kw["slot"], b.kw["slots"]) for b in brains], [(0, 2), (1, 2)])
+        self.assertEqual([b.kw["company"] for b in brains], [["Vesper"], ["Pip"]])
+        a, b = scene.pets
+        self.assertGreater(abs(a.body.foot_x - b.body.foot_x), 100, "they came out of the same spot")
+        for p in scene.pets:
+            self.assertIn("start", p.brain.calls)
+
+    def test_pip_greets_first_then_vesper_answers_her(self):
+        from session import Turn
+        scene, _ = self.scene()
+        pip_, ves = scene.pets
+        opened = []
+        ves.brain.open = lambda heard=None: opened.append(heard)
+        ves.on_ready("loaded")  # (Vesper's mind is ready first...)
+        scene.tick()
+        self.assertEqual(opened, [], "Vesper greeted before Pip")
+        pip_.on_ready("loaded")
+        self.assertIn("open", pip_.brain.calls)
+        pip_.on_speaking("opening")  # Pip introduces her...
+        pip_.on_spoke(Turn("This is my friend Vesper!", "opening", None, "happy", 1.0, {}, 10, 10, 460, 460))
+        scene.tick()
+        self.assertEqual(opened, [], "Vesper talked over Pip's greeting")
+        pip_.bubble.active = False  # ...and is done
+        scene.tick()
+        self.assertEqual(opened, [("Pip", "This is my friend Vesper!")], "Vesper should greet, hearing Pip")
+
+    def test_one_talks_at_a_time(self):
+        scene, _ = self.scene()
+        pip_, ves = scene.pets
+        for p in scene.pets:
+            p.ready = True
+        ves.on_speaking("idle")
+        pip_.talk()
+        self.assertFalse(pip_.input.isVisible(), "you started a chat with Pip while Vesper was talking")
+        menu = pip_.build_menu()
+        self.assertFalse(next(x for x in menu.actions() if x.text() == "Talk to her").isEnabled())
+        scene.tick()
+        self.assertNotIn("tick", pip_.brain.calls, "Pip spoke up while Vesper was talking")
+        ves.bubble.active = False
+        pip_.talk()
+        self.assertTrue(pip_.input.isVisible())
+        scene.tick()
+        self.assertNotIn("tick", ves.brain.calls, "Vesper spoke up while you were typing to Pip")
+        pip_.input.hide()
+
+    def test_they_leave_together(self):
+        scene, _ = self.scene()
+        pip_, ves = scene.pets
+        for p in scene.pets:
+            p.ready = True
+        ves.leave()  # Say goodbye to Vesper: Pip goes too
+        self.assertTrue(pip_.leaving and ves.leaving)
+        self.assertIn("close", pip_.brain.calls)
+        self.assertIn("close", ves.brain.calls)
+        scene.vanished(ves)
+        self.assertEqual(self.quits, [], "the app closed before Pip had gone")
+        scene.vanished(pip_)
+        self.assertEqual(self.quits, [True])
+
+    def test_pips_time_up_sends_both_home(self):
+        from session import Turn
+        scene, _ = self.scene()
+        pip_, ves = scene.pets
+        for p in scene.pets:
+            p.ready = True
+        pip_.bubble.start()
+        pip_.on_spoke(Turn("I have to go home now...", "time_up", None, "sad", 1.0, {}, 10, 10, 460, 460,
+                           time_up=True))
+        pip_.on_done()
+        self.assertTrue(ves.leaving and ves.going_home)
+
+    def test_who_comes_is_picked_once_a_day(self):
+        import friends
+        D = datetime.date
+        save = {"friend": {"folder": "mira", "invited_on": "2026-11-01", "visit_day": "2026-11-02"}}
+        picks = []
+        def pick(options, weights):
+            picks.append(dict(zip(options, weights)))
+            return ["only_friend"]
+        with mock_write_save(friends):
+            self.assertIsNone(friends.plan(save, pip(), D(2026, 11, 2), pick), "Vesper's own day: no plan")
+            self.assertEqual(friends.plan(save, pip(), D(2026, 11, 3), pick), "together",
+                             "the first day together is always together: Pip introduces her")
+            save["friend"]["introduced"] = "2026-11-03"
+            self.assertEqual(friends.plan(save, pip(), D(2026, 11, 3), pick), "together", "kept for the day")
+            self.assertEqual(friends.plan(save, pip(), D(2026, 11, 4), pick), "only_friend", "a new day: picked")
+            self.assertEqual(friends.plan(save, pip(), D(2026, 11, 4), pick), "only_friend", "opened again")
+        self.assertEqual(picks, [{"together": 70, "only_her": 15, "only_friend": 15}], "picked only once")
+
+    def test_chances_are_checked(self):
+        import character as C
+        base = {"folder": "mira", "at_trust": 10, "invite": "x", "memory": "x"}
+        self.assertEqual(C._friend(dict(base))["chances"], {"together": 1}, "left out: always together")
+        for chances in ({"sometimes": 5}, {"together": -1}, {"together": 0}, {"together": 1, "only_her": 1}):
+            with self.subTest(chances=chances), self.assertRaises(ValueError):
+                C._friend(dict(base, chances=chances))
+
+    def test_alone_she_says_why_the_other_isnt_here(self):
+        mira = Character("mira")
+        mira.log_path = os.path.join(TMP, "mira.log")
+        note = mira.fill(pip().friend["only_friend"]) + "."
+        self.assertIn("busy looking after the chapel, so she came on her own", note)
+        import session
+        real = session.start_server, session.warm_up, session.ask
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
+            return "ok", {}, "nice", "happy", None
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.ask = ask
+        try:
+            mira.save_path = save_with_minutes(0, trust_level=3)
+            s = session.Session(mira, say=lambda *_: None, greeting_note=note)
+            s.open()
+        finally:
+            session.start_server, session.warm_up, session.ask = real
+        self.assertIn(note, s.messages[-2]["content"])
+
+    def test_together_from_the_day_after_vespers_day(self):
+        import friends
+        D = datetime.date
+        save = {"friend": {"folder": "mira", "invited_on": "2026-11-01", "visit_day": None}}
+        self.assertIsNone(friends.together(save, D(2026, 11, 3)), "not before her own day")
+        save["friend"]["visit_day"] = "2026-11-03"
+        self.assertIsNone(friends.together(save, D(2026, 11, 3)), "her own day: she comes alone")
+        self.assertEqual(friends.together(save, D(2026, 11, 4)), "mira")
+        self.assertEqual(friends.together(save, D(2027, 1, 1)), "mira", "and every day after")
+        self.assertIsNone(friends.together({}, D(2026, 11, 4)))
+
+    def greeting(self, character, path, company, heard=None):
+        """Her greeting's stage direction, from a real Session with the model stood in for."""
+        import session
+        real = session.start_server, session.warm_up, session.ask
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
+            return "ok", {}, "nice", "happy", None
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.ask = ask
+        try:
+            character.save_path = path
+            s = session.Session(character, say=lambda *_: None, slot=0, slots=2, company=company)
+            s.open(heard)
+        finally:
+            session.start_server, session.warm_up, session.ask = real
+        return s.messages[-2]["content"]
+
+    def test_pip_introduces_vesper_the_first_day_only(self):
+        path = save_with_minutes(0, trust_level=10)
+        with open(path) as f:
+            data = json.load(f)
+        data["friend"] = {"folder": "mira", "invited_on": "2026-10-20", "visit_day": "2026-10-21"}
+        with open(path, "w") as f:
+            json.dump(data, f)
+        intro = pip().fill(pip().friend["introduce"])
+        self.assertIn(intro, self.greeting(pip(), path, ["Vesper"]))
+        with open(path) as f:
+            self.assertTrue(json.load(f)["friend"]["introduced"])
+        again = self.greeting(pip(), path, ["Vesper"])
+        self.assertNotIn(intro, again, "she introduces her only once")
+        self.assertIn("Her friend Vesper is on the desktop with her today", again)
+
+    def test_vespers_greeting_hears_pip(self):
+        mira = Character("mira")
+        mira.log_path = os.path.join(TMP, "mira.log")
+        cue = self.greeting(mira, save_with_minutes(0, trust_level=1), ["Pip"],
+                            heard=("Pip", "This is my best friend Vesper!"))
+        self.assertIn('Pip is on the desktop with her today, and just greeted the user, saying: '
+                      '"This is my best friend Vesper!"', cue)
+
 class DirectionsTest(unittest.TestCase):
     def test_a_cue_is_told_apart_from_the_user(self):
         from directions import direction, is_direction
@@ -1384,9 +1594,9 @@ class ReconnectTest(unittest.TestCase):
         self.real = session.start_server, session.warm_up, session.ask, llm.chat
         self.calls = {"start": 0, "read": 0, "ask": 0, "diary": 0}
 
-        def start(say): self.calls["start"] += 1
-        def warm(messages, fixed): self.calls["read"] += 1; return "loaded"
-        def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+        def start(say, slots=1): self.calls["start"] += 1
+        def warm(messages, fixed, slot=0): self.calls["read"] += 1; return "loaded"
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             self.calls["ask"] += 1
             messages.append({"role": "user", "content": question})
             if self.calls["ask"] == 2:  # her first reply to you: the server is gone

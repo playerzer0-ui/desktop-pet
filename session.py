@@ -61,11 +61,16 @@ class Turn:
         return context_used(self.timings)
 
 class Session:
-    def __init__(self, character=DEFAULT, say=print):
-        """character = a Character, or the name of their folder in character/."""
+    def __init__(self, character=DEFAULT, say=print, slot=0, slots=1, company=(), greeting_note=None):
+        """character = a Character, or the name of their folder in character/.
+        slot = their own slot on the server, of `slots` (one per character on the desktop: see llm.py).
+        company = the names of anyone else on the desktop with them today (desktop/scene.py).
+        greeting_note = something for their greeting to bring up (a stage direction's text), like why their
+        friend isn't here today (friends.plan)."""
         self.character = character if isinstance(character, Character) else Character(character)
-        self.say = say
-        start_server(say)
+        self.say, self.slot, self.slots, self.company = say, slot, slots, list(company)
+        self.greeting_note = greeting_note
+        start_server(say, slots)
         self.save = trust.start(self.character.save_path, self.character.gates)  # counts today as a day logged
         self.save["mood"] = "neutral"  # every sitting starts calm: yesterday's mood never holds back today's events
         write_save(self.save)
@@ -78,7 +83,7 @@ class Session:
             self.messages.append(remembered)
         self.keep = len(self.messages)  # never forgotten during the sitting; the chat starts after these
         t0 = time.time()
-        self.prompt_was = warm_up(self.messages, self.fixed)  # "read" (slow, first time since persona/lore changed) or "loaded"
+        self.prompt_was = warm_up(self.messages, self.fixed, self.slot)  # "read" (slow, first time since persona/lore changed) or "loaded"
         self.warm_up_seconds = time.time() - t0
         self.idle = Idle(self.character)
         self.quests = Quests(self.character)
@@ -92,11 +97,13 @@ class Session:
             f"trust {self.save['trust']} (stage {trust.stage(self.save)}, {self.save['points']} points) · "
             f"mood {self.mood} · {len(self.memories)} memories", fresh=True)
 
-    def open(self, on_text=None):
+    def open(self, heard=None, on_text=None):
+        """Her greeting. heard = (name, words): someone else on the desktop just greeted the user (desktop/scene.py),
+        so hers can answer it, like Vesper after Pip introduces her."""
         begins = self.story.begin_text(self.save, greeting=True)  # a story step that's due today begins here
         major = None if begins else self.major.due(self.save)  # trust is held back: she brings it up in her greeting
         self._raising = bool(begins or major)
-        extra = " ".join(filter(None, [self._first_visit(), self._news(), major, begins])) or None
+        extra = " ".join(filter(None, [self._first_visit(), self._with_company(heard), self.greeting_note, self._news(), major, begins])) or None
         return self._turn(self.idle.opening(extra), "opening", on_text)
 
     def goodbye(self):
@@ -165,10 +172,10 @@ class Session:
         """End of the sitting. Returns the diary notes she wrote about you (may be empty). Takes a few seconds."""
         self._count_stay()
         try:
-            notes = memory.write_diary(self.save, self.messages, self.keep, self.character)
+            notes = memory.write_diary(self.save, self.messages, self.keep, self.character, self.slot)
         except llm.ServerGone:
             self.reconnect(reread=False)  # the diary is its own short prompt: no need to read hers back in
-            notes = memory.write_diary(self.save, self.messages, self.keep, self.character)
+            notes = memory.write_diary(self.save, self.messages, self.keep, self.character, self.slot)
         if notes:
             write_save(self.save)
         self.log(f"sitting closed · trust {self.save['trust']} ({self.save['points']} points) · "
@@ -282,7 +289,8 @@ class Session:
         return turn
 
     def _ask(self, text, on_text, note=None):
-        return ask(self.messages, text, on_text=on_text, keep=self.keep, moods=self.character.moods, note=note)
+        return ask(self.messages, text, on_text=on_text, keep=self.keep, moods=self.character.moods, note=note,
+                   slot=self.slot)
 
     def _log_turn(self, t, text, tagged):
         """One reply in her log. tagged = she wrote a [mood: ...] tag (else her last mood was kept)."""
@@ -313,6 +321,23 @@ class Session:
         self.log(" · ".join(stats) + f"\n    {'you' if t.kind == 'user' else 'cue'}: {text}"
                  f"\n    {self.character.folder}: {t.reply}")
 
+    def _with_company(self, heard=None):
+        """For her greeting: who else is on the desktop with her today (desktop/scene.py), or None.
+        heard = (name, words) if one of them has just greeted the user: she greets the user after them.
+        The first day she brings her friend along (friends.introduce), her greeting introduces her friend."""
+        if not self.company:
+            return None
+        if heard:
+            name, words = heard
+            return self.character.fill(f"{{Their}} friend {name} is on the desktop with {{them}} today, and just "
+                f'greeted the user, saying: "{words}" {{They}} greets the user too, after {name}, and can react to '
+                f"what {name} said.")
+        introduce = friends.introduce(self.save, self.character)
+        if introduce:
+            return introduce + "."
+        return self.character.fill("{Their} friend ") + " and ".join(self.company) + self.character.fill(
+            " is on the desktop with {them} today too, but this greeting is {their} own, to the user.")
+
     def _first_visit(self):
         """What her very first greeting is about (first_visit in character.toml, like Vesper being sent by Pip),
         the first time she's ever opened, else None. Marked in her save, so it's only once."""
@@ -336,9 +361,9 @@ class Session:
         """Start llama-server again if it's gone (llm.ServerGone), and (reread) get her prompt and this sitting's
         chat back into it. The caller then retries once."""
         self.log("lost llama-server: restarting it and retrying")
-        start_server(self.say)
+        start_server(self.say, self.slots)
         if reread:
-            warm_up(self.messages, self.fixed)
+            warm_up(self.messages, self.fixed, self.slot)
 
     def _count_stay(self):
         trust.stayed(self.save, (time.time() - self.opened) / 60)

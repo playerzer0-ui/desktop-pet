@@ -207,8 +207,17 @@ needs_nice = true
 #   at_trust  the trust (1-10) she invites at
 #   invite    what she says on her way out (a stage direction, so written about her)
 #   memory    what she remembers afterwards
+#   introduce how she opens the first day they come together (desktop/scene.py): she introduces her friend
+# After that, who comes is picked once a day (friends.plan), by these chances (any whole numbers: they're weights):
+#   chances      together = both, only_her = just her, only_friend = just her friend
+#   only_her     in her greeting when it's just her: why her friend isn't here (about her, a stage direction)
+#   only_friend  in her friend's greeting when it's just the friend: why she isn't here (about the friend)
 [friend]
 folder = "mira"
 at_trust = 10
 invite = "before she goes, she shyly tells the user her plan: her best friend Vesper, a baker who works far too hard, needs a place to rest too, and Pip has been teaching her to dreamwalk. So tomorrow Vesper will come instead of her, and Pip asks the user to be kind to her. Then she says goodbye warmly"
 memory = "Pip told the user she would send her best friend Vesper, a baker, to rest on the desktop."
+introduce = "today she has brought her best friend Vesper along, who is standing right beside her on the desktop. She greets the user, reminds them she promised to bring her friend, and introduces Vesper properly: a loud, cheerful baker from a few doors down the street, who works far too hard and deserves some rest. She asks the user to be nice to her"
+chances = { together = 60, only_her = 20, only_friend = 20 }
+only_her = "her best friend Vesper couldn't come today, as she's busy at her bakery, so it's just Pip today"
+only_friend = "her best friend Pip couldn't come today, as she's busy looking after the chapel, so {they} came on {their} own"

@@ -16,9 +16,12 @@ class Brain(QObject):
                                  # screen to show, so the UI never reads the save while this thread writes it
     failed = Signal(str)
 
-    def __init__(self, character):
+    def __init__(self, character, slot=0, slots=1, company=(), greeting_note=None):
+        """slot, slots, company, greeting_note: see Session (her server slot, how many there are, who else is on
+        the desktop, something for her greeting to bring up)."""
         super().__init__()
         self.character = character  # who this mind is (character.py)
+        self.slot, self.slots, self.company, self.greeting_note = slot, slots, list(company), greeting_note
         self.session = None
         self.jobs = queue.Queue()
         self.busy = False
@@ -27,8 +30,9 @@ class Brain(QObject):
     def start(self):
         self.jobs.put(("start",))
 
-    def open(self):
-        self.jobs.put(("open",))
+    def open(self, heard=None):
+        """Her greeting. heard = (name, words) someone else on the desktop greeted the user with just before her."""
+        self.jobs.put(("open", heard))
 
     def say(self, text):
         self.jobs.put(("say", text))
@@ -70,14 +74,15 @@ class Brain(QObject):
     def _do(self, what, *args):
         if what == "start":
             from session import Session  # imported here: it starts nothing until asked
-            self.session = Session(self.character, say=lambda *_: None)
+            self.session = Session(self.character, say=lambda *_: None, slot=self.slot, slots=self.slots,
+                                   company=self.company, greeting_note=self.greeting_note)
             self.ready.emit(self.session.prompt_was)
         elif what == "close":
             self.closed.emit(self.session.close() if self.session else [])
         elif self.session is None:
             return
         elif what == "open":
-            self._speak("opening", self.session.open)
+            self._speak("opening", self.session.open, args[0] if args else None)
         elif what == "say":
             self._speak("user", self.session.user_says, args[0])
         elif what == "settle":

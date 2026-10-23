@@ -173,13 +173,20 @@ def _friend(table):
     what they say about it on their way out, and what they remember afterwards."""
     if table is None:
         return None
-    missing = [key for key in ("folder", "at_trust", "invite", "memory") if key not in table]
+    missing = [key for key in ("folder", "at_trust", "invite", "memory") if key not in table]  # (introduce: optional)
     if missing:
         raise ValueError(f"[friend] is missing: {', '.join(missing)}")
     if not isinstance(table["at_trust"], int) or not 1 <= table["at_trust"] <= 10:
         raise ValueError("[friend] at_trust must be a whole number from 1 to 10")
     if not os.path.isfile(os.path.join(HERE, "character", table["folder"], "character.toml")):
         raise ValueError(f"[friend] folder {table['folder']!r} isn't a character in character/")
+    chances = table.setdefault("chances", {"together": 1})  # (left out = always together)
+    if (set(chances) - {"together", "only_her", "only_friend"}
+            or any(not isinstance(n, int) or n < 0 for n in chances.values()) or not sum(chances.values())):
+        raise ValueError("[friend] chances: together, only_her and only_friend, whole numbers 0 or more (not all 0)")
+    for key in ("only_her", "only_friend"):
+        if chances.get(key) and key not in table:
+            raise ValueError(f"[friend] has a chance of {key}, so it needs an {key} line (why the other isn't here)")
     return table
 
 def _move_old_save(path):

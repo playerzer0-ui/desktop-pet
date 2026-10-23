@@ -34,30 +34,31 @@ def new_conversation(character=None, stage=None):
         messages += [{"role": "user", "content": user}, {"role": "assistant", "content": reply}]
     return messages
 
-def warm_up(messages, fixed):
+def warm_up(messages, fixed, slot=0):
     """Get the server to read the system prompt + examples (+ anything after them, like memories)
     before the first question. fixed = how many messages that fixed start is (len(new_conversation(...))).
     The system prompt + examples (the first `fixed` messages) are read once (~20 s on CPU) and saved to cache/.
     After that, they're just loaded from the file (~1 s). Editing persona or lore changes them,
     so they're read fresh once and saved under a new name. Anything after them (the character's memories,
     which change often) is read on top each time: only a few lines, so it's quick.
+    slot = the server slot this character uses (llm.py).
     Returns "loaded" or "read" (whether the cached part was loaded or had to be read)."""
     cached = prefix_of(messages[:fixed])  # the part that rarely changes
     everything = prefix_of(messages)
 
     name = hashlib.sha256(f"{os.path.basename(MODEL)} {N_CTX}\n{cached}".encode()).hexdigest()[:16] + ".bin"
     how = "read"
-    if os.path.exists(os.path.join(CACHE_DIR, name)) and llm.restore_slot(name):
+    if os.path.exists(os.path.join(CACHE_DIR, name)) and llm.restore_slot(name, slot):
         how = "loaded"
     else:  # (also when a llama-server update made an old cache file unreadable: then just read it again)
-        llm.read(cached)
-        llm.save_slot(name)
+        llm.read(cached, slot)
+        llm.save_slot(name, slot)
         # keep only the newest few files (one per trust stage is all that's ever useful)
         for old in sorted(glob.glob(os.path.join(CACHE_DIR, "*.bin")), key=os.path.getmtime)[:-5]:
             os.remove(old)
 
     if everything != cached:  # read the memories on top of the cached part
-        llm.read(everything)
+        llm.read(everything, slot)
     return how
 
 def prefix_of(messages):
@@ -73,7 +74,7 @@ ANSWER_TAG = re.compile(r"\s*\[(?:\w+:\s*)?(not[ _]answered|unanswered|answered|
     #  see quests.py; slips like [answered: not answered] too)
 YES_TAGS = {"answered", "done"}
 LEFTOVER_TAGS = re.compile(r"(\s*\[\w+(?::\s*[\w ]+)?\])+\s*$")  # any other tag-like slip at the very end, like [happy]
-def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
+def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
     """Send a question, return (reply, timings, feeling, mood, answered). Adds both to messages = memory.
     feeling = how the question felt to the character: "nice", "neutral" or "rude" (their hidden tag, see persona.md).
     mood = how they feel after replying (their second hidden tag): one of `moods` (Character.moods; any word if
@@ -83,11 +84,12 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None):
     answered = their judgment tag, [answered] / [not answered] (or [done] / [not yet] for a major quest):
     True, False, or None if they wrote neither.
     on_text(text) is called with each new piece of the reply as it streams in (without the tag).
-    keep = how many messages at the start are never forgotten (system prompt + examples, + memories if any)."""
+    keep = how many messages at the start are never forgotten (system prompt + examples, + memories if any).
+    slot = the server slot this character uses (llm.py)."""
     messages.append({"role": "user", "content": question})
     request = messages[:-1] + [{"role": "user", "content": f"{question}\n\n{note}"}] if note else messages
 
-    chunks = llm.chat_stream(request, max_tokens=200,
+    chunks = llm.chat_stream(request, slot=slot, max_tokens=200,
                              temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5)  # Qwen's recommended chat settings
 
     reply = ""

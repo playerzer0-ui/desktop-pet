@@ -36,13 +36,21 @@ def duration(minutes):
     return " ".join(parts)
 
 class App:
-    def __init__(self, character, resting=False, away=False):
+    def __init__(self, character, resting=False, away=False, scene=None, slot=0, greeting_note=None):
         """resting = she's used up today's time (visits.resting): only the portal shows, with a note, then it closes.
-        away = a story quest sent her home for a while (story.away): only the portal shows, no note, then it closes."""
+        away = a story quest sent her home for a while (story.away): only the portal shows, no note, then it closes.
+        scene = the Scene she shares the desktop with (desktop/scene.py), or None when she's on her own;
+        slot = her own slot on the model server (llm.py), one per character in the scene.
+        greeting_note = something for her greeting to bring up, like why her friend isn't here today."""
         self.character = character  # who's on the desktop (character.py)
+        self.scene = scene
+        company = [c.name for c in scene.characters if c is not character] if scene else []
         self.body, self.bubble = Body(character.sprites, character.portal), Bubble()
-        self.input, self.brain = InputBox(character.name), Brain(character)
+        self.input = InputBox(character.name)
+        self.brain = Brain(character, slot=slot, slots=len(scene.characters) if scene else 1, company=company,
+                           greeting_note=greeting_note)
         self.ready = False
+        self.wants_open = False  # her mind is ready and she'll greet you as soon as nobody else is talking
         self.snap = None    # the latest snapshot from the brain: {"summary": trust.summary(...), "memories": [...]}
         self.leaving = False
         self.last_squish = 0.0
@@ -55,7 +63,7 @@ class App:
         self.body.moved.connect(self.follow)
         self.body.clicked.connect(self.talk)
         self.body.menu_requested.connect(self.menu)
-        self.body.vanished.connect(QApplication.quit)
+        self.body.vanished.connect((lambda: scene.vanished(self)) if scene else QApplication.quit)
         self.input.submitted.connect(self.send)
         self.input.closed.connect(self.release)
         self.bubble.typed.connect(self.on_typed)
@@ -96,8 +104,12 @@ class App:
         (it would cut into her reply, an idle thought, or a quest question you'd then miss)."""
         return self.bubble.active or self.brain.working
 
+    def others_talking(self):
+        """Someone else in the scene is talking, or you're typing to them: she waits her turn."""
+        return bool(self.scene and self.scene.others_talking(self))
+
     def talk(self):
-        if self.leaving or self.saying_goodbye or self.talking or not self.body.here:
+        if self.leaving or self.saying_goodbye or self.talking or self.others_talking() or not self.body.here:
             return
         self.body.hold(True)
         self.input.open_at(self.body.head())
@@ -126,7 +138,8 @@ class App:
         menu = QMenu()
         talking = self.talking
         menu.addAction("Talk to her", self.talk).setEnabled(
-            self.body.here and not talking and not self.saying_goodbye and not self.leaving)
+            self.body.here and not talking and not self.others_talking() and not self.saying_goodbye
+            and not self.leaving)
         for label, action in (("Status", self.status), ("What she remembers", self.memories)):
             menu.addAction(label, action).setEnabled(not talking)
         menu.addSeparator()
@@ -152,20 +165,28 @@ class App:
         self.bubble.say(f"*smiles* I remember {len(entries)} things about you.", stay=12,
                         note=self._note(recent, GRAY))
 
-    def leave(self, going_home=False):
+    def leave(self, going_home=False, following=False):
         """Say goodbye: she writes in her diary, waves and fades away. going_home = her time today is up.
-        While her story wants goodbyes (story.py), she begs to stay instead, and only the last one sends her home."""
+        While her story wants goodbyes (story.py), she begs to stay instead, and only the last one sends her home.
+        In a scene everyone leaves together; following = she's leaving because someone else in it is."""
         if self.leaving:
             return
-        if not going_home and self.ready and self.snap and self.snap["summary"].get("talks_on_goodbye"):
+        if (not going_home and not following and self.ready and self.snap
+                and self.snap["summary"].get("talks_on_goodbye")):
             self.brain.goodbye()
             return
         self.leaving, self.going_home = True, going_home
         self.ticker.stop()
         self.input.hide()
         self.body.hold(True)
+        if self.scene and not following:
+            self.scene.leave_with(self, going_home)
         if not self.ready:
-            QApplication.quit()
+            if self.scene:  # (still in the portal: she just doesn't come out)
+                self.body.hide()
+                self.scene.vanished(self)
+            else:
+                QApplication.quit()
             return
         self.bubble.say("*writes in her little diary*", note=self._note("saying goodbye…", GRAY))
         self.brain.close()
@@ -180,8 +201,18 @@ class App:
     def on_ready(self, prompt_was):
         self.ready = True
         self.body.arrive()  # out of the portal (her opening line is "…" until it's written: she's out by then)
-        self.ticker.start(TICK_MS)
-        self.brain.open()
+        if not self.scene:  # (in a scene, the scene's ticker takes turns between everyone)
+            self.ticker.start(TICK_MS)
+        self.wants_open = True
+        self.try_open()
+
+    def try_open(self):
+        """Her greeting, once it's her turn (alone, that's right away). In a scene the first one greets first,
+        and the others wait until she's done, then hear what she said (Scene.heard_for)."""
+        if (self.wants_open and not self.leaving and not self.others_talking()
+                and (not self.scene or self.scene.may_greet(self))):
+            self.wants_open = False
+            self.brain.open(self.scene.heard_for(self) if self.scene else None)
 
     def on_speaking(self, kind):
         if kind == "time_up":  # her goodbye: no more talking from here on
@@ -231,6 +262,8 @@ class App:
 
     def on_spoke(self, turn):
         self.last_reply = turn.number
+        if turn.kind == "opening" and self.scene:
+            self.scene.greeted(self, turn.reply)
         self.time_up = turn.time_up or turn.leaving  # (either way she goes home once you've read this)
         self.story_leaving = self.story_leaving or turn.leaving
         if self.time_up:  # (also when her time ran out while answering you)
@@ -289,7 +322,11 @@ class App:
     # --- every few seconds, and whenever she moves ---
 
     def tick(self):
-        if self.ready and not self.leaving and not self.input.isVisible() and not self.bubble.active:
+        if self.wants_open:  # (in a scene: her greeting waited for someone else to finish)
+            self.try_open()
+            return
+        if (self.ready and not self.leaving and not self.input.isVisible() and not self.bubble.active
+                and not self.others_talking()):
             self.brain.tick()
 
     def follow(self):
@@ -305,20 +342,39 @@ class App:
         return f'<span style="color:{color}">{text}</span>' if text else ""
 
 def main(folder=DEFAULT):
-    """folder = which character to open (their folder in character/)."""
+    """folder = which character to open (their folder in character/). After she has brought her friend over
+    (friends.py), the friend comes with her: both on the desktop at once (desktop/scene.py)."""
     character = Character(folder)
-    friend = friends.visiting_today(load_save(character.save_path))
-    if friend:  # the day after she invited her friend (friends.py): the friend comes instead of her
+    save = load_save(character.save_path)
+    company = note = None
+    friend = friends.visiting_today(save)
+    if friend:  # the day after she invited her friend: the friend comes instead of her
         character = Character(friend)
-    problems = check.mood_problems(character)
-    if problems:
-        raise SystemExit(f"{character.name}'s mood lists don't match (see desktop/check.py):\n  - "
-                         + "\n  - ".join(problems))
+        save = load_save(character.save_path)
+    else:  # from the day after that, mostly together; now and then one of them is busy back home
+        who = friends.plan(save, character)
+        if who == "together":
+            company = Character(character.friend["folder"])
+        elif who == "only_her":
+            note = character.fill(character.friend["only_her"]) + "."
+        elif who == "only_friend":
+            lines, character = character.friend, Character(character.friend["folder"])
+            note = character.fill(lines["only_friend"]) + "."
+            save = load_save(character.save_path)
+    for c in filter(None, (character, company)):
+        problems = check.mood_problems(c)
+        if problems:
+            raise SystemExit(f"{c.name}'s mood lists don't match (see desktop/check.py):\n  - "
+                             + "\n  - ".join(problems))
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    save = load_save(character.save_path)
     # her story sent her home for now, or she invited her friend today: she doesn't come out (and no model is started)
     away = story.away(save) or friends.gone_today(save)
     resting = not away and visits.resting(character) and not story.ignores_time_limit(save, character)
-    pet = App(character, resting=resting, away=away)  # (kept in a variable so it isn't garbage-collected)
+    if company and not (away or resting):  # (she decides whether they come today: her friend comes with her)
+        from desktop.scene import Scene
+        company.daily_minutes = None  # (they leave together, when her time is up)
+        pet = Scene([character, company])
+    else:
+        pet = App(character, resting=resting, away=away, greeting_note=note)  # (kept so it isn't garbage-collected)
     sys.exit(app.exec())

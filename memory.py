@@ -97,9 +97,9 @@ def heard_it(note, heard):
     names = [w for w in re.findall(r"[A-Za-z][\w'-]*", note)[1:] if w[0].isupper() and w.lower() not in CALENDAR]
     return all(re.sub(r"'s$", "", n).lower() in heard.lower() for n in names)
 
-def write_diary(save, messages, start, character):
+def write_diary(save, messages, start, character, slot=0):
     """At the end of a sitting: the model writes notes about the user from messages[start:], as the character's
-    diary (character.py). Returns the new notes."""
+    diary (character.py), on their server slot (llm.py). Returns the new notes."""
     lines = []
     # only the user's own words, so the character's guesses and recollections can't turn into "facts".
     # A very short reply ("yes!", "his name is Leo") keeps the character's line before it, for context.
@@ -122,7 +122,7 @@ def write_diary(save, messages, start, character):
                      {"role": "user", "content": f"Today is {today}.\n\nAlready remembered:\n"
                                                  + ("\n".join("- " + k for k in known[-25:]) or "(nothing yet)")
                                                  + "\n\nWhat the user said this time:\n" + "\n".join(lines[-40:])}],
-                    max_tokens=250, temperature=0.3)
+                    slot=slot, max_tokens=250, temperature=0.3)
     notes = [re.sub(r"^-\s*", "", line).strip() for line in text.splitlines() if line.strip().startswith("-")]
     new = []
     for note in notes[:NOTES_PER_SITTING]:
