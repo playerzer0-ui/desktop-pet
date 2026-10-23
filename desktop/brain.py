@@ -55,6 +55,10 @@ class Brain(QObject):
         """You used Say goodbye while her story wants goodbyes: she begs to stay, or the last time goes home."""
         self.jobs.put(("goodbye",))
 
+    def duet(self, direction):
+        """One line of a chat with the other character on the desktop (duets.py)."""
+        self.jobs.put(("duet", direction))
+
     def close(self):
         self.jobs.put(("close",))
 
@@ -85,6 +89,8 @@ class Brain(QObject):
             self._speak("opening", self.session.open, args[0] if args else None)
         elif what == "say":
             self._speak("user", self.session.user_says, args[0])
+        elif what == "duet":
+            self._speak("duet", self.session.duet, args[0])
         elif what == "settle":
             self.session.settle_mood(args[0])
         elif what == "goodbye":

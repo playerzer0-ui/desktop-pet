@@ -28,8 +28,8 @@ from save import write_save
 @dataclass
 class Turn:
     reply: str
-    kind: str              # "opening", "user" (her answer to you), "idle" (spoke on her own), "quest" (asked one)
-                           # or "major" (brought up her major quest on her own)
+    kind: str              # "opening", "user" (her answer to you), "idle" (spoke on her own), "quest" (asked one),
+                           # "major" (brought up her major quest on her own) or "duet" (a line to her friend)
     feeling: str | None    # how your message felt to her: nice / neutral / rude (only for kind="user")
     mood: str              # how she feels now: one of her Character.moods (each has a sprite in her sprites/)
     seconds: float
@@ -167,6 +167,12 @@ class Session:
 
     def speak(self, direction, kind, on_text=None):
         return self._turn(direction, kind, on_text)
+
+    def duet(self, direction, on_text=None):
+        """One line of a chat with the other character on the desktop (duets.py: the direction carries what they
+        said). Counts as her speaking, so her own idle talk waits; earns nothing."""
+        self.idle.pip_spoke()
+        return self._turn(direction, "duet", on_text)
 
     def close(self):
         """End of the sitting. Returns the diary notes she wrote about you (may be empty). Takes a few seconds."""

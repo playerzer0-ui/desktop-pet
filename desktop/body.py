@@ -95,6 +95,7 @@ class Body(QWidget):
     menu_requested = Signal(QPoint)  # right click, at this screen position
     moved = Signal()                 # she moved (the bubble follows her)
     vanished = Signal()              # vanish() has finished: she's gone
+    met = Signal()                   # meet() has finished: she's at the spot, facing the way she was asked
 
     def __init__(self, sprites, portal=None):
         """sprites = the folder with the character's <mood>.png files (Character.sprites).
@@ -113,6 +114,9 @@ class Body(QWidget):
         self.vy = 0.0
         self.mode = "idle"           # idle, walk, drag or fall
         self.facing = 1              # 1 = walking right, -1 = left
+        self.face = None             # while standing: 1 = facing right, -1 = left (None = as her sprite is drawn)
+        self.staying = False         # meet(): she stays put (no wandering) until part()
+        self.meet_face = None        # meet(): the way she'll face once she's there (None = not on her way)
         self.target = self.foot_x
         self.phase = 0.0             # walk cycle: each whole number is one hop
         self.idle_until = time.time() + random.uniform(*IDLE_SECONDS)
@@ -197,8 +201,22 @@ class Body(QWidget):
 
     def hold(self, held):
         self.held = held
-        if held and self.mode == "walk":
-            self.target = self.foot_x  # finish this hop, then stand still
+        if held and self.mode == "walk" and self.meet_face is None:
+            self.target = self.foot_x  # finish this hop, then stand still (unless she's on her way to meet someone)
+
+    def meet(self, x, face):
+        """Walk to x and stand there facing `face` (1 = right, -1 = left), to chat with someone (desktop/scene.py).
+        She stays put until part(); `met` fires once she's there."""
+        left, right = self._screen().left() + SIZE / 2, self._screen().right() - SIZE / 2
+        self.target, self.meet_face, self.staying = max(left, min(right, x)), face, True
+        if self.mode in ("idle", "walk"):
+            self.facing = 1 if self.target >= self.foot_x else -1
+            self.mode, self.phase = "walk", 0.0  # (even if she's there already: one hop and she's met)
+
+    def part(self):
+        """The chat is over: she faces as usual again and wanders off when she likes."""
+        self.staying, self.meet_face, self.face = False, None, None
+        self.idle_until = time.time() + random.uniform(*IDLE_SECONDS)
 
     # --- movement ---
 
@@ -219,7 +237,10 @@ class Body(QWidget):
             self.vanished.emit()
         if self.state != "here":
             pass  # (no wandering until she's out of the portal, nor once she's leaving)
-        elif self.mode == "idle" and not self.held and now > self.idle_until:
+        elif self.mode == "idle" and self.meet_face is not None:  # on her way to meet someone (after a drag, too)
+            self.facing = 1 if self.target >= self.foot_x else -1
+            self.mode, self.phase = "walk", 0.0
+        elif self.mode == "idle" and not self.held and not self.staying and now > self.idle_until:
             left, right = self._screen().left() + SIZE / 2, self._screen().right() - SIZE / 2
             self.target = max(left, min(right, self.foot_x + random.choice([-1, 1]) * random.uniform(120, 420)))
             self.facing = 1 if self.target > self.foot_x else -1
@@ -233,6 +254,9 @@ class Body(QWidget):
                 self.mode, self.phase = "idle", 0.0
                 self.idle_until = now + random.uniform(*IDLE_SECONDS)
                 self.squish(0.6)
+                if self.meet_face is not None:  # she's where she was going to meet someone: face them
+                    self.face, self.meet_face = self.meet_face, None
+                    self.met.emit()
 
         elif self.mode == "fall":
             self.vy += GRAVITY * dt
@@ -305,7 +329,8 @@ class Body(QWidget):
         painter.save()
         painter.translate(W / 2 + dx, FEET + dy)                      # her feet are the anchor point
         painter.rotate(rot)
-        painter.scale(sx * (-1 if self.facing < 0 and self.mode == "walk" else 1), sy)
+        flip = self.facing < 0 if self.mode == "walk" else (self.face or 1) < 0  # (standing: as drawn, unless meeting)
+        painter.scale(sx * (-1 if flip else 1), sy)
         sprite = self.sprites.get(self.mood) or self.sprites["neutral"]
         painter.drawPixmap(QPointF(-SIZE / 2, -SIZE), sprite)
         painter.restore()

@@ -1475,7 +1475,7 @@ class SceneTest(unittest.TestCase):
             self.assertEqual(friends.plan(save, pip(), D(2026, 11, 3), pick), "together", "kept for the day")
             self.assertEqual(friends.plan(save, pip(), D(2026, 11, 4), pick), "only_friend", "a new day: picked")
             self.assertEqual(friends.plan(save, pip(), D(2026, 11, 4), pick), "only_friend", "opened again")
-        self.assertEqual(picks, [{"together": 70, "only_her": 15, "only_friend": 15}], "picked only once")
+        self.assertEqual(picks, [pip().friend["chances"]], "picked only once, by her chances")
 
     def test_chances_are_checked(self):
         import character as C
@@ -1505,6 +1505,158 @@ class SceneTest(unittest.TestCase):
         finally:
             session.start_server, session.warm_up, session.ask = real
         self.assertIn(note, s.messages[-2]["content"])
+
+    # --- duets: chatting with each other ---
+
+    def test_their_topics_load(self):
+        import duets
+        pair = duets.load(["pip", "mira"])
+        self.assertIsNotNone(pair)
+        self.assertEqual(duets.load(["mira", "pip"]).topics, pair.topics, "either order")
+        self.assertEqual({t["starts"] for t in pair.topics}, {"pip", "mira"})
+        self.assertEqual({t["stage"] for t in pair.topics}, {1, 2, 3, 4, 5})
+        self.assertIsNone(duets.load(["pip", "nobody"]))
+
+    def test_topics_follow_the_lower_stage_and_dont_repeat(self):
+        import duets, random as R
+        pair, rng = duets.load(["pip", "mira"]), R.Random(1)
+        stage1 = [t for t in pair.topics if t["stage"] == 1]
+        picked = [pair.pick(1, rng)["about"] for _ in range(len(stage1) // 2)]
+        self.assertEqual(len(set(picked)), len(picked), "a topic came up again too soon")
+        self.assertTrue(all(pair.pick(2, rng)["stage"] <= 2 for _ in range(30)))
+
+    def test_lines_are_stage_directions_with_the_other_ones_words(self):
+        import duets
+        from directions import is_direction
+        ves, topic = Character("mira"), {"about": "bread", "starts": "mira", "stage": 1}
+        first = duets.opener(ves, pip(), topic)
+        self.assertTrue(is_direction(first))
+        self.assertIn("Vesper turns to Pip and starts a little chat with her about bread", first)
+        answer = duets.reply(pip(), ves, "Your bread is flat!", last=True)
+        self.assertIn('Vesper says to Pip: "Your bread is flat!" Pip answers Vesper', answer)
+        self.assertIn("wraps the little chat up", answer)
+
+    def chatty_scene(self):
+        """A scene where both are here, greeted and quiet, with their duet calls recorded."""
+        scene, _ = self.scene()
+        for p in scene.pets:
+            p.ready, p.wants_open = True, False
+            p.snap = {"summary": {"stage": 1}, "memories": []}
+            p.lines = []
+            p.brain.duet = p.lines.append
+        scene.pair.lines = (3, 3)
+        scene.quiet_since -= scene.duet_gap + 1
+        return scene
+
+    def walk(self, body, seconds=30):
+        """Run a body's movement for up to `seconds` of its own time (in 50 ms steps), until it stops walking."""
+        for _ in range(int(seconds / 0.05)):
+            body.last -= 0.05
+            body._tick()
+            if body.mode != "walk":
+                return
+
+    def test_she_walks_over_faces_them_and_stays(self):
+        scene, _ = self.scene()
+        body = scene.pets[0].body
+        body.foot_x, body.mode = 900.0, "idle"
+        met = []
+        body.met.connect(lambda: met.append(True))
+        body.meet(700, 1)
+        self.walk(body)
+        self.assertAlmostEqual(body.foot_x, 700, delta=2)
+        self.assertEqual((met, body.face), ([True], 1), "she should be there, facing right")
+        body.hold(False)  # (released between lines: she still stays)
+        body.idle_until = 0
+        body._tick()
+        self.assertEqual(body.mode, "idle", "she wandered off mid-chat")
+        body.part()
+        self.assertIsNone(body.face)
+        body.idle_until = 0
+        body._tick()
+        self.assertEqual(body.mode, "walk", "after the chat she should wander again")
+
+    def test_they_meet_face_to_face_before_the_first_line(self):
+        scene = self.chatty_scene()
+        a, b = scene.pets
+        a.body.foot_x, b.body.foot_x = 1200.0, 500.0
+        scene.tick()
+        self.assertIsNotNone(scene.duet)
+        self.assertEqual(a.lines + b.lines, [], "they talked before meeting")
+        for p in scene.pets:
+            self.walk(p.body)
+        self.assertEqual((a.body.face, b.body.face), (-1, 1), "the one on the right faces left, and back")
+        gap = a.body.foot_x - b.body.foot_x
+        self.assertTrue(100 < gap < 200, f"they stand {gap:.0f}px apart")
+        self.assertEqual(len(a.lines + b.lines), 1, "once both are there, the first line")
+
+    def test_typing_while_they_walk_over_calls_it_off(self):
+        scene = self.chatty_scene()
+        scene.tick()
+        scene.pets[0].talk()
+        for p in scene.pets:
+            scene.arrived(p)
+        self.assertIsNone(scene.duet)
+        self.assertEqual(scene.pets[0].lines + scene.pets[1].lines, [])
+        self.assertFalse(any(p.body.staying for p in scene.pets), "they should be free to wander")
+        scene.pets[0].input.hide()
+
+    def test_a_whole_chat(self):
+        from session import Turn
+        from directions import is_direction
+        scene = self.chatty_scene()
+        scene.tick()
+        self.assertIsNotNone(scene.duet, "no chat after the quiet")
+        for p in scene.pets:
+            scene.arrived(p)  # (they've walked up to each other)
+        words = ["Your bread is flat, Pip!", "It rises in spirit!", "Fine, fine, you win."]
+        for i, said in enumerate(words):
+            speaker = scene.duet["speaker"]
+            listener = scene._partner(speaker)
+            self.assertEqual(len(speaker.lines), 1 + (i >= 2), f"line {i + 1}: wrong one asked to speak")
+            self.assertTrue(is_direction(speaker.lines[-1]))
+            if i:
+                self.assertIn(words[i - 1], speaker.lines[-1], "she didn't hear what the other one said")
+            speaker.on_speaking("duet")
+            listener.talk()
+            self.assertFalse(listener.input.isVisible(), "you opened a chat mid-duet")
+            speaker.on_spoke(Turn(said, "duet", None, "happy", 1.0, {}, 1, 1, 0, 0))
+            speaker.bubble.active = False
+            speaker.on_done()
+        self.assertIn("wraps the little chat up", scene.pets[0].lines[-1] + scene.pets[1].lines[-1])
+        self.assertIsNone(scene.duet, "the chat should be over after 3 lines")
+        self.assertFalse(any(p.body.staying for p in scene.pets), "they should wander off again")
+
+    def test_no_chat_while_you_type_or_too_soon(self):
+        scene = self.chatty_scene()
+        scene.pets[0].talk()
+        scene.tick()
+        self.assertIsNone(scene.duet, "they chatted while you were typing")
+        scene.pets[0].input.hide()
+        scene.activity()
+        scene.tick()
+        self.assertIsNone(scene.duet, "they chatted right after someone spoke")
+
+    def test_a_duet_line_earns_nothing_but_counts_as_speaking(self):
+        import session
+        real = session.start_server, session.warm_up, session.ask
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
+            return "ok", {}, "nice", "happy", None
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.ask = ask
+        try:
+            c = pip()
+            c.save_path = save_with_minutes(0, trust_level=10)
+            s = session.Session(c, say=lambda *_: None)
+            s.idle.last -= 600
+            turn = s.duet("(No message from the user. Vesper says to Pip: \"hi\" Pip answers Vesper.)")
+        finally:
+            session.start_server, session.warm_up, session.ask = real
+        self.assertEqual(turn.kind, "duet")
+        self.assertEqual(turn.points_after, turn.points_before)
+        self.assertLess(time.time() - s.idle.last, 5, "her own idle talk should wait after a duet line")
 
     def test_together_from_the_day_after_vespers_day(self):
         import friends

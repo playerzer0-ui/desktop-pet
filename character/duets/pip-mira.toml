@@ -1,0 +1,102 @@
+# Pip and Vesper chatting with each other on the desktop (duets.py, desktop/scene.py), on days they come together.
+# After a few quiet minutes one of them starts a little chat with the other, they take turns for a few lines,
+# and the last line wraps it up. Neither one earns trust from it, and the user can't talk to them until it's over.
+
+every = [4, 10]  # minutes of quiet (nobody talking, nobody typing) before they chat: random in this range
+lines = [3, 4]   # how many lines a chat has: random in this range
+
+# Topics, by the trust stage they open at: the LOWER of the two characters' stages, so Vesper's (Pip is at the
+# top by the time Vesper comes). Each one only leans on lore both of them have at that stage, and never on
+# Vesper's secrets: Pip doesn't know them (Vesper's persona tells her to keep them in front of Pip).
+#   starts   who starts the chat: "pip" or "mira" (folder names)
+#   about    what about (it finishes "starts a little chat with her about ...")
+
+[[topics]]  # stage 1: teasing, fussing, small things
+stage = 1
+starts = "mira"
+about = "teasing Pip that her bread never rises properly"
+
+[[topics]]
+stage = 1
+starts = "pip"
+about = "fussing that Vesper works far too hard and should sleep more"
+
+[[topics]]
+stage = 1
+starts = "mira"
+about = "a bet over which of them can make the user smile first"
+
+[[topics]]
+stage = 1
+starts = "pip"
+about = "the potted herb Pip forgot to water again, and what Vesper thinks of it"
+
+[[topics]]
+stage = 1
+starts = "mira"
+about = "how quiet and cozy the desktop is next to the bakery's hot ovens"
+
+[[topics]]
+stage = 1
+starts = "pip"
+about = "whether Vesper has been eating properly, and not just tasting her own dough"
+
+[[topics]]  # stage 2: their daily lives back home
+stage = 2
+starts = "mira"
+about = "the stuffy bank clerks who sneak into the bakery every morning, and whether they ever visit the chapel"
+
+[[topics]]
+stage = 2
+starts = "pip"
+about = "a story one of Pip's elderly Freeport visitors told her this week"
+
+[[topics]]
+stage = 2
+starts = "mira"
+about = "the price of flour jumping around again because nobody knows what Republicia will do"
+
+[[topics]]
+stage = 2
+starts = "pip"
+about = "a strange new coin that came through Pip's currency exchange"
+
+[[topics]]  # stage 3: dreamwalking and the chapel
+stage = 3
+starts = "pip"
+about = "Pip's dreamwalking lessons, and how quickly Vesper picked it up (Vesper laughs it off)"
+
+[[topics]]
+stage = 3
+starts = "mira"
+about = "Pip's old lamp that's always warm, and the way Pip looks at it"
+
+[[topics]]
+stage = 3
+starts = "pip"
+about = "whether the gods could still be listening, and Vesper teasing her gently about it"
+
+[[topics]]  # stage 4: the dangers around them
+stage = 4
+starts = "pip"
+about = "the noise from the Bloodcult's brawls carrying all the way to the Republic (Vesper changes the subject quickly)"
+
+[[topics]]
+stage = 4
+starts = "mira"
+about = "being careful while Heaven's officials walk around the district"
+
+[[topics]]  # stage 5: closeness
+stage = 5
+starts = "mira"
+about = "promising, half joking, to keep Pip safe no matter what"
+
+[[topics]]
+stage = 5
+starts = "pip"
+about = "a lamp Pip wants to light for Vesper's bakery"
+
+[[topics]]
+stage = 5
+starts = "mira"
+about = "building a little chapel and a little bakery side by side on the desktop someday"

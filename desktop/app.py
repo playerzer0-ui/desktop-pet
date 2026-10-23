@@ -123,6 +123,8 @@ class App:
             return
         if self.saying_goodbye or self.leaving:
             return  # (she's on her way home)
+        if self.scene:
+            self.scene.activity()
         self.brain.say(text)
 
     def release(self):
@@ -215,6 +217,8 @@ class App:
             self.brain.open(self.scene.heard_for(self) if self.scene else None)
 
     def on_speaking(self, kind):
+        if self.scene:
+            self.scene.activity()
         if kind == "time_up":  # her goodbye: no more talking from here on
             self.goodbye_started()
         self.body.hold(True)
@@ -248,6 +252,8 @@ class App:
     def on_done(self):
         """Her whole reply has been read: she can wander again, and her mood slowly settles back to neutral."""
         self.release()
+        if self.scene:  # (in a chat with her friend, it's the other one's turn now)
+            self.scene.line_done(self)
         if self.time_up:  # she's said goodbye (or answered you after her time ran out): home she goes
             self.leave(going_home=True)
             return
@@ -264,6 +270,8 @@ class App:
         self.last_reply = turn.number
         if turn.kind == "opening" and self.scene:
             self.scene.greeted(self, turn.reply)
+        if turn.kind == "duet" and self.scene:
+            self.scene.duet_said(self, turn.reply)
         self.time_up = turn.time_up or turn.leaving  # (either way she goes home once you've read this)
         self.story_leaving = self.story_leaving or turn.leaving
         if self.time_up:  # (also when her time ran out while answering you)
@@ -310,6 +318,8 @@ class App:
 
     def on_failed(self, error):
         print(error, file=sys.stderr)
+        if self.scene:
+            self.scene.end_duet()  # (a chat can't go on without her line)
         self.body.think(False)  # her reply isn't coming: no more "…"
         self.bubble.say("*looks confused* Something went wrong…", stay=8,
                         note=self._note(error.strip().splitlines()[-1], GRAY))
