@@ -1,3 +1,5 @@
 # Windows scripts keep Windows line endings on every machine, whatever git's line-ending setting is there
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+# Linux scripts keep Linux line endings (a Windows line ending breaks them: "bad interpreter")
+*.sh text eol=lf
