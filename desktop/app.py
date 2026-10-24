@@ -36,11 +36,12 @@ def duration(minutes):
     return " ".join(parts)
 
 def story_mood(character, lineup):
-    """The mood her story has her in today (story.mood_today), read from her save without changing it, or None."""
+    """The mood her story has her in today (story.mood_today), from her save, or None."""
     save = load_save(character.save_path)
     save.gates = character.gates
     for key, empty in (("points", 0), ("quests_done", [])):  # (a save that's never been opened has neither)
         save.setdefault(key, empty)
+    story.catch_up(save, character)  # (a story step that lasted all of an earlier day is over)
     return story.mood_today(save, character, lineup)
 
 class App:

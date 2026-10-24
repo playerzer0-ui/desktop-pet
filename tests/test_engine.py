@@ -1630,6 +1630,7 @@ class SceneTest(unittest.TestCase):
             p.brain.duet = p.lines.append
             p.snap = {"summary": {"stage": 3}, "memories": []}
         ves.snap["summary"]["story_duet"] = wanted
+        scene.pair.lines = (3, 3)  # (the test plays 3 lines: not a random 3 or 4)
         done = []
         ves.brain.story_duet_done = lambda: done.append(True)
         scene.tick()
@@ -1928,8 +1929,10 @@ class SummonsTest(unittest.TestCase):
         from desktop import check
         v = Character("mira")
         steps = v.major_quests[3]["steps"]
-        self.assertEqual([s.get("day") for s in steps], ["together", "away", "alone"])
-        self.assertEqual([s["ends"] for s in steps], ["duet", "after_it", "answer"])
+        self.assertEqual([s.get("day") for s in steps], ["together", "away", "alone", "together"])
+        self.assertEqual([s["ends"] for s in steps], ["duet", "after_it", "answer", "day"])
+        self.assertEqual([s["completes"] for s in steps], [False, False, True, False], "your answer opens stage 4")
+        self.assertEqual([s.get("mood") for s in steps], [None, None, "injured", None], "injured: day 3 only")
         self.assertEqual(steps[0]["duet"]["starts"], "pip")
         self.assertEqual((steps[2]["mood"], v.story_moods), ("injured", {"injured"}))
         self.assertNotIn("injured", v.moods, "the model would pick injured on its own")
@@ -1962,17 +1965,49 @@ class SummonsTest(unittest.TestCase):
         s = self.sitting()
         turn = s.open()
         self.assertEqual(turn.mood, "injured", "she should be hurt all day")
+        self.assertTrue(turn.major_raised, "day 3 is still the quest: its note should show")
         self.assertTrue(s.snapshot()["summary"]["mood_locked"])
         self.judged = True
         turn = s.user_says("idk")  # (a dodge never settles it, whatever she tagged)
         self.assertFalse(turn.story_done)
         self.assertIn("[done] only if the user tells her to protect Pip", self.notes[-1])
         turn = s.user_says("please protect Pip, don't tell them anything about her")
-        self.assertTrue(turn.story_done and turn.stage_up)
+        self.assertTrue(turn.story_done and turn.stage_up, "your answer completes it: the stage-up comes here")
         saved = self.saved()
         self.assertIn("major-the-summons", saved["quests_done"])
-        self.assertNotIn("story", saved)
         self.assertIn("came back hurt", saved["memories"][-1]["text"])
+        s.close()
+        self.assertEqual(story.mood_today(self.saved(), self.vesper(), "alone"), "injured", "back alone today: hurt")
+        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), "together"),
+                          "day 4 played the same day (a test): the injury showed")
+        # day 4, both again: her usual self (not injured), her back aching, which she blames on flour sacks
+        self.assertEqual(story.day_needed(self.saved(), self.vesper()), "together")
+        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), "together", tomorrow), "still injured")
+        s = self.sitting(company=["Pip"])
+        turn = s.open(("Pip", "Good morning!"))
+        self.assertIn("flour sacks", s.messages[-2]["content"])
+        self.assertFalse(turn.major_raised, "the quest is done: day 4 shouldn't show the quest note")
+        turn = s.user_says("how's your back?")
+        self.assertIn("flour sacks", self.notes[-1], "her note should last the whole visit")
+        self.assertFalse(s.snapshot()["summary"]["mood_locked"])
+        memories = len(self.saved()["memories"])
+        s.close()
+        # (opened again the same day: day 4 goes on, her back still aching)
+        self.assertIn("story", self.saved(), "day 4 ended when she left: a relaunch would skip it")
+        s = self.sitting(company=["Pip"])
+        s.open(("Pip", "Hello again!"))
+        s.user_says("so how was yesterday?")
+        self.assertIn("flour sacks", self.notes[-1])
+        self.assertIn("down with a fever", self.notes[-1])
+        s.close()
+        # the next day it's over, and the story with it
+        data = self.saved()
+        self.assertTrue(story.catch_up(data, self.vesper(), datetime.date.today() + datetime.timedelta(days=1)))
+        saved = self.saved()
+        self.assertNotIn("story", saved)
+        self.assertEqual(saved["quests_done"].count("major-the-summons"), 1)
+        self.assertEqual(len(saved["memories"]), memories, "the quest's memory was kept twice")
 
     def day3(self):
         """Her story at day 3 (only Vesper, hurt), not begun yet."""
@@ -2012,11 +2047,32 @@ class SummonsTest(unittest.TestCase):
         self.assertEqual(turn.mood, "injured", "she healed the moment the quest was done")
         self.assertIn("still sore", self.notes[-1])
         self.assertTrue(s.snapshot()["summary"]["mood_locked"])
-        D = datetime.date
-        tomorrow, after = D.today() + datetime.timedelta(days=1), D.today() + datetime.timedelta(days=2)
-        self.assertEqual(story.lingering(self.saved(), tomorrow)["mood"], "injured", "still hurt tomorrow")
-        self.assertIsNone(story.lingering(self.saved(), after), "healed the day after")
-        self.assertEqual(story.mood_today(self.saved(), self.vesper(), "together", tomorrow), "injured")
+        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        self.assertIsNone(story.lingering(self.saved(), tomorrow), "injured is for day 3 only")
+        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), "alone", tomorrow), "injured again, alone")
+
+    def test_with_pip_there_she_wears_her_mask(self):
+        """'so how was yesterday?' had Vesper tell the user, with Pip right there, that someone pays her to watch
+        Pip's chapel; told not to, she still let it slip. With Pip there, her secrets aren't in her prompt at all."""
+        from save import load_save, write_save
+        data = load_save(self.path)
+        data.update(trust=8, points=trust.TRUST_POINTS[8] - 1, quests_done=[
+            "major-keep-it-secret", "major-gift-for-pip", "major-the-summons"])  # (at gate 4: her real name)
+        data.pop("story", None)
+        data["memories"] = [{"when": "2026-10-23 16:47", "kind": "milestone",
+                             "text": self.vesper().fill(self.vesper().major_quests[3]["memory"])}]
+        write_save(data)
+        with_pip, alone = self.sitting(company=["Pip"]), self.sitting()
+        prompt = lambda s: " ".join(m["content"] for m in s.messages)
+        self.assertEqual((with_pip.shown_stage, alone.shown_stage), (2, 4))
+        secrets = ("She is Bloodcult", "Lind sent her", "pays her to keep an eye on Everlily Chapel",
+                   "long before Pip's lessons", "Pip nearly found out")  # (not the world's lore: everyone knows that)
+        for secret in secrets:
+            self.assertNotIn(secret, prompt(with_pip), "Pip's there: it could slip out")
+        self.assertIn("She is Bloodcult", prompt(alone), "alone with you she's all of herself")
+        self.assertIn("Pip nearly found out", prompt(alone))
+        self.assertIsNone(with_pip._major_due(), "she'd tell you her real name in front of Pip")
+        self.assertIn("real name", alone._major_due() or "")
 
     def test_the_lineup_follows_her_story(self):
         import friends
@@ -2031,6 +2087,8 @@ class SummonsTest(unittest.TestCase):
         self.assertEqual(need(data), "only_her", "day 2: only Pip comes")
         data["story"]["step"] = 2
         self.assertEqual(need(data), "only_friend", "day 3: only Vesper comes")
+        data["story"]["step"] = 3
+        self.assertEqual(need(data), "together", "day 4: both")
 
     def test_bad_steps_are_caught(self):
         import character as C
@@ -2247,7 +2305,7 @@ class EarlyMoodTest(unittest.TestCase):
             s = session.Session(pip(), say=lambda *_: None)
             told = []
             s.user_says("hello there", on_mood=told.append)
-            s.story.mood = lambda save: "happy"  # (a story step that keeps her joyful)
+            s.story.mood = lambda save, lineup=None: "happy"  # (a story step that keeps her joyful)
             s.user_says("hello again", on_mood=told.append)
         finally:
             session.start_server, session.warm_up, session.ask = real

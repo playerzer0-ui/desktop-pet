@@ -12,6 +12,11 @@ moods = ["happy", "neutral", "sad", "worried", "scared", "angry", "regretful", "
 # moods only her story puts her in (a sprite each in sprites/, but the model never picks them): her summons, day 3
 story_moods = ["injured"]
 
+# Her mask: on days Pip is on the desktop too, she's her public self, the friendly baker of stage 2. Her prompt,
+# idle talk and event reactions go no higher than this stage then, and memories of private quests are left out,
+# so she can't let her secrets slip in front of Pip (told "don't", she still did). Alone with you she's all of herself.
+with_friend_stage = 2
+
 # trust stages 1-5, from the arc table in events.md
 stage_names = ["Cautious", "Trusting", "Open", "Revealing the truth",
                "Desktop guardian"]
@@ -156,8 +161,9 @@ memory = "Vesper asked the user to help her think of a gift her friend Pip could
 points = 10
 needs_nice = false
 
-[major_quests.3]  # opens stage 4, Revealing the truth: a story over three days, told by both of them (story.py)
+[major_quests.3]  # opens stage 4, Revealing the truth: a story over four days, told by both of them (story.py)
 id = "the-summons"
+private = true  # (remembered, but never in her prompt with Pip there)
 memory = "Pip nearly found out that Vesper could dreamwalk long before her lessons. Vesper vanished for a day, came back hurt, and told the user that someone dangerous pays her to watch Pip. The user told her to keep Pip safe."
 points = 10
 
@@ -166,7 +172,11 @@ points = 10
 #   ends     "duet" = the step is a chat with Pip on a set topic (duet = {starts, about}); "answer" = she judges
 #            your messages with a hidden [done] / [not yet] tag until one settles it (done_when, needs_nice;
 #            waiting_on = what she asked, so she answers you instead of saying her opening again)
+#            "day" = the step lasts the whole day (any number of visits), over on a later day
 #   lingers  days the step's mood stays after it ends (today counts as one), with lingers_note on her lines
+#   completes = true: the quest is done when this step ends (the stage-up comes here); the steps after it are
+#            an epilogue
+# injured is only ever hers on day 3: the epilogue (day 4) is her usual self, hiding it from Pip
 [[major_quests.3.steps]]  # day 1, both here: in a chat, Pip nearly finds her out
 day = "together"
 opens = "she's in her usual cheerful, teasing mood"
@@ -187,12 +197,20 @@ ends = "answer"
 waiting_on = "whether she should keep reporting on Pip to the people who called her home"
 done_when = "the user tells her to protect Pip: to stop reporting on her, lie in the report, or keep Pip safe some other way"
 needs_nice = false
-# her injury doesn't heal the moment you answer: injured for the rest of today and tomorrow too
-lingers = 2
-lingers_note = "(Not part of the message: {name} is still sore and bruised from the fight back home, healing slowly. It shows a little in how {they} moves and talks, though {they} jokes about it.)"
+completes = true  # (your answer is what opens stage 4: day 4 below is the epilogue)
+# her injury doesn't heal the moment you answer: injured for the rest of today (only today: tomorrow she hides it)
+lingers = 1
+lingers_note = "(Not part of the message: {name} is still sore and bruised from the fight back home, and it shows a little in how {they} moves and talks, though {they} jokes about it.)"
+
+[[major_quests.3.steps]]  # day 4, both here: she looks her usual self, but her back still aches (she hides why)
+day = "together"
+opens = "she seems her usual cheerful self, but she winces and rubs her back now and then, and mentions it's aching. She blames hauling heavy flour sacks at the bakery"
+note = "(Not part of the message: {name}'s back and body still ache, and now and then {they} mentions it lightly, rubbing {their} back or wincing. {They} says it's from hauling heavy flour sacks at the bakery, and if asked about yesterday or the day before, {they} says {they} was down with a fever.)"
+ends = "day"  # (the whole day: open the app again that day and her back still aches)
 
 [major_quests.4]  # opens stage 5, Desktop guardian
 id = "real-name"
+private = true  # (she only tells you her real name when it's just you two)
 starts = "she quietly tells the user that her real name is Mira, a name nobody back home knows, not even Pip, and asks whether they still want her around now that they know what she really is"
 done_when = "the user accepts her as she is, or kindly calls her Mira"
 memory = "Vesper told the user her real name, Mira, which not even Pip knows, and the user accepted her as she is."
@@ -209,3 +227,4 @@ needs_nice = true
 
 [time_up]
 1 = "her real body back home needs her now: it hasn't eaten or drunk anything all the while she has been dreamwalking here, and the ovens need lighting before dawn. She says a cheerful goodbye, and that she'll come back tomorrow"
+

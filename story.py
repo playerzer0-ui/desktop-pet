@@ -27,6 +27,9 @@ Vesper, hurt, and she confesses). Each step can say:
     ends = "duet"      the step is a chat with her friend on a set topic (duet = {starts, about}), and ends with it
     ends = "answer"    like a single-moment major quest: she judges your messages with a hidden [done] / [not yet]
                        tag (done_when, needs_nice) until one settles it; waiting_on = what she asked
+    ends = "day"       the step lasts the whole day it begins on, however many visits (its note on every line of
+                       hers), and is over on the first launch of a later day (catch_up)
+    completes = true   the quest is done when this step ends (the gate opens): the steps after it are an epilogue
 And any step with a mood can keep it after it ends: lingers = days (today counts as one), with lingers_note.
 """
 import datetime
@@ -66,20 +69,42 @@ def next_step(save, character, today=None):
         return None
     return _quest(character, progress["quest"])["steps"][progress["step"]]
 
-def lingering(save, today=None):
+def catch_up(save, character, today=None):
+    """At launch, before anything asks about her story: a step that lasted the whole of an earlier day
+    (ends = "day") is over now. True if one was."""
+    return bool(Story(character).day_over(save, today))
+
+def lingering(save, today=None, character=None):
     """A step's mood that stays after it ends (lingers = days, today counting as the first, with lingers_note),
-    like Vesper still sore the day after her summons: {mood, note, until}, or None once it has passed."""
+    like Vesper still hurt for the rest of the day after her confession: {mood, note, until}, or None once it has
+    passed. character = whose: its note is then read from her character.toml (so an older save, or one that was
+    edited, still gets it right), else from what the save kept."""
     left = save.get("lingering")
     today = (today or datetime.date.today()).isoformat()
-    return left if left and today <= left["until"] else None
+    if not left or today > left["until"]:
+        return None
+    step = _lingering_step(left, character) if character else None
+    return dict(left, note=step.get("lingers_note")) if step else left
+
+def _lingering_step(left, character):
+    """The step a lingering mood came from: by the quest and step the save kept, or (a save from before it kept
+    them) the step that lingers with that mood."""
+    for quest in character.major_quests.values():
+        for i, step in enumerate(quest.get("steps", [])):
+            if "quest" in left:
+                if (left["quest"], left.get("step")) == (quest["id"], i):
+                    return step
+            elif step.get("lingers") and step.get("mood") == left["mood"]:
+                return step
+    return None
 
 def mood_today(save, character, lineup=None, today=None):
     """The mood her story has her in when she arrives (so her portal shows it, not neutral first): the step she's
     in, or the one her greeting will begin (on a day with the right lineup), or a lingering one. Else None."""
     step = current_step(save, character) or next_step(save, character, today)
-    if step and step.get("mood") and step.get("day") in (None, lineup) and not away(save, today):
-        return step["mood"]
-    left = lingering(save, today)
+    if step and step.get("day") in (None, lineup) and not away(save, today):
+        return step.get("mood")  # (a step beginning today: its mood, or none, whatever the last one left behind)
+    left = lingering(save, today, character)
     return left["mood"] if left else None
 
 def day_needed(save, character, today=None):
@@ -95,6 +120,7 @@ def tell(save, character, teller, today=None):
         return None
     story = Story(character)
     story._progress(save)["begun"] = True
+    save.pop("lingering", None)  # (a new step: the last one's lingering mood is over)
     story._end(save, today)
     return teller.fill(step["opens"])
 
@@ -130,27 +156,44 @@ class Story:
         day = _quest(self.character, progress["quest"])["steps"][progress["step"]].get("day")
         if day and day != lineup:
             return None
-        progress.update(begun=True, back_on=None)
+        progress.update(begun=True, back_on=None, begun_on=today.isoformat())
+        save.pop("lingering", None)  # (a new step: the last one's lingering mood is over, even on the same day)
         write_save(save)
         self.opening_now = True
         return self.character.fill(_quest(self.character, progress["quest"])["steps"][progress["step"]]["opens"])
 
-    def note(self, save):
+    def note(self, save, lineup=None):
         """The step's hidden note for each of her replies while it lasts (pet.ask's note), or the note of a mood
-        lingering after one (like Vesper still sore after her summons), or None."""
+        lingering after one (like Vesper still hurt after her confession), or None. (lineup: not used yet.)"""
         step = current_step(save, self.character)
         if step and step.get("note"):
             return self.character.fill(step["note"])
-        left = lingering(save)
+        left = lingering(save, character=self.character)
         return self.character.fill(left["note"]) if left and left.get("note") else None
 
-    def mood(self, save):
-        """The mood she's stuck in while the step lasts, or while it lingers after (whatever her own tag says)."""
+    def mood(self, save, lineup=None):
+        """The mood she's stuck in while the step lasts, or while it lingers after (whatever her own tag says).
+        (lineup: not used yet.)"""
         step = current_step(save, self.character)
         if step and step.get("mood"):
             return step["mood"]
-        left = lingering(save)
+        left = lingering(save, character=self.character)
         return left["mood"] if left else None
+
+    def unfinished(self, save):
+        """True while her story's quest isn't done yet: its steps are the quest (the ✻ "something is on her mind"
+        note). False in its epilogue, the steps after one that completes it (like Vesper's day 4)."""
+        progress = save.get("story")
+        return bool(progress) and "major-" + progress["quest"] not in save.get("quests_done", [])
+
+    def day_over(self, save, today=None):
+        """A step that lasts the whole day (ends = "day") is over once a later day comes. Returns what _end does,
+        or None. (catch_up calls it at launch.)"""
+        step = current_step(save, self.character)
+        today = today or datetime.date.today()
+        if step and step["ends"] == "day" and save["story"].get("begun_on", today.isoformat()) < today.isoformat():
+            return self._end(save, today)
+        return None
 
     def begs_on_goodbye(self, save):
         """True if Say goodbye should go to goodbye() instead of sending her home (a step that ends with goodbyes)."""
@@ -231,14 +274,20 @@ class Story:
         step = quest["steps"][progress["step"]]
         if step.get("mood") and step.get("lingers"):  # (an injury doesn't heal the moment the step is over)
             last = today + datetime.timedelta(days=step["lingers"] - 1)
-            save["lingering"] = {"mood": step["mood"], "note": step.get("lingers_note"), "until": last.isoformat()}
-        if progress["step"] + 1 < len(quest["steps"]):
+            save["lingering"] = {"mood": step["mood"], "until": last.isoformat(),  # (its notes: from the step)
+                                 "quest": quest["id"], "step": progress["step"]}
+        last_step = progress["step"] + 1 >= len(quest["steps"])
+        completed = (last_step or step["completes"]) and "major-" + quest["id"] not in save.get("quests_done", [])
+        if completed:  # (the gate opens: trust can grow again; any steps after this one are its epilogue)
+            trust.quest_done(save, "major-" + quest["id"], quest["points"])
+            kept = memory.remember(save, "milestone", self.character.fill(quest["memory"]))
+            if quest["private"]:
+                kept["private"] = True  # (left out of her prompt when her friend is there: Session._public)
+        if not last_step:
             back = today + datetime.timedelta(days=step["away_days"] + 1) if step["away_days"] else None
             progress.update(step=progress["step"] + 1, begun=False, goodbyes=0, back_on=back and back.isoformat())
             write_save(save)
-            return "leave" if step["leaves"] else "next"
+            return "done" if completed else "leave" if step["leaves"] else "next"
         del save["story"]
-        trust.quest_done(save, "major-" + quest["id"], quest["points"])  # (the gate opens: trust can grow again)
-        memory.remember(save, "milestone", self.character.fill(quest["memory"]))
         write_save(save)
-        return "done"
+        return "done" if completed else "next"

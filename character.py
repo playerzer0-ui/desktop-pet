@@ -56,6 +56,11 @@ class Character:
         needed = self.daily_minutes is not None  # (what they say when it runs low / runs out, by trust stage)
         self.time_warning = _by_stage(c, "time_warning", needed)
         self.time_up = _by_stage(c, "time_up", needed)
+        # her public self, when her friend is on the desktop too: her prompt, idle talk and events go no higher than
+        # this stage then, and private memories are left out (Session.shown_stage), so her secrets can't slip out
+        self.with_friend_stage = c.get("with_friend_stage")
+        if self.with_friend_stage is not None and self.with_friend_stage not in (1, 2, 3, 4, 5):
+            raise ValueError("with_friend_stage must be a trust stage, 1-5 (or left out: no mask)")
         self.quests = [(quest_id, int(stage), about)
                        for stage, asks in c["quests"].items() for quest_id, about in asks.items()]
         self.major_quests = _major_quests(c.get("major_quests", {}), self.moods | self.story_moods)
@@ -155,6 +160,8 @@ def _major_quests(tables, moods):
             raise ValueError(f"{where} is missing: {', '.join(missing)}")
         if not isinstance(q.setdefault("needs_nice", True), bool):
             raise ValueError(f"{where} needs_nice must be true or false")
+        if not isinstance(q.setdefault("private", False), bool):
+            raise ValueError(f"{where} private must be true or false (only raised, and remembered, when it's just you)")
         for i, step in enumerate(q.get("steps", []), 1):
             _check_step(f"{where} step {i}", step, moods)
         if "steps" in q and not q["steps"]:
@@ -169,8 +176,10 @@ def _check_step(where, step, moods):
     step.setdefault("leaves", False)
     step.setdefault("away_days", 0)
     step.setdefault("no_time_limit", False)
-    if step.setdefault("ends", "after_it") not in ("after_it", "goodbyes", "duet", "answer"):
-        raise ValueError(f'{where}: ends must be "after_it", "goodbyes", "duet" or "answer"')
+    if step.setdefault("ends", "after_it") not in ("after_it", "goodbyes", "duet", "answer", "day"):
+        raise ValueError(f'{where}: ends must be "after_it", "goodbyes", "duet", "answer" or "day"')
+    if not isinstance(step.setdefault("completes", False), bool):
+        raise ValueError(f"{where}: completes must be true or false (the quest is done when this step ends)")
     if step.get("day", "together") not in ("together", "alone", "away"):
         raise ValueError(f'{where}: day must be "together", "alone" or "away"')
     if step.get("day") == "away" and step["ends"] != "after_it":

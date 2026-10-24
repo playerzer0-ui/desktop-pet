@@ -86,6 +86,8 @@ def _friends_save(character):
     data.gates = friend.gates
     for key, empty in (("points", 0), ("quests_done", [])):  # (a save that's never been opened has neither)
         data.setdefault(key, empty)
+    import story
+    story.catch_up(data, friend)  # (a story step that lasted all of an earlier day is over: before asking her story)
     return friend, data
 
 def stories_need(save, character):
