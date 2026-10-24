@@ -32,9 +32,9 @@ def mood_problems(character):
     lists = {
         folder + "persona.md": persona_moods(character.text("persona.md")),
         f"the '## Moods' line in {folder}events.md": events_moods(character.text("events.md")),
-        folder + "sprites/": {name[:-4] for name in os.listdir(character.sprites) if name.endswith(".png")},
-        "moves.MOOD_MOVES": set(moves.MOOD_MOVES),
     }
+    sprites = {name[:-4] for name in os.listdir(character.sprites) if name.endswith(".png")}
+    every = moods | character.story_moods  # (story_moods: a sprite and a move each, but not on the lists above)
     toml = folder + "character.toml"
     problems = []
     for where, found in lists.items():
@@ -45,6 +45,13 @@ def mood_problems(character):
             problems.append(f"{where} is missing: {', '.join(sorted(moods - found))}")
         if found - moods:
             problems.append(f"{where} has {', '.join(sorted(found - moods))}, which {toml} doesn't")
+    if every - sprites:
+        problems.append(f"{folder}sprites/ is missing: {', '.join(sorted(every - sprites))}")
+    if sprites - every:
+        problems.append(f"{folder}sprites/ has {', '.join(sorted(sprites - every))}, which {toml} doesn't "
+                        "(add it to moods, or to story_moods if only a story step uses it)")
+    if every - set(moves.MOOD_MOVES):  # (the moves are shared: a mood only another character has is fine)
+        problems.append(f"moves.MOOD_MOVES is missing: {', '.join(sorted(every - set(moves.MOOD_MOVES)))}")
     for e in character.events:
         for mood in sorted(e["not_ready_moods"] - moods):
             problems.append(f"event '{e['name']}' waits on mood '{mood}', which {toml} doesn't have")

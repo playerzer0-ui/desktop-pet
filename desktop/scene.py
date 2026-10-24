@@ -27,6 +27,7 @@ TICK_MS = 2000   # how often someone may speak up on her own (each tick gives on
 SPACING = SIZE * 1.4  # how far apart they come out of their portals
 CHAT_GAP = SIZE * 1.1  # how far apart they stand to chat (between their feet)
 MEET_SECONDS = 20      # if one hasn't reached the other by then (being dragged around...), they talk anyway
+STORY_QUIET = 45       # seconds of quiet before a chat one of their stories wants (story.py: a step ending in a duet)
 
 class Scene:
     def __init__(self, characters):
@@ -45,6 +46,7 @@ class Scene:
         self.duet = None     # while they chat: {"speaker": pet, "left": lines to go, "heard": the last line,
                              #                   "walking": pets still on their way, "opener": the first line's cue}
         self.quiet_since = time.time()  # the last time anyone spoke (or you sent something)
+        self.story_duets_had = set()    # story chats had this sitting (their topics), so none is had twice
         self.duet_gap = self.pair.gap() if self.pair else None
         self.turn = 0  # whose chance it is first on the next tick
         self.ticker = QTimer(timeout=self.tick)
@@ -73,6 +75,10 @@ class Scene:
         After a few quiet minutes, they may chat with each other instead."""
         if self.duet:
             return  # (their lines follow each other: line_done)
+        wanted = self.story_duet()
+        if wanted and self.free() and time.time() - self.quiet_since >= STORY_QUIET:
+            self.start_duet(topic=wanted[1], owner=wanted[0])
+            return
         if self.duet_due():
             self.start_duet()
             return
@@ -89,23 +95,36 @@ class Scene:
         """Someone spoke, or you sent something: the quiet starts over."""
         self.quiet_since = time.time()
 
-    def duet_due(self):
-        """Time for a chat: they have topics, both are here and greeted, nobody's talking or typing or leaving,
-        and it has been quiet long enough."""
-        return bool(self.pair and all(p.ready and p.body.here and not p.wants_open and not p.leaving
-                                      and not p.saying_goodbye and not p.talking and not p.input.isVisible()
-                                      for p in self.pets)
-                    and time.time() - self.quiet_since >= self.duet_gap)
+    def free(self):
+        """Both are here and have greeted you, and nobody's talking, typing or leaving."""
+        return all(p.ready and p.body.here and not p.wants_open and not p.leaving and not p.saying_goodbye
+                   and not p.talking and not p.input.isVisible() for p in self.pets)
 
-    def start_duet(self, rng=random):
-        stages = [p.snap["summary"]["stage"] for p in self.pets if p.snap]
-        topic = self.pair.pick(min(stages) if len(stages) == len(self.pets) else 1, rng)
+    def duet_due(self):
+        """Time for a chat: they have topics, they're free, and it has been quiet long enough."""
+        return bool(self.pair and self.free() and time.time() - self.quiet_since >= self.duet_gap)
+
+    def story_duet(self):
+        """(pet, {starts, about}) if one of them is in a story step that wants a chat with the other (her
+        snapshot's story_duet) that they haven't had yet this sitting, else None."""
+        for pet in self.pets:
+            wanted = pet.snap and pet.snap["summary"].get("story_duet")
+            if wanted and wanted["about"] not in self.story_duets_had:
+                return pet, wanted
+        return None
+
+    def start_duet(self, rng=random, topic=None, owner=None):
+        """They walk up to each other and chat. topic = a set one (a story's), else picked from their pair's file
+        for the lower of their trust stages. owner = whose story the chat is, told once it's over (story_duet_done)."""
+        if topic is None:
+            stages = [p.snap["summary"]["stage"] for p in self.pets if p.snap]
+            topic = self.pair.pick(min(stages) if len(stages) == len(self.pets) else 1, rng) if self.pair else None
         if not topic:
             return
         speaker = next(p for p in self.pets if p.character.folder == topic["starts"])
         opener = duets.opener(speaker.character, self._partner(speaker).character, topic)
-        self.duet = duet = {"speaker": speaker, "left": self.pair.length(rng), "heard": None,
-                            "walking": set(self.pets), "opener": opener}
+        self.duet = duet = {"speaker": speaker, "left": self.pair.length(rng) if self.pair else 3, "heard": None,
+                            "walking": set(self.pets), "opener": opener, "topic": topic, "owner": owner}
         left, right = sorted(self.pets, key=lambda p: p.body.foot_x)  # they meet halfway, face to face
         middle = (left.body.foot_x + right.body.foot_x) / 2
         screen = left.body._screen()
@@ -145,18 +164,23 @@ class Scene:
         self.duet["left"] -= 1
         stop = any(p.leaving or p.saying_goodbye or p.input.isVisible() for p in self.pets)
         if self.duet["left"] <= 0 or stop or not self.duet["heard"]:
-            self.end_duet()
+            self.end_duet(finished=self.duet["left"] <= 0 and bool(self.duet["heard"]))
             return
         listener = self._partner(pet)
         self.duet["speaker"], heard = listener, self.duet["heard"]
         self.duet["heard"] = None
         listener.brain.duet(duets.reply(listener.character, pet.character, heard, last=self.duet["left"] == 1))
 
-    def end_duet(self):
+    def end_duet(self, finished=False):
+        """The chat is over. finished = all its lines were said: a story's chat then moves her story on (cut
+        short, it's had again later)."""
         if self.duet:
-            self.duet = None
+            duet, self.duet = self.duet, None
+            if finished and duet["owner"]:
+                self.story_duets_had.add(duet["topic"]["about"])
+                duet["owner"].brain.story_duet_done()
             self.activity()
-            self.duet_gap = self.pair.gap()
+            self.duet_gap = self.pair.gap() if self.pair else None
             for pet in self.pets:
                 pet.body.part()
 

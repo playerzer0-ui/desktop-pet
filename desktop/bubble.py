@@ -52,9 +52,11 @@ def _so_far(text):
     """Streamed text as far as it can be shown yet: without an *action* that's still being written."""
     return text[:text.rindex("*")] if text.count("*") % 2 else text
 
-def cut_long(text):
+def cut_long(text, comma=True):
     """Split a too-long sentence so the readable part is at most PAGE_MAX letters: after a comma if there's
-    one far enough in, else at the last space that fits. Never cuts inside an *action*."""
+    one far enough in, else at the last space that fits. Never cuts inside an *action*.
+    comma=False: always at the last space that fits (the live page: its words are on screen already, and cutting
+    back to an earlier comma would take them away again)."""
     space = comma = None
     for gap in re.finditer(r"[,;]?\s", text):
         at = gap.start() + (1 if gap.group()[0] in ",;" else 0)
@@ -64,7 +66,7 @@ def cut_long(text):
         if readable(head) > PAGE_MAX:
             break
         space = at
-        if gap.group()[0] in ",;" and readable(head) > PAGE_MAX // 2:
+        if comma and gap.group()[0] in ",;" and readable(head) > PAGE_MAX // 2:
             comma = at
     at = comma or space
     return (text[:at].strip(), text[at:].lstrip()) if at else (text[:PAGE_MAX], text[PAGE_MAX:])
@@ -198,11 +200,16 @@ class Bubble(QWidget):
         if end and readable(self.incoming[:end]) <= PAGE_MAX + 20:
             text, rest = self.incoming[:end], self.incoming[end:]
         elif readable(self.incoming) > PAGE_MAX + 20 or (final and readable(self.incoming) > PAGE_MAX):
-            text, rest = cut_long(self.incoming)
+            text, rest = cut_long(self.incoming, comma=False)  # (where the words on screen already reach)
         elif final:
             text, rest = self.incoming, ""
         else:
-            text, rest = _so_far(self.incoming), None  # (None: the sentence isn't finished yet)
+            # (None: the sentence isn't finished yet.) Only whole words, and past PAGE_MAX only what a cut would
+            # keep, so nothing on screen is ever taken back (words used to flash up, then vanish to the next page)
+            text, rest = _so_far(self.incoming), None
+            text = text[:len(text) - len(re.search(r"\S*$", text).group())]
+            if readable(text) > PAGE_MAX:
+                text = cut_long(text, comma=False)[0]
         actions = re.findall(r"\*([^*]+)\*", text)
         for action in actions[self.live_acted:]:
             self.acted.emit(action.strip())

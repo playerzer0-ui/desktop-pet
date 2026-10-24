@@ -10,6 +10,7 @@ class Brain(QObject):
     ready = Signal(str)          # the session is up: "read" (first time since persona/lore changed) or "loaded"
     speaking = Signal(str)       # she started a reply of this kind: opening, user, idle or quest
     piece = Signal(str)          # the next bit of her reply, as it's written
+    mood = Signal(str)           # her mood for the reply she's starting (it comes before her words)
     spoke = Signal(object)       # her finished reply (a session.Turn)
     closed = Signal(list)        # the sitting is over: the diary notes she wrote
     snapshot = Signal(dict)      # after every job: a copy of trust/today/memories (session.snapshot()) for the
@@ -59,6 +60,10 @@ class Brain(QObject):
         """One line of a chat with the other character on the desktop (duets.py)."""
         self.jobs.put(("duet", direction))
 
+    def story_duet_done(self):
+        """The chat her story wanted with her friend is over (story.py): her story moves on."""
+        self.jobs.put(("story_duet_done",))
+
     def close(self):
         self.jobs.put(("close",))
 
@@ -91,6 +96,8 @@ class Brain(QObject):
             self._speak("user", self.session.user_says, args[0])
         elif what == "duet":
             self._speak("duet", self.session.duet, args[0])
+        elif what == "story_duet_done":
+            self.session.story_duet_done()
         elif what == "settle":
             self.session.settle_mood(args[0])
         elif what == "goodbye":
@@ -110,5 +117,5 @@ class Brain(QObject):
                 self.speaking.emit(kind)
             else:
                 self.piece.emit(piece)
-        turn = call(*args, on_text=on_text)
+        turn = call(*args, on_text=on_text, on_mood=self.mood.emit)
         self.spoke.emit(turn)

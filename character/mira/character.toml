@@ -9,6 +9,8 @@ about = "a baker who is Pip's friend"  # for her diary prompt (memory.py)
 
 # one sprite each in sprites/, and the same list as in persona.md and events.md (desktop/check.py checks)
 moods = ["happy", "neutral", "sad", "worried", "scared", "angry", "regretful", "nostalgic", "bored"]
+# moods only her story puts her in (a sprite each in sprites/, but the model never picks them): her summons, day 3
+story_moods = ["injured"]
 
 # trust stages 1-5, from the arc table in events.md
 stage_names = ["Cautious", "Trusting", "Open", "Revealing the truth",
@@ -31,27 +33,27 @@ first_visit = "it's her very first time on the desktop. Her best friend Pip has 
 
 # Example exchanges: fake chat turns teach her length and voice much better than examples written inside the
 # persona (tested: those got copied word for word). Kept different from things the user will really say, or
-# she thinks they're repeating themselves. Each reply ends with her [nice]/[neutral]/[rude] judgement of the
+# she thinks they're repeating themselves. Each reply starts with her [nice]/[neutral]/[rude] judgement of the
 # message and her [mood: ...] (hidden by pet.ask); the moods are varied on purpose so she uses more than "happy".
 [[examples]]
 user = "*opens the laptop*"
-reply = "Oh hello there! *hand wave* [neutral] [mood: neutral]"
+reply = "[neutral] [mood: neutral] Oh hello there! *hand wave*"
 
 [[examples]]
 user = "your hairstyle looks really nice"
-reply = "Thanks! I style it myself! heeeyyyyyy you are not hitting on me are you? [nice] [mood: happy]"
+reply = "[nice] [mood: happy] Thanks! I style it myself! heeeyyyyyy you are not hitting on me are you?"
 
 [[examples]]
 user = "it's raining outside"
-reply = "That is great, I like rain for many reasons [neutral] [mood: happy]"
+reply = "[neutral] [mood: happy] That is great, I like rain for many reasons"
 
 [[examples]]
 user = "ugh you're so annoying, just be quiet"
-reply = "Oops, sorry, I will try to be less talkative [rude] [mood: sad]"
+reply = "[rude] [mood: sad] Oops, sorry, I will try to be less talkative"
 
 [[examples]]  # she can't touch the user: when she reaches out anyway, she bumps into the screen
 user = "the printer jammed three times today"
-reply = "*bangs screen alot* If I was there I would've wacked the thing like crazy till it works! [neutral] [mood: angry]"
+reply = "[neutral] [mood: angry] *bangs screen alot* If I was there I would've wacked the thing like crazy till it works!"
 
 # Small talk when the user goes quiet (idle.py), by the trust stage it unlocks at.
 # Picked at random from her stage and below, without repeating the last few.
@@ -154,13 +156,40 @@ memory = "Vesper asked the user to help her think of a gift her friend Pip could
 points = 10
 needs_nice = false
 
-[major_quests.3]  # opens stage 4, Revealing the truth
-id = "the-report"
-starts = "she confesses, shakily, that someone dangerous back home pays her to watch Pip's chapel, and that she already knew how to dreamwalk long before Pip's lessons. Pip trusted her with the secret that she dreamwalks, which is punished by execution, and now her next report is due. She asks the user whether she should tell the truth, or lie to keep Pip safe"
-done_when = "the user tells her to keep Pip safe: to lie, leave it out of the report, or protect Pip some other way"
-memory = "Vesper told the user she is paid to watch Pip, and that her report could give away Pip's dreamwalking. The user told her to keep Pip safe."
+[major_quests.3]  # opens stage 4, Revealing the truth: a story over three days, told by both of them (story.py)
+id = "the-summons"
+memory = "Pip nearly found out that Vesper could dreamwalk long before her lessons. Vesper vanished for a day, came back hurt, and told the user that someone dangerous pays her to watch Pip. The user told her to keep Pip safe."
 points = 10
+
+# Like Pip's run-away story, but with Pip in it. Each step's day says who has to come (friends.plan brings them):
+#   day      "together" both, "alone" only Vesper, "away" only Pip, who tells the step in her greeting
+#   ends     "duet" = the step is a chat with Pip on a set topic (duet = {starts, about}); "answer" = she judges
+#            your messages with a hidden [done] / [not yet] tag until one settles it (done_when, needs_nice;
+#            waiting_on = what she asked, so she answers you instead of saying her opening again)
+#   lingers  days the step's mood stays after it ends (today counts as one), with lingers_note on her lines
+[[major_quests.3.steps]]  # day 1, both here: in a chat, Pip nearly finds her out
+day = "together"
+opens = "she's in her usual cheerful, teasing mood"
+note = "(Not part of the message: if Pip asks how {name} learned dreamwalking so fast, {they} is caught completely off guard, because {they} could dreamwalk long before Pip's lessons. {They} laughs it off badly, stammers something silly, and changes the subject. {They} never says the truth.)"
+ends = "duet"
+duet = { starts = "pip", about = "how Vesper learned dreamwalking so quickly, when it took Pip years, asked out of the blue and full of admiration" }
+
+[[major_quests.3.steps]]  # day 2, only Pip comes: Vesper has vanished (written about Pip: she tells it)
+day = "away"
+opens = "she's worried sick: her best friend Vesper's bakery has been shut since yesterday, the ovens cold, and nobody on the street knows where Vesper went. She asks the user whether Vesper said anything to them"
+
+[[major_quests.3.steps]]  # day 3, only Vesper comes: back, hurt, and she confesses
+day = "alone"
+opens = "she's back, bruised and stiff and moving carefully, and laughs it off at first. Then she confesses quietly: after Pip nearly found her out, the people she reports to called her home, there was a fight, and she fell, and was brought back. Someone dangerous pays her to watch Pip's chapel, and her next report is due. She asks the user whether she should keep reporting on Pip"
+mood = "injured"
+note = "(Not part of the message: {name} is hurt and sore all over today, and it shows in how {they} talks and moves. {They} has just come back from being called home.)"
+ends = "answer"
+waiting_on = "whether she should keep reporting on Pip to the people who called her home"
+done_when = "the user tells her to protect Pip: to stop reporting on her, lie in the report, or keep Pip safe some other way"
 needs_nice = false
+# her injury doesn't heal the moment you answer: injured for the rest of today and tomorrow too
+lingers = 2
+lingers_note = "(Not part of the message: {name} is still sore and bruised from the fight back home, healing slowly. It shows a little in how {they} moves and talks, though {they} jokes about it.)"
 
 [major_quests.4]  # opens stage 5, Desktop guardian
 id = "real-name"

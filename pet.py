@@ -74,7 +74,9 @@ ANSWER_TAG = re.compile(r"\s*\[(?:\w+:\s*)?(not[ _]answered|unanswered|answered|
     #  see quests.py; slips like [answered: not answered] too)
 YES_TAGS = {"answered", "done"}
 LEFTOVER_TAGS = re.compile(r"(\s*\[\w+(?::\s*[\w ]+)?\])+\s*$")  # any other tag-like slip at the very end, like [happy]
-def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
+# her tags at the very start of a reply ([nice] [mood: happy], see persona.md): one word, or "word: words"
+LEADING_TAGS = re.compile(r"^\s*(?:\[(?:\w+(?::\s*[\w ]+)?|not answered|not yet)\]\s*)*", re.I)
+def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, on_mood=None):
     """Send a question, return (reply, timings, feeling, mood, answered). Adds both to messages = memory.
     feeling = how the question felt to the character: "nice", "neutral" or "rude" (their hidden tag, see persona.md).
     mood = how they feel after replying (their second hidden tag): one of `moods` (Character.moods; any word if
@@ -83,7 +85,9 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0)
     quest note asking them to judge whether this answers their question (quests.answer_note).
     answered = their judgment tag, [answered] / [not answered] (or [done] / [not yet] for a major quest):
     True, False, or None if they wrote neither.
-    on_text(text) is called with each new piece of the reply as it streams in (without the tag).
+    on_text(text) is called with each new piece of the reply as it streams in (without the tags).
+    on_mood(mood) is called as soon as their mood tag has streamed in, before their words (it comes first: see
+    persona.md), so the screen can show it right away. Only a mood from `moods`.
     keep = how many messages at the start are never forgotten (system prompt + examples, + memories if any).
     slot = the server slot this character uses (llm.py)."""
     messages.append({"role": "user", "content": question})
@@ -93,7 +97,8 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0)
                              temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5)  # Qwen's recommended chat settings
 
     reply = ""
-    shown = 0  # how much of the reply on_text has been given
+    shown = 0  # how much of the reply (after her tags at the start) on_text has been given
+    mood_told = False
     timings = {}
     finish_reason = None
     for chunk in chunks:
@@ -104,7 +109,16 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0)
         text = chunk["choices"][0]["delta"].get("content") or ""
         if text:
             reply += text
-            visible = reply.split("[")[0]  # hold back anything from "[" on: it's probably the feeling tag
+            lead = LEADING_TAGS.match(reply).end()  # her tags so far at the start
+            if on_mood and not mood_told:
+                told = MOOD_TAG.search(reply[:lead])
+                if told and (moods is None or told.group(1).lower() in moods):
+                    mood_told = True
+                    on_mood(told.group(1).lower())
+            body = reply[lead:]
+            if body.startswith("[") and "]" not in body:
+                continue  # another tag still being written
+            visible = body.split("[")[0]  # hold back anything from "[" on: it's probably a tag at the end
             if on_text and len(visible) > shown:
                 on_text(visible[shown:])
                 shown = len(visible)
@@ -122,18 +136,30 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0)
     answer_tag = ANSWER_TAG.search(reply)
     answered = (answer_tag.group(1).lower() in YES_TAGS) if answer_tag else None
     reply = LEFTOVER_TAGS.sub("", MOOD_TAG.sub("", FEELING_TAG.sub("", ANSWER_TAG.sub("", reply)))).rstrip()
+    reply = LEADING_TAGS.sub("", reply)  # (any other tag-like slip at the very start)
     if on_text and len(reply) > shown:  # a "[" that wasn't a tag after all: show the rest now
         on_text(reply[shown:])
 
     # remember the model's own answer, tag included: seeing their own tags keeps them adding them
-    messages.append({"role": "assistant", "content": f"{reply} [{feeling}] [mood: {mood or 'neutral'}]"})
+    messages.append({"role": "assistant", "content": f"[{feeling}] [mood: {mood or 'neutral'}] {reply}"})
 
-    # forget the oldest chat lines when context gets too full (the first `keep` messages stay)
-    if context_used(timings) > N_CTX * 0.75 and len(messages) > keep + 2:
-        messages.pop(keep)  # oldest question
-        messages.pop(keep)  # and its answer
-
+    forget_oldest(messages, keep, context_used(timings))
     return reply.strip(), timings, feeling, mood, answered
+
+def forget_oldest(messages, keep, used, full=0.75, down_to=0.5):
+    """When the context is over `full` of N_CTX, forget the oldest chat lines (question + answer pairs, never the
+    first `keep` messages) in one go, until it's down to about `down_to`. One big cut instead of a pair every reply:
+    each cut makes the server re-read everything after `keep`, so after one slow reply the next many are fast again.
+    Token counts per message aren't known, so they're guessed from their share of the letters."""
+    if used <= N_CTX * full:
+        return 0
+    letters = [len(m["content"]) for m in messages]
+    target = sum(letters) * (N_CTX * down_to / used)  # letters that fit in `down_to` of the context
+    total, dropped = sum(letters), 0
+    while total > target and len(messages) > keep + 2:
+        total -= len(messages.pop(keep)["content"]) + len(messages.pop(keep)["content"])  # a question and its answer
+        dropped += 2
+    return dropped
 
 def context_used(timings):
     # how full the context is = cached tokens + newly read tokens + reply tokens

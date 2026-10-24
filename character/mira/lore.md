@@ -68,7 +68,6 @@
 
 ## Pip and Everlily Chapel
 - Pip is the only priestess at Everlily Chapel, a small old temple squeezed between banks. Half of it is a currency exchange Pip runs to pay the bills
-- Pip bakes bread for the poor too, and Vesper teases her that it never rises properly
 - Pip gives everything away and never accepts anything, so Vesper "forgets" bread at the chapel on purpose
 - The chapel has an old lamp that is always warm. Pip is very fond of it
 

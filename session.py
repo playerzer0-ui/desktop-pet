@@ -8,7 +8,8 @@ Who it is comes from their folder (character.py); the examples here say Pip and 
                                  # (or split it: what = s.wants_to_speak(), then s.speak(*what))
     notes = s.close()            # counts the last stretch of time, and Pip writes in her diary (see memory.py)
 
-Every call takes an optional on_text(piece) to stream her reply as it's written.
+Every call takes an optional on_text(piece) to stream her reply as it's written, and on_mood(mood), called with
+her mood as soon as it's known (it comes before her words: see pet.ask), so her face can change as she starts.
 
 For tuning, every reply is written to <character>.log, e.g. pip.log (started fresh each sitting, like server.log):
 what was said, how it felt to her, her mood, how long it took, how full the context is, and trust gained.
@@ -82,6 +83,7 @@ class Session:
         if remembered:
             self.messages.append(remembered)
         self.keep = len(self.messages)  # never forgotten during the sitting; the chat starts after these
+        self.transcript = []  # every line of this sitting's chat, for her diary (old lines leave self.messages)
         t0 = time.time()
         self.prompt_was = warm_up(self.messages, self.fixed, self.slot)  # "read" (slow, first time since persona/lore changed) or "loaded"
         self.warm_up_seconds = time.time() - t0
@@ -97,14 +99,14 @@ class Session:
             f"trust {self.save['trust']} (stage {trust.stage(self.save)}, {self.save['points']} points) · "
             f"mood {self.mood} · {len(self.memories)} memories", fresh=True)
 
-    def open(self, heard=None, on_text=None):
+    def open(self, heard=None, on_text=None, on_mood=None):
         """Her greeting. heard = (name, words): someone else on the desktop just greeted the user (desktop/scene.py),
         so hers can answer it, like Vesper after Pip introduces her."""
-        begins = self.story.begin_text(self.save, greeting=True)  # a story step that's due today begins here
+        begins = self.story.begin_text(self.save, greeting=True, lineup=self.lineup)  # a story step due today begins
         major = None if begins else self.major.due(self.save)  # trust is held back: she brings it up in her greeting
         self._raising = bool(begins or major)
         extra = " ".join(filter(None, [self._first_visit(), self._with_company(heard), self.greeting_note, self._news(), major, begins])) or None
-        return self._turn(self.idle.opening(extra), "opening", on_text)
+        return self._turn(self.idle.opening(extra), "opening", on_text, on_mood)
 
     def goodbye(self):
         """Say goodbye (the menu) while she has something to say about it (talks_on_goodbye in snapshot()):
@@ -121,13 +123,13 @@ class Session:
         self.idle.pip_spoke()
         return direction(self.character.fill("{name} says something on {their} own: ") + text + "."), "goodbye"
 
-    def user_says(self, text, on_text=None):
+    def user_says(self, text, on_text=None, on_mood=None):
         self.idle.user_spoke()
-        return self._turn(text, "user", on_text)
+        return self._turn(text, "user", on_text, on_mood)
 
-    def tick(self, on_text=None):
+    def tick(self, on_text=None, on_mood=None):
         what = self.wants_to_speak()
-        return self.speak(*what, on_text=on_text) if what else None
+        return self.speak(*what, on_text=on_text, on_mood=on_mood) if what else None
 
     def wants_to_speak(self):
         """(stage direction, kind) if she should speak up on her own now, else None. Quick, no model call.
@@ -148,7 +150,8 @@ class Session:
         if self.said_goodbye:
             return None  # (she's on her way home)
         if time.time() - self.idle.last >= QUIET_FIRST:  # her major quest comes first, after a quiet minute
-            major = self.story.begin_text(self.save, greeting=False) or self.major.due(self.save)
+            major = (self.story.begin_text(self.save, greeting=False, lineup=self.lineup)
+                     or self.major.due(self.save))
             if major:
                 self.idle.pip_spoke()
                 self._raising = True
@@ -165,28 +168,30 @@ class Session:
             return nudge, "idle"
         return direction(self.character.fill("{name} says something on {their} own. ") + news), "idle"
 
-    def speak(self, direction, kind, on_text=None):
-        return self._turn(direction, kind, on_text)
+    def speak(self, direction, kind, on_text=None, on_mood=None):
+        return self._turn(direction, kind, on_text, on_mood)
 
-    def duet(self, direction, on_text=None):
+    def duet(self, direction, on_text=None, on_mood=None):
         """One line of a chat with the other character on the desktop (duets.py: the direction carries what they
         said). Counts as her speaking, so her own idle talk waits; earns nothing."""
         self.idle.pip_spoke()
-        return self._turn(direction, "duet", on_text)
+        return self._turn(direction, "duet", on_text, on_mood)
 
     def close(self):
         """End of the sitting. Returns the diary notes she wrote about you (may be empty). Takes a few seconds."""
         self._count_stay()
         try:
-            notes = memory.write_diary(self.save, self.messages, self.keep, self.character, self.slot)
+            notes = memory.write_diary(self.save, self.transcript, 0, self.character, self.slot)
         except llm.ServerGone:
             self.reconnect(reread=False)  # the diary is its own short prompt: no need to read hers back in
-            notes = memory.write_diary(self.save, self.messages, self.keep, self.character, self.slot)
+            notes = memory.write_diary(self.save, self.transcript, 0, self.character, self.slot)
         if notes:
             write_save(self.save)
         self.log(f"sitting closed · trust {self.save['trust']} ({self.save['points']} points) · "
             f"{len(notes)} new diary notes" + "".join(f"\n    ✎ {n['text']}" for n in notes)
-            + f"\n  all {len(self.memories)} memories:" + "".join(f"\n    {m['when']} {m['kind']}: {m['text']}" for m in self.memories))
+            + f"\n  {len(self.memories)} memories, {len(memory.archive(self.save))} of them only recalled when mentioned;"
+            + " always in her prompt:" + "".join(f"\n    {m['when']} {m['kind']}{' (lasting)' if m.get('lasting') else ''}: "
+                                                 f"{m['text']}" for m in memory.in_prompt(self.save)))
         return notes
 
     def _time_cue(self, lines, left):
@@ -217,6 +222,7 @@ class Session:
         summary["talks_on_goodbye"] = (self.story.begs_on_goodbye(self.save)  # (Say goodbye: she begs to stay,
                                        or friends.invite_due(self.save, self.character))  # or invites her friend)
         summary["mood_locked"] = self.story.mood(self.save)  # (her mood doesn't settle back to neutral)
+        summary["story_duet"] = self.story.duet(self.save)  # (a chat with her friend her story wants: scene.py)
         return {"summary": summary, "memories": [dict(m) for m in self.memories]}
 
     @property
@@ -242,14 +248,17 @@ class Session:
         with open(self.character.log_path, "w" if fresh else "a", encoding="utf-8") as f:
             f.write(f"{datetime.datetime.now():%H:%M:%S}  {text}\n")
 
-    def _turn(self, text, kind, on_text):
+    def _turn(self, text, kind, on_text, on_mood=None):
         trust_before, points_before = self.save["trust"], self.save["points"]
         t0 = time.time()
         raising, self._raising = self._raising, False
         leaving, self._leaving_after = self._leaving_after, False
         note = judging = None  # she's waiting on a quest: she judges this message (her major quest first)
         stepping = self.story.note(self.save)  # (a story step's note on every line of hers while it lasts)
-        if stepping:
+        answering = self.story.answer_note(self.save) if kind == "user" else None  # (a step that ends on your answer)
+        if answering:
+            note, judging = "\n\n".join(filter(None, [stepping, answering])), "story"
+        elif stepping:
             note = stepping
         elif kind == "user":
             note = self.major.answer_note(self.save)
@@ -257,8 +266,14 @@ class Session:
             if not note:
                 note = self.quests.answer_note()
                 judging = "world quest" if note else None
+        recalled = memory.recall(self.save, text) if kind == "user" else []  # old memories this message mentions
+        if recalled:
+            self.log("brought back: " + " · ".join(m["text"] for m in recalled))
+            note = "\n\n".join(filter(None, [memory.recall_note(recalled, self.character), note]))  # (judging last)
+        if kind == "user" and self.company:  # (who's who, when her friend is on the desktop with her)
+            note = "\n\n".join(filter(None, [self._company_note(), note]))
         try:
-            reply, timings, feeling, mood, judged = self._ask(text, on_text, note)
+            reply, timings, feeling, mood, judged = self._ask(text, on_text, note, on_mood)
         except llm.ServerGone:
             # the server went away (e.g. another copy of the pet that owned it was closed): start it again and retry once
             if self.messages and self.messages[-1] == {"role": "user", "content": text}:
@@ -266,13 +281,14 @@ class Session:
             self.reconnect()
             if on_text:
                 on_text(None)  # tells the screen to start her reply over
-            reply, timings, feeling, mood, judged = self._ask(text, on_text, note)
+            reply, timings, feeling, mood, judged = self._ask(text, on_text, note, on_mood)
+        self.transcript += self.messages[-2:]  # (this question and her answer)
         mood = self.story.mood(self.save) or mood  # (a story step can keep her in one mood, whatever her tag says)
         self.save["mood"] = mood or self.mood  # (events.py checks it: some events wait for the right mood)
         done = major_done = None
         if kind == "user":  # her talking on her own earns nothing
             trust.talked(self.save, text, feeling)
-            if note:
+            if judging:
                 self.log(f"{judging} judged: " + {True: "yes", False: "no", None: "no tag (doesn't count)"}[judged])
             if judging == "major":
                 major_done = self.major.finished(self.save, text, feeling, judged)
@@ -284,6 +300,8 @@ class Session:
                 memory.remember_answer(self.save, self.quests.topic(done), text, self.character)
                 write_save(self.save)
         outcome = self.story.after_reply(self.save)  # (a step that ends right after its first line ends now)
+        if judging == "story":  # (or one that ends on your answer, if this was it)
+            outcome = self.story.answered(self.save, text, feeling, judged) or outcome
         leaving = leaving or outcome == "leave"
         self._count_stay()
         self.replies += 1
@@ -294,8 +312,11 @@ class Session:
         self._log_turn(turn, text, tagged=mood is not None)
         return turn
 
-    def _ask(self, text, on_text, note=None):
-        return ask(self.messages, text, on_text=on_text, keep=self.keep, moods=self.character.moods, note=note,
+    def _ask(self, text, on_text, note=None, on_mood=None):
+        early = {}
+        if on_mood:  # (a story step that keeps her in one mood wins over her tag, as in _turn)
+            early["on_mood"] = lambda mood: on_mood(self.story.mood(self.save) or mood)
+        return ask(self.messages, text, on_text=on_text, keep=self.keep, moods=self.character.moods, note=note, **early,
                    slot=self.slot)
 
     def _log_turn(self, t, text, tagged):
@@ -343,6 +364,29 @@ class Session:
             return introduce + "."
         return self.character.fill("{Their} friend ") + " and ".join(self.company) + self.character.fill(
             " is on the desktop with {them} today too, but this greeting is {their} own, to the user.")
+
+    @property
+    def lineup(self):
+        """Who's on the desktop, for her story's steps (story.py's day): "together" with her friend, or "alone"."""
+        return "together" if self.company else "alone"
+
+    def story_duet_done(self):
+        """The chat her story wanted with her friend has been had (desktop/scene.py): on to the next step."""
+        outcome = self.story.duet_done(self.save)
+        if outcome:
+            self.log(f"story duet done: {outcome}")
+        return outcome
+
+    def _company_note(self):
+        """On a day her friend is on the desktop with her (desktop/scene.py): a hidden note on each of your messages,
+        so she keeps straight who's who. Without it, "who bakes better?" made Vesper talk as if YOU were Pip."""
+        others = " and ".join(self.company)
+        return self.character.fill(
+            f"(Not part of the user's message: {others} is on the desktop beside {{name}} and can hear everything, "
+            f"but this message is from the user, the human who owns the desktop, and {{name}} answers the user. "
+            f'In {{their}} reply, "you" is the user. {others} is someone else: when the message is about {others}, '
+            f"{{they}} talks about {others} by name. {{They}} never mixes up what is {{their}} own, what is {others}'s "
+            f"and what is the user's.)")
 
     def _first_visit(self):
         """What her very first greeting is about (first_visit in character.toml, like Vesper being sent by Pip),

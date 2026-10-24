@@ -35,6 +35,14 @@ def duration(minutes):
         parts.append(f"{mins} minute{'s' if mins != 1 else ''}")
     return " ".join(parts)
 
+def story_mood(character, lineup):
+    """The mood her story has her in today (story.mood_today), read from her save without changing it, or None."""
+    save = load_save(character.save_path)
+    save.gates = character.gates
+    for key, empty in (("points", 0), ("quests_done", [])):  # (a save that's never been opened has neither)
+        save.setdefault(key, empty)
+    return story.mood_today(save, character, lineup)
+
 class App:
     def __init__(self, character, resting=False, away=False, scene=None, slot=0, greeting_note=None):
         """resting = she's used up today's time (visits.resting): only the portal shows, with a note, then it closes.
@@ -46,6 +54,9 @@ class App:
         self.scene = scene
         company = [c.name for c in scene.characters if c is not character] if scene else []
         self.body, self.bubble = Body(character.sprites, character.portal), Bubble()
+        mood = story_mood(character, "together" if scene else "alone")
+        if mood:  # (her story has her hurt today, say: it shows from the portal on, not only after she speaks)
+            self.body.set_mood(mood)
         self.input = InputBox(character.name)
         self.brain = Brain(character, slot=slot, slots=len(scene.characters) if scene else 1, company=company,
                            greeting_note=greeting_note)
@@ -72,6 +83,7 @@ class App:
         self.brain.ready.connect(self.on_ready)
         self.brain.speaking.connect(self.on_speaking)
         self.brain.piece.connect(self.on_piece)
+        self.brain.mood.connect(self.on_mood)
         self.brain.spoke.connect(self.on_spoke)
         self.brain.closed.connect(self.on_closed)
         self.brain.snapshot.connect(self.on_snapshot)
@@ -228,6 +240,10 @@ class App:
         self.bubble.start()
         self.follow()
 
+    def on_mood(self, mood):
+        """Her mood for the reply she's starting: her face changes now, as her first words appear."""
+        self.body.set_mood(mood)
+
     def on_piece(self, piece):
         self.bubble.add(piece)  # (queued: the bubble shows it a sentence at a time, at reading pace)
         self.follow()
@@ -351,6 +367,22 @@ class App:
     def _note(text, color):
         return f'<span style="color:{color}">{text}</span>' if text else ""
 
+def one_at_a_time(character):
+    """Only one copy of the pet at a time: two copies would each write their whole save, and one would wipe the
+    other's points and memories. Returns the held lock (saves/desktop.lock), or tells the user and exits.
+    The lock names this process, so a copy that crashed or was killed doesn't keep the next one out."""
+    import os
+    from PySide6.QtCore import QLockFile
+    from PySide6.QtWidgets import QMessageBox
+    folder = os.path.dirname(character.save_path)
+    os.makedirs(folder, exist_ok=True)
+    lock = QLockFile(os.path.join(folder, "desktop.lock"))
+    lock.setStaleLockTime(0)  # (never stale by age alone: only once the copy holding it has gone)
+    if not lock.tryLock(500):
+        QMessageBox.information(None, character.name, f"{character.name} is already on your desktop.")
+        raise SystemExit(0)
+    return lock
+
 def main(folder=DEFAULT):
     """folder = which character to open (their folder in character/). After she has brought her friend over
     (friends.py), the friend comes with her: both on the desktop at once (desktop/scene.py)."""
@@ -363,13 +395,14 @@ def main(folder=DEFAULT):
         save = load_save(character.save_path)
     else:  # from the day after that, mostly together; now and then one of them is busy back home
         who = friends.plan(save, character)
+        story_day = friends.by_story(save)  # (a story picked today's lineup: no "she's busy today" line)
         if who == "together":
             company = Character(character.friend["folder"])
-        elif who == "only_her":
-            note = character.fill(character.friend["only_her"]) + "."
+        elif who == "only_her":  # (on a story's day, her friend's story is what she brings up instead)
+            note = (friends.tell_for_friend(character) if story_day else None) or                    character.fill(character.friend["only_her"]) + "."
         elif who == "only_friend":
             lines, character = character.friend, Character(character.friend["folder"])
-            note = character.fill(lines["only_friend"]) + "."
+            note = None if story_day else character.fill(lines["only_friend"]) + "."
             save = load_save(character.save_path)
     for c in filter(None, (character, company)):
         problems = check.mood_problems(c)
@@ -378,6 +411,7 @@ def main(folder=DEFAULT):
                              + "\n  - ".join(problems))
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+    running = one_at_a_time(character)  # (kept until the app exits: that's what holds the lock)
     # her story sent her home for now, or she invited her friend today: she doesn't come out (and no model is started)
     away = story.away(save) or friends.gone_today(save)
     resting = not away and visits.resting(character) and not story.ignores_time_limit(save, character)

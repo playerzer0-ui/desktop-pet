@@ -53,20 +53,62 @@ def together(save, today=None):
     today = (today or datetime.date.today()).isoformat()
     return invited["folder"] if invited and invited["visit_day"] and today > invited["visit_day"] else None
 
-def plan(save, character, today=None, pick=random.choices):
+def plan(save, character, today=None, pick=random.choices, story_day=None):
     """Who comes today, once they can come together (together(save)): "together", "only_her" or "only_friend",
     picked by [friend] chances on the day's first launch and kept in her save, so opening the app again the same day
-    brings the same ones. The first day is always together: it's the day she introduces her friend.
-    None before then. pick = random.choices (the tests stand in for it)."""
+    brings the same ones. The first day is always together: it's the day she introduces her friend. After that, a
+    story step that needs a certain lineup (story.py's day) decides instead of the chances (by_story is then True).
+    None before then. pick = random.choices and story_day = stories_need (the tests stand in for them)."""
     if not together(save, today):
         return None
     invited, day = save["friend"], (today or datetime.date.today()).isoformat()
     if invited.get("today", {}).get("day") != day:
         chances = character.friend["chances"]
-        who = "together" if not invited.get("introduced") else pick(list(chances), weights=list(chances.values()))[0]
-        invited["today"] = {"day": day, "who": who}
+        needed = (story_day or stories_need)(save, character) if invited.get("introduced") else None
+        if not invited.get("introduced"):
+            who = "together"
+        else:
+            who = needed or pick(list(chances), weights=list(chances.values()))[0]
+        invited["today"] = {"day": day, "who": who, "story": bool(needed)}
         write_save(save)
     return invited["today"]["who"]
+
+def by_story(save):
+    """True if today's lineup (plan) was set by a story step, not by chance: no "she's busy today" line then."""
+    return bool(save.get("friend", {}).get("today", {}).get("story"))
+
+def _friends_save(character):
+    """Her friend (a Character) and the friend's save, ready for story.py (with the friend's gates)."""
+    from character import Character
+    from save import load_save
+    friend = Character(character.friend["folder"])
+    data = load_save(friend.save_path)
+    data.gates = friend.gates
+    for key, empty in (("points", 0), ("quests_done", [])):  # (a save that's never been opened has neither)
+        data.setdefault(key, empty)
+    return friend, data
+
+def stories_need(save, character):
+    """The lineup a story step of theirs needs today (story.day_needed), as plan's "together", "only_her" or
+    "only_friend", or None. Her friend's story is asked first."""
+    import story
+    from save import Save
+    friend, theirs = _friends_save(character)
+    mine = Save(getattr(save, "path", None), {"points": 0, "quests_done": [], **save})
+    mine.gates = character.gates
+    for data, c, alone, away in ((theirs, friend, "only_friend", "only_her"), (mine, character, "only_her", "only_friend")):
+        day = story.day_needed(data, c)
+        if day:
+            return {"together": "together", "alone": alone, "away": away}[day]
+    return None
+
+def tell_for_friend(character, today=None):
+    """On a day only she comes because of her friend's story (an "away" step: the friend is missing), what she
+    says about it in her greeting (a stage direction's text), and that step is over. Else None."""
+    import story
+    friend, theirs = _friends_save(character)
+    told = story.tell(theirs, friend, character, today)
+    return told + "." if told else None
 
 def introduce(save, character, today=None):
     """The first day they come together, her greeting introduces her friend ([friend] introduce): its text for a

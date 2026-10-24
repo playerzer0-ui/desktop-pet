@@ -22,6 +22,18 @@ from config import HERE
 DEFAULT = "pip"  # who main.py opens when no character is named
 PORTAL = os.path.join(HERE, "character", "portal.png")  # every character arrives through the same portal (for now)
 
+def cast():
+    """Every character's names: the name they go by and their folder (Vesper's is her real name, Mira).
+    Her diary never writes notes about any of them (memory.write_diary): the user is never one of them."""
+    names = set()
+    root = os.path.join(HERE, "character")
+    for folder in sorted(os.listdir(root)):
+        toml = os.path.join(root, folder, "character.toml")
+        if os.path.isfile(toml):
+            with open(toml, "rb") as f:
+                names |= {tomllib.load(f)["name"], folder.capitalize()}
+    return names
+
 class Character:
     def __init__(self, folder=DEFAULT):
         self.folder = folder
@@ -32,6 +44,8 @@ class Character:
         self.pronouns = dict(zip(("they", "them", "their"), c["pronouns"]))
         self.about = c["about"]
         self.moods = set(c["moods"])
+        self.story_moods = set(c.get("story_moods", []))  # moods only a story step puts her in (a sprite each, but
+                                                           # never on the list the model picks from), like injured
         self.stage_names = {i + 1: name for i, name in enumerate(c["stage_names"])}
         self.examples = [(e["user"], e["reply"]) for e in c["examples"]]
         self.idle_topics = [(int(stage), topic) for stage, topics in c["idle_topics"].items() for topic in topics]
@@ -44,7 +58,7 @@ class Character:
         self.time_up = _by_stage(c, "time_up", needed)
         self.quests = [(quest_id, int(stage), about)
                        for stage, asks in c["quests"].items() for quest_id, about in asks.items()]
-        self.major_quests = _major_quests(c.get("major_quests", {}), self.moods)
+        self.major_quests = _major_quests(c.get("major_quests", {}), self.moods | self.story_moods)
         # stage -> {id, starts, done_when, memory, points}, or a story over several days: {id, memory, points, steps}
         self.friend = _friend(c.get("friend"))  # the friend they invite to the desktop ([friend], friends.py), or None
         self.first_visit = c.get("first_visit")  # what their very first greeting is about (a stage direction), or None
@@ -155,8 +169,23 @@ def _check_step(where, step, moods):
     step.setdefault("leaves", False)
     step.setdefault("away_days", 0)
     step.setdefault("no_time_limit", False)
-    if step.setdefault("ends", "after_it") not in ("after_it", "goodbyes"):
-        raise ValueError(f'{where}: ends must be "after_it" or "goodbyes"')
+    if step.setdefault("ends", "after_it") not in ("after_it", "goodbyes", "duet", "answer"):
+        raise ValueError(f'{where}: ends must be "after_it", "goodbyes", "duet" or "answer"')
+    if step.get("day", "together") not in ("together", "alone", "away"):
+        raise ValueError(f'{where}: day must be "together", "alone" or "away"')
+    if step.get("day") == "away" and step["ends"] != "after_it":
+        raise ValueError(f'{where}: an "away" step is told by her friend in their greeting, so it ends "after_it"')
+    if step["ends"] == "duet" and not {"starts", "about"} <= set(step.get("duet", {})):
+        raise ValueError(f'{where} ends with a duet, so it needs: duet = {{ starts = "<folder>", about = "..." }}')
+    if step["ends"] == "duet" and step.get("day") != "together":
+        raise ValueError(f'{where} ends with a duet, so it needs day = "together"')
+    if step["ends"] == "answer" and "done_when" not in step:
+        raise ValueError(f"{where} ends with an answer, so it needs: done_when")
+    step.setdefault("needs_nice", False)
+    if not isinstance(step.setdefault("lingers", 0), int) or step["lingers"] < 0:
+        raise ValueError(f"{where}: lingers must be a whole number of days, 0 or more")
+    if step["lingers"] and "mood" not in step:
+        raise ValueError(f"{where}: lingers keeps the step's mood for days after it, so it needs a mood")
     if step["ends"] == "goodbyes":
         missing = [key for key in ("goodbyes", "begs", "leaves_line") if key not in step]
         if missing:
