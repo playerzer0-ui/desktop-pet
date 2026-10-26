@@ -162,6 +162,14 @@ def _major_quests(tables, moods):
             raise ValueError(f"{where} needs_nice must be true or false")
         if not isinstance(q.setdefault("private", False), bool):
             raise ValueError(f"{where} private must be true or false (only raised, and remembered, when it's just you)")
+        if not isinstance(q.setdefault("note", ""), str):
+            raise ValueError(f"{where} note must be text (a hidden note on each message she judges for it)")
+        if not isinstance(q.setdefault("answer_words", ""), str):
+            raise ValueError(f"{where} answer_words must be text (a pattern a real answer has to contain)")
+        try:
+            re.compile(q["answer_words"])
+        except re.error as e:
+            raise ValueError(f"{where} answer_words isn't a valid pattern: {e}")
         for i, step in enumerate(q.get("steps", []), 1):
             _check_step(f"{where} step {i}", step, moods)
         if "steps" in q and not q["steps"]:

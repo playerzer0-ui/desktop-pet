@@ -143,6 +143,9 @@ start-over = "whether people in the user's world can start their lives over some
 #   done_when  what counts as done: she judges it herself, with a hidden [done] / [not yet] tag
 #   memory     what she remembers afterwards (kept forever, like her answers to the world quests)
 #   points     trust points it gives (enough to step into the next stage)
+#   note       optional: a hidden note on each message she judges for it, for anything she must keep straight
+#   answer_words optional: a pattern a real answer has to contain (her [done] alone let "my cat knocked a cup
+#              over" through); written in ''' quotes, so backslashes and ' stay as they are
 #   needs_nice true = the reply must also feel nice to her (her [nice] tag), for quests about being kind to her.
 #              false for a plain favour or a promise, where "sure, I promise" is enough. (Left out = true.)
 [major_quests.1]  # opens stage 2, Trusting
@@ -152,6 +155,7 @@ done_when = "the user promises to keep her visits a secret"
 memory = "Vesper made the user promise to keep her visits here a secret, and they promised."
 points = 10
 needs_nice = false
+answer_words = '''\b(?:promise\w*|won'?t tell|will not tell|never tell|not tell|secret|swear|my lips|cross my heart|keep it)\b'''
 
 [major_quests.2]  # opens stage 3, Open
 id = "gift-for-pip"
@@ -160,6 +164,7 @@ done_when = "the user suggests a gift or an idea for Pip (anything, even a silly
 memory = "Vesper asked the user to help her think of a gift her friend Pip couldn't refuse."
 points = 10
 needs_nice = false
+answer_words = '''\b(?:gift|give|how about|what about|maybe|could|idea|try|why not|present)\b'''
 
 [major_quests.3]  # opens stage 4, Revealing the truth: a story over four days, told by both of them (story.py)
 id = "the-summons"
@@ -211,11 +216,14 @@ ends = "day"  # (the whole day: open the app again that day and her back still a
 [major_quests.4]  # opens stage 5, Desktop guardian
 id = "real-name"
 private = true  # (she only tells you her real name when it's just you two)
-starts = "she quietly tells the user that her real name is Mira, a name nobody back home knows, not even Pip, and asks whether they still want her around now that they know what she really is"
-done_when = "the user accepts her as she is, or kindly calls her Mira"
+starts = "she quietly tells the user that her own real name, the one she was born with, is Mira, a name nobody back home knows, not even Pip, and asks whether they still want her around now that they know what she really is"
+done_when = "the user accepts her as she is, or kindly calls Vesper by her own real name, Mira"
+# (on each message she judges for it: her stage 4 self only knows herself as Vesper, so "Mira" drifted onto the user)
+note = "(Not part of the message: Mira is {name}'s own real name, the one {they} was born with. The user is not Mira. When the user says Mira, they mean {name}, and {they} never calls the user Mira.)"
 memory = "Vesper told the user her real name, Mira, which not even Pip knows, and the user accepted her as she is."
 points = 10
 needs_nice = true
+answer_words = '''\b(?:accept\w*|still want|want you|of course|mira|friend|doesn'?t matter|don'?t care|stay|glad|no matter|love|care)\b'''
 
 # What she says when her daily time (daily_minutes, at the top) runs low and runs out, by the trust stage each line
 # starts at: the highest one at or below her stage is used (stage 1 is required). Written about her, as a stage

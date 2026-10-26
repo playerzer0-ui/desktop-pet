@@ -78,12 +78,8 @@ class Session:
         self.replies = 0           # replies so far this sitting (Turn.number)
         self.opened = time.time()  # for "duration of stay"
         # (with her friend there, she wears her mask: her prompt is her public self, see shown_stage and _public)
-        self.messages = new_conversation(self.character, stage=self.shown_stage)
-        self.fixed = len(self.messages)  # system prompt + examples: the part warm_up caches
-        remembered = memory.as_message(self._public(), self.character)  # her memories of you from earlier visits
-        if remembered:
-            self.messages.append(remembered)
-        self.keep = len(self.messages)  # never forgotten during the sitting; the chat starts after these
+        self.messages = []
+        self._build_prompt()
         self.transcript = []  # every line of this sitting's chat, for her diary (old lines leave self.messages)
         t0 = time.time()
         self.prompt_was = warm_up(self.messages, self.fixed, self.slot)  # "read" (slow, first time since persona/lore changed) or "loaded"
@@ -159,7 +155,8 @@ class Session:
                 self.idle.pip_spoke()
                 self._raising = not begins or self.story.unfinished(self.save)  # (an epilogue step isn't the quest)
                 return direction(self.character.fill("{name} says something on {their} own. ") + major), "major"
-        ask_about = None if self.major.active(self.save) else self.quests.due(self.save)  # (world quests wait)
+        # (world quests wait for a major one; with her friend there, only questions for the stage she shows)
+        ask_about = None if self.major.active(self.save) else self.quests.due(self._public())
         if ask_about:
             self.idle.pip_spoke()
             return ask_about, "quest"
@@ -252,6 +249,7 @@ class Session:
             f.write(f"{datetime.datetime.now():%H:%M:%S}  {text}\n")
 
     def _turn(self, text, kind, on_text, on_mood=None):
+        self.restage()  # (if a gate opened on her last reply and nobody has yet: see restage)
         trust_before, points_before = self.save["trust"], self.save["points"]
         t0 = time.time()
         raising, self._raising = self._raising, False
@@ -317,6 +315,42 @@ class Session:
                     self.minutes_left is not None and self.minutes_left <= 0, leaving, outcome == "done")
         self._log_turn(turn, text, tagged=mood is not None)
         return turn
+
+    def _build_prompt(self):
+        """Her prompt for the stage she shows now (persona, lore, examples, then her memories), with this sitting's
+        chat so far kept after it. self.fixed = the cached part (warm_up), self.keep = never forgotten."""
+        chat = self.messages[self.keep:] if self.messages else []
+        self.prompt_stage = self.shown_stage
+        self.messages = new_conversation(self.character, stage=self.prompt_stage)
+        self.fixed = len(self.messages)  # system prompt + examples: the part warm_up caches
+        remembered = memory.as_message(self._public(), self.character)  # her memories of you from earlier visits
+        if remembered:
+            self.messages.append(remembered)
+        self.keep = len(self.messages)  # never forgotten during the sitting; the chat starts after these
+        self.messages += chat
+
+    @property
+    def restage_due(self):
+        """True once a gate has opened this sitting (a major quest done): her prompt is still the old stage's."""
+        return self.shown_stage != self.prompt_stage
+
+    def restage(self):
+        """Right after a gate opens, she becomes her new stage's self for the rest of the sitting, not just from the
+        next launch: her prompt is rebuilt for it (with the memory she just made) and read, the chat kept.
+        (Vesper, just after telling you her real name: "I'll stick with Vesper for now", as her stage 4 prompt
+        didn't know it yet.) The first time for a stage, the read takes a while (~20-35 s on CPU); then it's cached.
+        Returns True if it was rebuilt. The desktop calls it while you read her reply (desktop/brain.py)."""
+        if not self.restage_due:
+            return False
+        was, t0 = self.prompt_stage, time.time()
+        self._build_prompt()
+        try:
+            how = warm_up(self.messages, self.fixed, self.slot)
+        except llm.ServerGone:
+            self.reconnect()  # (reads the new prompt back in)
+            how = "read"
+        self.log(f"stage {was} -> {self.prompt_stage}: her prompt is now her new stage's ({how} in {time.time() - t0:.1f}s)")
+        return True
 
     def _ask(self, text, on_text, note=None, on_mood=None):
         early = {}
@@ -417,8 +451,11 @@ class Session:
         if not self.masked:
             return self.save
         private = {self.character.fill(q["memory"]) for q in self.character.major_quests.values() if q["private"]}
+        # (and her answers to world questions from above the stage she shows: "...asked about whether anyone spies")
+        above = {self.character.fill(f"{{name}} asked about {about}.") for _, st, about in self.character.quests
+                 if st > self.shown_stage}
         memories = [m for m in self.save.get("memories", [])
-                    if not m.get("private") and not any(m["text"].startswith(p) for p in private)]
+                    if not m.get("private") and not any(m["text"].startswith(p) for p in private | above)]
         return dict(self.save, memories=memories, trust=min(self.save["trust"], self.shown_stage * 2))
 
     def _major_due(self):

@@ -67,6 +67,7 @@ class App:
         self.leaving = False
         self.last_squish = 0.0
         self.acted = False  # an *action* in her current reply got its own move (else her mood picks one)
+        self.restaging = False  # she's re-reading her prompt for a stage she just reached (on_restaging)
         self.time_up = False      # her latest reply came after today's time ran out: she goes home after it
         self.going_home = False   # leaving because of that (her goodbye differs a little)
         self.saying_goodbye = False  # her time-up goodbye has started: you can't talk to her any more (it'd keep her)
@@ -85,6 +86,7 @@ class App:
         self.brain.speaking.connect(self.on_speaking)
         self.brain.piece.connect(self.on_piece)
         self.brain.mood.connect(self.on_mood)
+        self.brain.restaging.connect(self.on_restaging)
         self.brain.spoke.connect(self.on_spoke)
         self.brain.closed.connect(self.on_closed)
         self.brain.snapshot.connect(self.on_snapshot)
@@ -241,6 +243,13 @@ class App:
         self.bubble.start()
         self.follow()
 
+    def on_restaging(self, busy):
+        """She's taking in a stage she just reached (Session.restage): a "…" over her once her reply has been read,
+        so you can see why she doesn't answer a click yet."""
+        self.restaging = busy
+        if not self.bubble.active:
+            self.body.think(busy)
+
     def on_mood(self, mood):
         """Her mood for the reply she's starting: her face changes now, as her first words appear."""
         self.body.set_mood(mood)
@@ -269,6 +278,8 @@ class App:
     def on_done(self):
         """Her whole reply has been read: she can wander again, and her mood slowly settles back to neutral."""
         self.release()
+        if self.restaging:
+            self.body.think(True)  # (still taking in her new stage: see on_restaging)
         if self.scene:  # (in a chat with her friend, it's the other one's turn now)
             self.scene.line_done(self)
         if self.time_up:  # she's said goodbye (or answered you after her time ran out): home she goes

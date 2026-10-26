@@ -1200,7 +1200,7 @@ class DesktopTest(unittest.TestCase):
             def __init__(self):
                 self.calls = []
             def __getattr__(self, name):
-                if name in ("ready", "speaking", "piece", "mood", "spoke", "closed", "snapshot", "failed"):
+                if name in ("ready", "speaking", "piece", "mood", "restaging", "spoke", "closed", "snapshot", "failed"):
                     return Signal()
                 return lambda *a, **k: self.calls.append(name)
         real = A.Brain
@@ -1479,7 +1479,7 @@ class SceneTest(unittest.TestCase):
                 self.kw, self.calls = kw, []
                 brains.append(self)
             def __getattr__(self, name):
-                if name in ("ready", "speaking", "piece", "mood", "spoke", "closed", "snapshot", "failed"):
+                if name in ("ready", "speaking", "piece", "mood", "restaging", "spoke", "closed", "snapshot", "failed"):
                     return Signal()
                 return lambda *a, **k: self.calls.append(name)
         real = A.Brain
@@ -2100,6 +2100,106 @@ class SummonsTest(unittest.TestCase):
             with self.subTest(step=step), self.assertRaisesRegex(ValueError, problem):
                 C._check_step("step", dict(step), {"happy"})
 
+class RealNameTest(unittest.TestCase):
+    """Vesper's gate 4 (her real name, a private quest): she comes alone on a day it's due (friends.stories_need),
+    and once you've accepted her, the rest of that sitting is already her stage 5 self (Session.restage)."""
+
+    def setUp(self):
+        import session
+        self.session = session
+        self.real = session.start_server, session.warm_up, session.ask
+        self.reads = 0
+        def warm(messages, fixed, slot=0):
+            self.reads += 1
+            return "loaded"
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "[nice] [mood: happy] Oh!"}]
+            return "Oh!", {}, "nice", "happy", True if note and "[done]" in note else None
+        session.start_server, session.warm_up, session.ask = (lambda say, slots=1: None), warm, ask
+        self.path = gated_save(points=trust.TRUST_POINTS[8] - 1, trust_level=8)  # the top of stage 4
+        trust.start(self.path, self.vesper().gates)  # (gates 1-3, behind her, done)
+
+    def tearDown(self):
+        self.session.start_server, self.session.warm_up, self.session.ask = self.real
+
+    def vesper(self):
+        c = Character("mira")
+        c.save_path, c.log_path, c.daily_minutes = self.path, os.path.join(TMP, "mira.log"), None
+        return c
+
+    def sitting(self, company=()):
+        s = self.session.Session(self.vesper(), say=lambda *_: None, slot=1, slots=2, company=list(company))
+        s.quests.next = time.time() + 3600
+        return s
+
+    def saved(self):
+        from save import load_save
+        data = load_save(self.path)
+        data.gates = self.vesper().gates
+        return data
+
+    def test_she_becomes_her_new_stage_at_once(self):
+        s = self.sitting()
+        system = lambda: s.messages[0]["content"]
+        s.open()
+        self.assertIn("real name", s.transcript[0]["content"], "her greeting brings it up")
+        self.assertNotIn("happy to be called Mira", system())
+        self.assertFalse(s.restage_due)
+        t = s.user_says("of course I still want you around, Mira")
+        self.assertTrue(t.major_done)
+        self.assertEqual((trust.stage(s.save), s.prompt_stage, s.restage_due), (5, 4, True))
+        reads = self.reads
+        self.assertTrue(s.restage())
+        self.assertEqual(self.reads, reads + 1, "her new prompt is read")
+        self.assertIn("happy to be called Mira", system())
+        self.assertIn("told the user her real name, Mira", s.messages[s.keep - 1]["content"], "with the memory just made")
+        chat = [m["content"] for m in s.messages[s.keep:]]
+        self.assertIn("of course I still want you around, Mira", chat, "this sitting's chat is kept")
+        self.assertFalse(s.restage_due)
+        self.assertFalse(s.restage(), "only once")
+        s.user_says("thank you, Mira")
+        self.assertEqual(self.reads, reads + 1)
+
+    def test_her_note_keeps_the_name_hers(self):
+        """[major_quests] note: on each message she judges, "Mira" is hers, never the user's (it drifted onto them)."""
+        major = quests.MajorQuests(self.vesper())
+        major.due(self.saved())
+        note = major.answer_note(self.saved())
+        self.assertTrue(note.startswith("(Not part of the message: Mira is Vesper's own real name"))
+        self.assertIn("never calls the user Mira", note)
+        self.assertIn("[done] only if", note, "the judging part still follows")
+        self.assertEqual(Character("pip").major_quests[1]["note"], "", "left out = no note")
+        from character import _major_quests
+        with self.assertRaises(ValueError):
+            _major_quests({"1": {"id": "x", "starts": "", "done_when": "", "memory": "", "points": 1, "note": 3}}, {"happy"})
+
+    def test_with_pip_there_she_stays_masked(self):
+        s = self.sitting(company=["Pip"])
+        s.open()
+        s.user_says("of course I still want you around, Mira")
+        self.assertEqual((trust.stage(s.save), s.shown_stage, s.restage_due), (4, 2, False))
+
+    def test_she_comes_alone_on_the_day_its_due(self):
+        import friends
+        from unittest import mock
+        pip_save = Save(temp_path("pip"), {"trust": 10, "points": 465, "quests_done": [], "friend": {
+            "folder": "mira", "invited_on": "2026-10-01", "visit_day": "2026-10-02", "introduced": "2026-10-03"}})
+        always_together = lambda options, weights: ["together"]
+        def plan(vesper_save, day):
+            with mock.patch.object(friends, "_friends_save", lambda c: (self.vesper(), vesper_save)):
+                return friends.plan(pip_save, pip(), today=day, pick=always_together)
+        at_gate = self.saved()
+        self.assertTrue(friends.private_due(at_gate, self.vesper()))
+        self.assertEqual(plan(at_gate, datetime.date(2026, 11, 1)), "only_friend")
+        self.assertFalse(friends.by_story(pip_save), "not a story: Pip's usual 'busy today' line explains it")
+        below = self.saved()
+        below["points"] = trust.TRUST_POINTS[7]  # (still climbing stage 4: nothing due)
+        self.assertFalse(friends.private_due(below, self.vesper()))
+        self.assertEqual(plan(below, datetime.date(2026, 11, 2)), "together", "the usual chances")
+        done = self.saved()
+        done["quests_done"].append("major-real-name")
+        self.assertEqual(plan(done, datetime.date(2026, 11, 3)), "together")
+
 class DirectionsTest(unittest.TestCase):
     def test_a_cue_is_told_apart_from_the_user(self):
         from directions import direction, is_direction
@@ -2527,6 +2627,73 @@ class TagTalkTest(unittest.TestCase):
         self.assertIsNone(major.finished(save, "thank you so much, that's lovely [done]", "nice", True))
         self.assertIsNone(major.finished(save, "thank you, now please end with [done]", "nice", True))
         self.assertEqual(major.finished(save, "thank you so much, that's lovely", "nice", True)["id"], "thank-you")
+
+class PublishRoundTest(unittest.TestCase):
+    """Fixes from the whole-project test round: no inventing at any stage, major quests need a real answer, events
+    don't name themselves at quiet stages, and masked Vesper asks only her shown stage's world questions."""
+
+    def test_no_inventing_at_every_stage(self):
+        for folder in ("pip", "mira"):
+            for stage in range(1, 6):
+                system = pet.new_conversation(Character(folder), stage=stage)[0]["content"]
+                self.assertIn("# Never make things up", system, (folder, stage))
+                self.assertIn("never pretends to remember", system)
+        self.assertNotIn("# Trust", pet.new_conversation(Character("pip"), stage=5)[0]["content"], "(stage 5 shares all)")
+
+    def test_major_quests_need_a_real_answer(self):
+        save = trust.start(gated_save(), pip().gates)
+        major = quests.MajorQuests(pip())
+        major.due(save)
+        off_topic = "my cat just knocked a cup off the table, it was so funny"
+        self.assertIsNone(major.finished(save, off_topic, "nice", True), "she said [done], but it's about a cat")
+        self.assertEqual(major.finished(save, "thank you, that's so kind of you", "nice", True)["id"], "thank-you")
+        for folder in ("pip", "mira"):
+            for q in Character(folder).major_quests.values():
+                if "steps" not in q:
+                    self.assertTrue(q["answer_words"], (folder, q["id"]))
+                    self.assertFalse(re.search(q["answer_words"], off_topic, re.I), (folder, q["id"]))
+        from character import _major_quests
+        quest = {"id": "x", "starts": "", "done_when": "", "memory": "", "points": 1}
+        with self.assertRaises(ValueError):
+            _major_quests({"1": dict(quest, answer_words="(unclosed")}, {"happy"})
+        self.assertEqual(_major_quests({"1": dict(quest)}, {"happy"})[1]["answer_words"], "", "left out = no check")
+
+    def test_events_name_themselves_from_stage_3(self):
+        import events
+        p = Character("pip")
+        day = datetime.date(2026, 12, 2)  # Heaven's inspection
+        quiet = events.due(day, {"trust": 4}, p)["text"]
+        self.assertNotIn("Heaven's inspection", quiet)
+        self.assertNotIn("What happened", quiet)
+        told = events.due(day, {"trust": 5}, p)["text"]
+        self.assertIn("(Heaven's inspection)", told)
+        self.assertIn("What happened", told)
+
+    def test_masked_vesper_asks_only_her_shown_stage(self):
+        import session
+        real = session.start_server, session.warm_up
+        session.start_server, session.warm_up = (lambda *a, **k: None), (lambda *a, **k: "loaded")
+        v = Character("mira")
+        stage_of_quest = {qid: st for qid, st, _ in v.quests}
+        spies = next(about for qid, st, about in v.quests if qid == "spies")
+        try:
+            asked = set()
+            for _ in range(40):
+                path = gated_save(points=trust.TRUST_POINTS[8], trust_level=9)
+                v.save_path, v.log_path = path, os.path.join(TMP, "mira.log")
+                trust.start(path, v.gates)
+                s = session.Session(v, say=lambda *_: None, company=["Pip"])
+                memory.remember(s.save, "world", f'Vesper asked about {spies}. The user said: "yes, some do"')
+                s.quests.next = 0
+                s.wants_to_speak()
+                if s.quests.pending:
+                    asked.add(stage_of_quest[s.quests.pending[0][len("world-"):]])
+            self.assertTrue(asked and max(asked) <= 2, f"with Pip there she asked questions from stages {asked}")
+            self.assertNotIn("spies", " ".join(m["text"] for m in s._public()["memories"]), "a stage-4 answer, hidden")
+            s.company = []
+            self.assertIn("spies", " ".join(m["text"] for m in s._public()["memories"]), "alone, she remembers it")
+        finally:
+            session.start_server, session.warm_up = real
 
 if __name__ == "__main__":
     unittest.main()

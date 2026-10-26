@@ -125,6 +125,8 @@ listening = "whether the user thinks gods would hear her if she prayed from thei
 #   done_when  what counts as done: she judges it herself, with a hidden [done] / [not yet] tag
 #   memory     what she remembers afterwards (kept forever, like her answers to the world quests)
 #   points     trust points it gives (enough to step into the next stage)
+#   answer_words optional: a pattern a real answer has to contain (her [done] alone let "my cat knocked a cup
+#              over" through); written in ''' quotes, so backslashes and ' stay as they are
 #   needs_nice true = the reply must also feel nice to her (her [nice] tag), for quests about being kind to her.
 #              false for a plain favour, where "let's call it Sprout" is enough. (Left out = true.)
 [major_quests.1]  # opens stage 2, Learning to receive
@@ -134,6 +136,7 @@ done_when = "the user thanks her or is kind to her in return, so she gets to acc
 memory = "Pip gave the user a small blessing, and for once she let herself accept their thanks."
 points = 10
 needs_nice = true
+answer_words = '''\b(?:thank|thanks|thx|ty|kind|sweet|bless\w*|appreciate\w*|grateful|lovely|nice of you|means a lot)\b'''
 
 [major_quests.2]  # opens stage 3, Admitting the silence
 id = "first-favour"
@@ -142,6 +145,7 @@ done_when = "the user gives the herb a name (any name, even a silly one)"
 memory = "Pip asked the user for her first favour ever: to name her potted herb."
 points = 10
 needs_nice = false
+answer_words = '''\b(?:name\w*|call(?:ed)?|how about|what about|let'?s go with|should be)\b'''
 
 [major_quests.3]  # opens stage 4, Naming why she left: a story over several days (see steps below)
 id = "run-away"
@@ -188,6 +192,7 @@ done_when = "the user tells her she's welcome to keep coming and resting here"
 memory = "Pip admitted how tired she is back home, and the user told her she's welcome to rest here."
 points = 10
 needs_nice = true
+answer_words = '''\b(?:welcome|of course|stay|rest|come back|any ?time|bother|keep coming|you can|always|please do)\b'''
 
 # What she says when her daily time (daily_minutes, at the top) runs low and runs out, by the trust stage each line
 # starts at: the highest one at or below her stage is used (stage 1 is required). Written about her, as a stage

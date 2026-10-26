@@ -145,7 +145,8 @@ class MajorQuests:
         if not quest or self.listening <= 0:
             return None
         self.listening -= 1
-        return self.character.fill(
+        extra = self.character.fill(quest["note"]) + "\n\n" if quest.get("note") else ""  # ([major_quests] note)
+        return extra + self.character.fill(
             "(Not part of the user's message: {name} had just brought up something important to {them}: ") + \
             quest["starts"] + self.character.fill(
             ". {They} replies as usual. Then, at the very end of {their} reply, {they} judges whether it's done, and adds one "
@@ -162,6 +163,8 @@ class MajorQuests:
         if (not quest or judged is not True or unkind or len(re.findall(r"\w+", message)) < 2
                 or is_dodge(message) or not looks_like_words(message) or mentions_tags(message)):
             return None
+        if quest.get("answer_words") and not re.search(quest["answer_words"], message, re.I):
+            return None  # (a friendly message about something else: she sometimes judged that [done] too)
         self.listening = 0
         trust.quest_done(save, "major-" + quest["id"], quest["points"])  # (done first, so the gate opens for them)
         return quest

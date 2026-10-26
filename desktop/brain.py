@@ -11,6 +11,7 @@ class Brain(QObject):
     speaking = Signal(str)       # she started a reply of this kind: opening, user, idle or quest
     piece = Signal(str)          # the next bit of her reply, as it's written
     mood = Signal(str)           # her mood for the reply she's starting (it comes before her words)
+    restaging = Signal(bool)     # True while she re-reads her prompt for a stage she just reached, then False
     spoke = Signal(object)       # her finished reply (a session.Turn)
     closed = Signal(list)        # the sitting is over: the diary notes she wrote
     snapshot = Signal(dict)      # after every job: a copy of trust/today/memories (session.snapshot()) for the
@@ -119,3 +120,9 @@ class Brain(QObject):
                 self.piece.emit(piece)
         turn = call(*args, on_text=on_text, on_mood=self.mood.emit)
         self.spoke.emit(turn)
+        if self.session.restage_due:  # a gate just opened: her new stage's prompt, while you read this reply
+            self.restaging.emit(True)
+            try:
+                self.session.restage()
+            finally:
+                self.restaging.emit(False)

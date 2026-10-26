@@ -26,6 +26,14 @@ def new_conversation(character=None, stage=None):
         system_prompt += character.fill("\n\n# Trust\n{name} happily talks about everything written above. {They} "
             "also knows more that isn't written here, but {they} isn't ready to share it yet. If asked about it, "
             "{they} gently changes the subject instead of making things up.")
+    # (at every stage, the top one too: without it she named cities that don't exist, "Goldcrest", "Aethelgard")
+    system_prompt += character.fill("\n\n# Never make things up\n{name} never invents names of people, places, gods, "
+        "cities, family members or events that aren't written above, and never invents who taught {them} something. "
+        "If asked something {they} doesn't know, {they} says so in {their} own words, or that {they} would rather "
+        "not say, instead of guessing.\n{They} only remembers what the user has said in this chat and what's in "
+        "{their} memories of earlier visits (if any are given). If the user asks whether {they} remembers "
+        "something that isn't there, like a pet's name, {they} honestly says {they} doesn't remember it or that "
+        "the user hasn't told {them} yet, and never pretends to remember.")
     system_prompt += character.fill(f"\n\n# Note\nThe first {len(character.examples)} exchanges in this chat are "
         "only examples of {name}'s style and length. They never really happened, so never say the user already "
         "said those things.")

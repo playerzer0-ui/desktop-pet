@@ -73,7 +73,10 @@ def due(date, save, character):
                 waiting.append(e)
             continue
         acts, _, says = e["reactions"][stage].partition(" / ")
-        text = character.fill(f"Something happened in {{name}}'s world today ({e['name']}). "
+        # (its name only from stage 3, with the fact: below that the reaction is all she says, and given the name
+        #  she said it anyway: "a cold inspection from Heaven" when the reaction was only "the exchange is busy")
+        named = f" ({e['name']})" if stage >= 3 else ""
+        text = character.fill(f"Something happened in {{name}}'s world today{named}. "
                               "{They} ") + f"{acts.strip()}, and {says.strip()}."
         if stage >= 3:  # from stage 3 she's honest about her world, so she may know and say what happened
             text += f" What happened: {e['fact']}"

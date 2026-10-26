@@ -21,7 +21,7 @@ It's kept in the inviter's save (Pip's), so the friend's own save stays hers alo
 Like a story step (story.py), the friend's day waits for your next visit: skip a few days and nothing is missed.
 """
 import datetime, random
-import memory
+import memory, trust
 from save import write_save
 
 def invite_due(save, character):
@@ -57,7 +57,8 @@ def plan(save, character, today=None, pick=random.choices, story_day=None):
     """Who comes today, once they can come together (together(save)): "together", "only_her" or "only_friend",
     picked by [friend] chances on the day's first launch and kept in her save, so opening the app again the same day
     brings the same ones. The first day is always together: it's the day she introduces her friend. After that, a
-    story step that needs a certain lineup (story.py's day) decides instead of the chances (by_story is then True).
+    story step that needs a certain lineup (story.py's day) decides instead of the chances (by_story is then True),
+    and so does a private major quest that's due (it only comes up when it's just you two: ForQuest).
     None before then. pick = random.choices and story_day = stories_need (the tests stand in for them)."""
     if not together(save, today):
         return None
@@ -69,7 +70,7 @@ def plan(save, character, today=None, pick=random.choices, story_day=None):
             who = "together"
         else:
             who = needed or pick(list(chances), weights=list(chances.values()))[0]
-        invited["today"] = {"day": day, "who": who, "story": bool(needed)}
+        invited["today"] = {"day": day, "who": who, "story": bool(needed) and not isinstance(needed, ForQuest)}
         write_save(save)
     return invited["today"]["who"]
 
@@ -90,9 +91,21 @@ def _friends_save(character):
     story.catch_up(data, friend)  # (a story step that lasted all of an earlier day is over: before asking her story)
     return friend, data
 
+class ForQuest(str):
+    """A lineup a private major quest needs (stories_need): not a story's, so the usual "she's busy today" line
+    still explains who's missing (by_story stays False)."""
+
+def private_due(data, character):
+    """True if the major quest holding their trust back is a private one (private in character.toml): it only comes
+    up when it's just them and the user, so on any other day their trust would wait (Vesper's real name, at the
+    top of stage 4, waited up to weeks of days together, 4 days in 5)."""
+    quest = character.major_quests.get(trust.at_gate(data))
+    return bool(quest and quest["private"])
+
 def stories_need(save, character):
     """The lineup a story step of theirs needs today (story.day_needed), as plan's "together", "only_her" or
-    "only_friend", or None. Her friend's story is asked first."""
+    "only_friend", or None. Her friend's story is asked first. With no story step waiting, a private major quest
+    that's due brings that one on their own (a ForQuest)."""
     import story
     from save import Save
     friend, theirs = _friends_save(character)
@@ -102,6 +115,9 @@ def stories_need(save, character):
         day = story.day_needed(data, c)
         if day:
             return {"together": "together", "alone": alone, "away": away}[day]
+    for data, c, alone in ((theirs, friend, "only_friend"), (mine, character, "only_her")):
+        if private_due(data, c):
+            return ForQuest(alone)
     return None
 
 def tell_for_friend(character, today=None):
