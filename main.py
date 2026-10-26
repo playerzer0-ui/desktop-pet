@@ -23,6 +23,10 @@ def show_error(text):
         pass  # (no screen to show it on: the console line above is all there is)
 
 if __name__ == "__main__":
+    # Linux on Wayland: apps can't place their own windows there, so she couldn't walk along the bottom of the screen.
+    # X11 mode (through XWayland) lets her (start.sh does the same). Set QT_QPA_PLATFORM yourself to choose otherwise.
+    if sys.platform.startswith("linux") and os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("QT_QPA_PLATFORM"):
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
     try:
         from character import DEFAULT
         from desktop.app import main

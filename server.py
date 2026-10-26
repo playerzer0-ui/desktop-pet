@@ -8,7 +8,7 @@ Talking to it is llm.py's job; this file only owns the process.
     Linux     a small shell watchdog (WATCHDOG) runs the server, checks every second that the pet is still there,
               and stops the server when it isn't
 """
-import atexit, ctypes, glob, os, shutil, subprocess, threading, time
+import atexit, ctypes, glob, os, shutil, subprocess, sys, threading, time
 import llm
 from config import HERE, LOG_DIR, PORT, N_CTX, MODEL, CACHE_DIR
 
@@ -83,6 +83,17 @@ def kill_with_python(proc):
     kernel32.AssignProcessToJobObject(wintypes.HANDLE(job), wintypes.HANDLE(int(proc._handle)))
     return job  # must be kept alive: when the handle closes, the server is killed
 
+def server_env(llama_server):
+    """Linux: llama-server loads its libraries (libllama.so, libggml*.so) from its own folder. The built game's
+    launcher points LD_LIBRARY_PATH at the game's _internal folder (keeping the player's own in
+    LD_LIBRARY_PATH_ORIG), so the server gets its own folder first, then whatever the player had."""
+    env = dict(os.environ)
+    original = env.pop("LD_LIBRARY_PATH_ORIG", None)
+    if original is None:
+        original = env.get("LD_LIBRARY_PATH", "") if not hasattr(sys, "frozen") else ""
+    env["LD_LIBRARY_PATH"] = os.pathsep.join(p for p in (os.path.dirname(llama_server), original) if p)
+    return env
+
 _starting = threading.Lock()  # two characters on the desktop each start their mind: only one may start the server
 
 def start_server(say=print, slots=1):
@@ -117,7 +128,7 @@ def _start(say, slots):
         _job = kill_with_python(server)  # ...it dies with the pet, even if the pet crashes or is killed
     else:
         server = subprocess.Popen(["sh", "-c", WATCHDOG, "watchdog", str(os.getpid())] + command,
-                                  stdout=log, stderr=subprocess.STDOUT,
+                                  stdout=log, stderr=subprocess.STDOUT, env=server_env(command[0]),
                                   start_new_session=True)  # (Ctrl+C in the terminal reaches only the pet)
     atexit.register(server.terminate)  # shut the server down when the pet closes normally
 
