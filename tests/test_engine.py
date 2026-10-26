@@ -7,6 +7,7 @@ import contextlib, datetime, io, json, os, re, shutil, sys, tempfile, time, unit
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # no windows pop up
+os.environ["PET_DATA_DIR"] = tempfile.mkdtemp(prefix="pet-tests-data-")  # (never the player's real saves/logs)
 
 import memory, pet, quests, trust
 from character import Character, for_stage
@@ -2694,6 +2695,198 @@ class PublishRoundTest(unittest.TestCase):
             self.assertIn("spies", " ".join(m["text"] for m in s._public()["memories"]), "alone, she remembers it")
         finally:
             session.start_server, session.warm_up = real
+
+class DataFolderTest(unittest.TestCase):
+    """The player's own files (config.DATA) live apart from the game, and old ones are moved there once (data.py)."""
+
+    def test_where_it_lives(self):
+        import config, importlib
+        from unittest import mock
+        self.assertEqual(config.DATA, os.environ["PET_DATA_DIR"], "the tests have their own")
+        self.assertTrue(Character("pip").save_path.startswith(config.SAVES_DIR))
+        self.assertTrue(Character("pip").log_path.startswith(config.LOG_DIR))
+        self.assertTrue(config.CACHE_DIR.startswith(config.DATA))
+        with mock.patch.dict(os.environ, {"PET_DATA_DIR": "", "LOCALAPPDATA": r"C:\Users\x\AppData\Local"}):
+            with mock.patch.object(config.os, "name", "nt"):
+                self.assertEqual(config._data_dir(), os.path.join(r"C:\Users\x\AppData\Local", "DesktopPet"))
+            with mock.patch.object(config.os, "name", "posix"), mock.patch.object(config.sys, "platform", "linux"):
+                with mock.patch.dict(os.environ, {"XDG_DATA_HOME": "/home/x/.local/share"}):
+                    self.assertEqual(config._data_dir(), os.path.join("/home/x/.local/share", "desktop-pet"))
+
+    def test_the_model_is_found_in_either_place(self):
+        import config
+        from unittest import mock
+        root = tempfile.mkdtemp(dir=TMP)
+        game, data = os.path.join(root, "game"), os.path.join(root, "data")
+        with mock.patch.object(config, "HERE", game), mock.patch.object(config, "DATA", data):
+            self.assertEqual(config._model(), os.path.join(data, "models", config.MODEL_FILE), "not there: download to DATA")
+            os.makedirs(os.path.join(game, "models"))
+            open(os.path.join(game, "models", config.MODEL_FILE), "w").close()
+            self.assertEqual(config._model(), os.path.join(game, "models", config.MODEL_FILE), "a copy next to the game")
+            os.makedirs(os.path.join(data, "models"))
+            open(os.path.join(data, "models", config.MODEL_FILE), "w").close()
+            self.assertEqual(config._model(), os.path.join(data, "models", config.MODEL_FILE), "DATA's comes first")
+
+    def test_old_files_move_over_once(self):
+        import config, data
+        from unittest import mock
+        root = tempfile.mkdtemp(dir=TMP)
+        old, new = os.path.join(root, "game"), os.path.join(root, "data")
+        os.makedirs(os.path.join(old, "saves")); os.makedirs(os.path.join(old, "cache"))
+        for name, text in (("saves/pip.json", "pip"), ("saves/mira.json", "old mira"), ("saves/desktop.lock", "1"),
+                           ("cache/prompt.bin", "cached")):
+            with open(os.path.join(old, name), "w") as f:
+                f.write(text)
+        with mock.patch.multiple(data, SAVES_DIR=os.path.join(new, "saves"), CACHE_DIR=os.path.join(new, "cache"),
+                                 LOG_DIR=os.path.join(new, "logs"), DATA=new):
+            os.makedirs(os.path.join(new, "saves"))
+            with open(os.path.join(new, "saves", "mira.json"), "w") as f:
+                f.write("new mira")  # (already there: never overwritten)
+            moved = data.move_old_files(old)
+            self.assertEqual(sorted(os.path.basename(m) for m in moved), ["pip.json", "prompt.bin"])
+            def read(*p):
+                with open(os.path.join(new, *p)) as f:
+                    return f.read()
+            self.assertEqual((read("saves", "pip.json"), read("saves", "mira.json"), read("cache", "prompt.bin")),
+                             ("pip", "new mira", "cached"))
+            self.assertTrue(os.path.exists(os.path.join(old, "saves", "desktop.lock")), "a live lock stays")
+            with open(os.path.join(old, "saves", "MOVED.txt")) as f:
+                self.assertIn(os.path.join(new, "saves"), f.read())
+            self.assertEqual(data.move_old_files(old), [], "only once")
+            data.prepare(old)  # (never the real game folder: that once moved its cache into a test's temp folder)
+            self.assertTrue(all(os.path.isdir(os.path.join(new, d)) for d in ("saves", "logs", "cache", "models")))
+
+class DownloadTest(unittest.TestCase):
+    """desktop/download.py fetch: the first-launch model download, against a small local server."""
+    BODY = os.urandom(3 * 1024 * 1024 + 123)
+
+    @classmethod
+    def setUpClass(cls):
+        import hashlib, http.server, threading
+        cls.sha = hashlib.sha256(cls.BODY).hexdigest()
+        cls.ranges = True
+        body, test = cls.BODY, cls
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a): pass
+            def do_GET(self):
+                start = 0
+                wanted = self.headers.get("Range")
+                if wanted and test.ranges:
+                    start = int(re.match(r"bytes=(\d+)-", wanted).group(1))
+                    if start >= len(body):
+                        self.send_response(416); self.end_headers(); return
+                    self.send_response(206)
+                else:
+                    self.send_response(200)
+                self.send_header("Content-Length", str(len(body) - start))
+                self.end_headers()
+                self.wfile.write(body[start:])
+        cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+        cls.url = f"http://127.0.0.1:{cls.server.server_address[1]}/model.gguf"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+
+    def setUp(self):
+        type(self).ranges = True
+        self.path = os.path.join(tempfile.mkdtemp(dir=TMP), "models", "model.gguf")
+
+    def read(self):
+        with open(self.path, "rb") as f:
+            return f.read()
+
+    def fetch(self, **kw):
+        from desktop.download import fetch
+        return fetch(self.url, self.path, kw.pop("sha", self.sha), len(self.BODY), **kw)
+
+    def test_downloads_and_checks_it(self):
+        seen = []
+        self.fetch(progress=lambda stage, done, total: seen.append((stage, done, total)))
+        self.assertEqual(self.read(), self.BODY)
+        self.assertFalse(os.path.exists(self.path + ".part"))
+        self.assertEqual(seen[-1], ("downloading", len(self.BODY), len(self.BODY)))
+
+    def test_carries_on_from_where_it_stopped(self):
+        os.makedirs(os.path.dirname(self.path))
+        with open(self.path + ".part", "wb") as f:
+            f.write(self.BODY[:1_000_000])
+        stages = set()
+        self.fetch(progress=lambda stage, done, total: stages.add(stage))
+        self.assertEqual(self.read(), self.BODY)
+        self.assertEqual(stages, {"checking", "downloading"})
+
+    def test_a_server_that_ignores_resuming(self):
+        type(self).ranges = False
+        os.makedirs(os.path.dirname(self.path))
+        with open(self.path + ".part", "wb") as f:
+            f.write(b"x" * 500_000)  # (not even the right bytes: it's started over, not appended to)
+        self.fetch()
+        self.assertEqual(self.read(), self.BODY)
+
+    def test_a_damaged_download_is_thrown_away(self):
+        with self.assertRaises(ValueError):
+            self.fetch(sha="0" * 64)
+        self.assertFalse(os.path.exists(self.path) or os.path.exists(self.path + ".part"))
+
+    def test_stopping_keeps_what_it_has(self):
+        import threading
+        from desktop.download import Stopped
+        stop = threading.Event()
+        def progress(stage, done, total):
+            if done > 1_000_000:
+                stop.set()
+        with self.assertRaises(Stopped):
+            self.fetch(progress=progress, stop=stop)
+        self.assertGreater(os.path.getsize(self.path + ".part"), 1_000_000)
+        self.assertFalse(os.path.exists(self.path))
+        self.fetch()
+        self.assertEqual(self.read(), self.BODY)
+
+    def test_not_enough_room(self):
+        from unittest import mock
+        import collections
+        Usage = collections.namedtuple("Usage", "total used free")
+        with mock.patch("shutil.disk_usage", lambda p: Usage(10, 10, 1000)):
+            with self.assertRaises(OSError) as e:
+                self.fetch()
+        self.assertIn("Not enough free space", str(e.exception))
+
+    def test_already_there_needs_no_window(self):
+        import config
+        from unittest import mock
+        from desktop import download
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        open(self.path + ".x", "w").close()
+        with mock.patch.object(config, "MODEL", self.path + ".x"):
+            self.assertTrue(download.ensure_model())
+
+class StartupFailureTest(unittest.TestCase):
+    """A problem starting the model (server.py's SystemExit, on the brain's thread) reaches the screen: it used to
+    end the thread silently, leaving only her portal."""
+    def test_brain_reports_it(self):
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from desktop.brain import Brain
+        import session
+        real = session.Session
+        def broken(*a, **k):
+            raise SystemExit("Can't find llama-server.exe. Install it with: winget install ggml.llamacpp")
+        session.Session = broken
+        try:
+            b = Brain(pip())
+            got = []
+            b.failed.connect(got.append)
+            b._do_safely = None
+            b.jobs.put(("start",))
+            end = time.time() + 5
+            while not got and time.time() < end:
+                QApplication.processEvents()
+                time.sleep(0.02)
+        finally:
+            session.Session = real
+        self.assertEqual(got, ["Can't find llama-server.exe. Install it with: winget install ggml.llamacpp"])
 
 if __name__ == "__main__":
     unittest.main()

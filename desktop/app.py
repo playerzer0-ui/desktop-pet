@@ -10,12 +10,12 @@ Her mind is session.py, run by brain.py on its own thread. The screen never read
 after every job the brain sends a snapshot (trust summary, memories), and Status / memories show that.
 """
 import sys, time
-import friends, story, visits
+import data, friends, story, visits
 from save import load_save
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
 from character import Character, DEFAULT
-from desktop import check, moves
+from desktop import check, download, moves
 from desktop.status import card as status_card
 from desktop.body import Body
 from desktop.brain import Brain
@@ -346,6 +346,11 @@ class App:
 
     def on_failed(self, error):
         print(error, file=sys.stderr)
+        if not self.ready:  # she never woke up (no llama-server, it crashed while starting...): say why, and close
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(None, self.character.name, f"{self.character.name} couldn't wake up.\n\n{error.strip()}")
+            QApplication.quit()
+            return
         if self.scene:
             self.scene.end_duet()  # (a chat can't go on without her line)
         self.body.think(False)  # her reply isn't coming: no more "…"
@@ -398,7 +403,14 @@ def one_at_a_time(character):
 def main(folder=DEFAULT):
     """folder = which character to open (their folder in character/). After she has brought her friend over
     (friends.py), the friend comes with her: both on the desktop at once (desktop/scene.py)."""
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
+    data.prepare()  # (the player's folder, config.DATA: saves, logs, cache, the model; old files moved there once)
     character = Character(folder)
+    running = one_at_a_time(character)  # (kept until the app exits: that's what holds the lock. Before the model
+                                        #  download, so two copies never download it at once)
+    if not download.ensure_model(character.name):  # first launch: the model (~3 GB), in its own window
+        return
     save = load_save(character.save_path)
     company = note = None
     friend = friends.visiting_today(save)
@@ -421,9 +433,6 @@ def main(folder=DEFAULT):
         if problems:
             raise SystemExit(f"{c.name}'s mood lists don't match (see desktop/check.py):\n  - "
                              + "\n  - ".join(problems))
-    app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
-    running = one_at_a_time(character)  # (kept until the app exits: that's what holds the lock)
     # her story sent her home for now, or she invited her friend today: she doesn't come out (and no model is started)
     away = story.away(save) or friends.gone_today(save)
     resting = not away and visits.resting(character) and not story.ignores_time_limit(save, character)

@@ -10,7 +10,7 @@ Talking to it is llm.py's job; this file only owns the process.
 """
 import atexit, ctypes, glob, os, shutil, subprocess, threading, time
 import llm
-from config import HERE, PORT, N_CTX, MODEL, CACHE_DIR
+from config import HERE, LOG_DIR, PORT, N_CTX, MODEL, CACHE_DIR
 
 WINDOWS = os.name == "nt"
 
@@ -105,7 +105,8 @@ def _start(say, slots):
                 f"need {slots}.\nClose it (or its start-server.bat window) and run this again.")
         return
     os.makedirs(CACHE_DIR, exist_ok=True)
-    log = open(os.path.join(HERE, "server.log"), "w")  # server messages go here, for debugging
+    os.makedirs(LOG_DIR, exist_ok=True)
+    log = open(os.path.join(LOG_DIR, "server.log"), "w")  # server messages go here, for debugging
     command = [find_llama_server(), "-m", MODEL, "-c", str(N_CTX * slots), "-ngl", "0", "--port", str(PORT),
                "-np", str(slots),  # one conversation slot per character (the context is split between them,
                                    # so each gets N_CTX), and each request names its own (llm.py's slot)
@@ -125,6 +126,6 @@ def _start(say, slots):
         if llm.is_up():
             return
         if server.poll() is not None:
-            raise SystemExit("llama-server crashed while starting. See server.log for details.")
+            raise SystemExit(f"llama-server crashed while starting. See {os.path.join(LOG_DIR, 'server.log')} for details.")
         time.sleep(0.5)
-    raise SystemExit("llama-server took too long to start. See server.log for details.")
+    raise SystemExit(f"llama-server took too long to start. See {os.path.join(LOG_DIR, 'server.log')} for details.")

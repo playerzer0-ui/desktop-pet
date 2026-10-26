@@ -8,3 +8,7 @@ save.json
 saves/
 
 cache/
+
+# the built game (build.ps1)
+build/
+dist/

@@ -14,7 +14,7 @@ her mood as soon as it's known (it comes before her words: see pet.ask), so her 
 For tuning, every reply is written to <character>.log, e.g. pip.log (started fresh each sitting, like server.log):
 what was said, how it felt to her, her mood, how long it took, how full the context is, and trust gained.
 """
-import datetime, time
+import datetime, os, time
 from dataclasses import dataclass
 import events, friends, llm, memory, story, trust, visits
 from character import Character, DEFAULT
@@ -245,6 +245,7 @@ class Session:
 
     def log(self, text, fresh=False):
         """A line in her log (pip.log), for tuning. fresh = start the file over (each new sitting)."""
+        os.makedirs(os.path.dirname(self.character.log_path), exist_ok=True)
         with open(self.character.log_path, "w" if fresh else "a", encoding="utf-8") as f:
             f.write(f"{datetime.datetime.now():%H:%M:%S}  {text}\n")
 

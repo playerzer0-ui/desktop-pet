@@ -17,7 +17,7 @@ written with singular verbs, "{They} greets", which suits she/he.)
 """
 import os, re, tomllib
 import events
-from config import HERE
+from config import HERE, LOG_DIR, SAVES_DIR
 
 DEFAULT = "pip"  # who main.py opens when no character is named
 PORTAL = os.path.join(HERE, "character", "portal.png")  # every character arrives through the same portal (for now)
@@ -69,11 +69,9 @@ class Character:
         self.first_visit = c.get("first_visit")  # what their very first greeting is about (a stage direction), or None
         self.sprites = os.path.join(self.dir, "sprites")
         self.portal = PORTAL
-        self.save_path = os.path.join(HERE, "saves", folder + ".json")
-        self.log_path = os.path.join(HERE, folder + ".log")
+        self.save_path = os.path.join(SAVES_DIR, folder + ".json")  # (the player's own folder: see config.py)
+        self.log_path = os.path.join(LOG_DIR, folder + ".log")
         self.events = events.parse(self.text("events.md"))
-        if folder == DEFAULT:
-            _move_old_save(self.save_path)
 
     @staticmethod
     def at_stage(lines, stage):
@@ -234,10 +232,3 @@ def _friend(table):
         if chances.get(key) and key not in table:
             raise ValueError(f"[friend] has a chance of {key}, so it needs an {key} line (why the other isn't here)")
     return table
-
-def _move_old_save(path):
-    """Before characters, Pip's save was save.json in the project folder: it becomes saves/pip.json."""
-    old = os.path.join(HERE, "save.json")
-    if os.path.exists(old) and not os.path.exists(path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        os.replace(old, path)

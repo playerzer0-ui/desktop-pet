@@ -76,6 +76,8 @@ class Brain(QObject):
                 self._do(*job)
                 if self.session:
                     self.snapshot.emit(self.session.snapshot())
+            except SystemExit as e:  # (server.py says what's wrong this way: no llama-server, it crashed...)
+                self.failed.emit(str(e.code) if isinstance(e.code, str) else traceback.format_exc(limit=3))
             except Exception:
                 self.failed.emit(traceback.format_exc(limit=3))
             finally:
