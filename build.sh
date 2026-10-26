@@ -34,22 +34,23 @@ to="build/llama-server"
 rm -rf "$to"
 mkdir -p "$to"
 cp "$found" "$to/llama-server"
-# Its libraries: everything next to it (llama.cpp loads its CPU backends, libggml-cpu-*.so, from there at runtime),
-# and wherever the system finds the llama / ggml / OpenMP ones it links to (a Homebrew install keeps them in ../lib).
-# Not the GPU (Vulkan) backend: the game runs the model on the CPU (-ngl 0), and players' GPU drivers vary.
-# (cp -L: copy the file a symlink like libllama.so -> libllama.so.0 points to, under the symlink's name.)
-skip='libggml-vulkan|libggml-rpc'
-for lib in "$from"/lib*.so*; do
-    [ -e "$lib" ] || continue
-    name=$(basename "$lib")
-    echo "$name" | grep -Eq "$skip" || cp -L "$lib" "$to/$name"
+# Its libraries, and only those (llama.cpp's other tools come with their own, like libllama-cli-impl.so):
+#   - the CPU backends (libggml-cpu-haswell.so...): llama.cpp picks the best one for the player's CPU at runtime,
+#     from its own folder. Not the GPU (Vulkan) one: the game runs the model on the CPU (-ngl 0), and players' GPU
+#     drivers vary.
+#   - what the server and those backends link to, by the name they ask for (libllama.so.0, not also libllama.so
+#     and libllama.so.0.7.0, the same file under more names): found with ldd, which also finds them where a
+#     Homebrew install keeps them (../lib).
+#   - libgomp (GCC's OpenMP, which the backends use): on nearly every Linux, but not all, so it comes along.
+# (cp -L: copy the file a symlink points to, under the symlink's name.)
+for lib in "$from"/libggml-cpu-*.so; do
+    [ -e "$lib" ] && cp -L "$lib" "$to/"
 done
-LD_LIBRARY_PATH="$from" ldd "$found" "$from"/lib*.so* 2>/dev/null |
+LD_LIBRARY_PATH="$from" ldd "$found" "$to"/libggml-cpu-*.so 2>/dev/null |
     awk '$2 == "=>" && $3 ~ /^\// && $1 ~ /^lib(llama|ggml|mtmd|gomp)/ {print $1, $3}' | sort -u |
     while read -r name path; do
-        echo "$name" | grep -Eq "$skip" || [ -e "$to/$name" ] || cp -L "$path" "$to/$name"
+        [ -e "$to/$name" ] || cp -L "$path" "$to/$name"
     done
-# (libgomp, GCC's OpenMP, is on nearly every Linux, but not all: it comes along so the server never misses it)
 for license in "$from"/LICENSE*; do
     [ -e "$license" ] && cp "$license" "$to/"
 done
