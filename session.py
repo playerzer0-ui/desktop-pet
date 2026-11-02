@@ -16,7 +16,7 @@ what was said, how it felt to her, her mood, how long it took, how full the cont
 """
 import datetime, os, time
 from dataclasses import dataclass
-import events, friends, llm, memory, story, trust, visits
+import events, llm, memory, roster, story, trust, visits
 from character import Character, DEFAULT
 from directions import direction
 from idle import Idle
@@ -67,7 +67,7 @@ class Session:
         slot = their own slot on the server, of `slots` (one per character on the desktop: see llm.py).
         company = the names of anyone else on the desktop with them today (desktop/scene.py).
         greeting_note = something for their greeting to bring up (a stage direction's text), like why their
-        friend isn't here today (friends.plan)."""
+        friend isn't here today (roster.today)."""
         self.character = character if isinstance(character, Character) else Character(character)
         self.say, self.slot, self.slots, self.company = say, slot, slots, list(company)
         self.greeting_note = greeting_note
@@ -111,10 +111,10 @@ class Session:
         """Say goodbye (the menu) while she has something to say about it (talks_on_goodbye in snapshot()):
         (stage direction, kind) for what she says, or None if goodbye should just send her home.
         A story step that wants goodbyes comes first (she begs to stay or, the last time, goes home); else her
-        invitation to her friend (friends.py), after which she goes home."""
+        invitation to someone new (roster.py), after which she goes home."""
         said = self.story.goodbye(self.save)
         if not said:
-            invite = friends.invite(self.save, self.character)
+            invite = roster.invite(self.save, self.character)
             if not invite:
                 return None
             said = invite, True
@@ -138,7 +138,7 @@ class Session:
         left = self.minutes_left
         if left is not None and left <= 0 and not self.said_goodbye:
             self.said_goodbye = True
-            invite = friends.invite(self.save, self.character)  # (her invitation takes the place of her goodbye)
+            invite = roster.invite(self.save, self.character)  # (her invitation takes the place of her goodbye)
             if invite:
                 self._leaving_after = True  # (she won't be back tomorrow: her friend comes instead)
                 return direction(self.character.fill("{name} says something on {their} own: ") + invite + "."), "time_up"
@@ -220,7 +220,7 @@ class Session:
         summary["minutes_today"] = visits.minutes_used(self.save, (time.time() - self.opened) / 60)  # (this sitting too)
         summary["daily_minutes"] = self.character.daily_minutes
         summary["talks_on_goodbye"] = (self.story.begs_on_goodbye(self.save)  # (Say goodbye: she begs to stay,
-                                       or friends.invite_due(self.save, self.character))  # or invites her friend)
+                                       or roster.invite_due(self.save, self.character))  # or invites someone)
         summary["mood_locked"] = self.story.mood(self.save, self.lineup)  # (her mood doesn't settle back to neutral)
         summary["story_duet"] = self.story.duet(self.save)  # (a chat with her friend her story wants: scene.py)
         return {"summary": summary, "memories": [dict(m) for m in self.memories]}
@@ -392,7 +392,7 @@ class Session:
     def _with_company(self, heard=None):
         """For her greeting: who else is on the desktop with her today (desktop/scene.py), or None.
         heard = (name, words) if one of them has just greeted the user: she greets the user after them.
-        The first day she brings her friend along (friends.introduce), her greeting introduces her friend."""
+        The first day she brings someone she invited along (roster.introduce), her greeting introduces them."""
         if not self.company:
             return None
         if heard:
@@ -400,11 +400,12 @@ class Session:
             return self.character.fill(f"{{Their}} friend {name} is on the desktop with {{them}} today, and just "
                 f'greeted the user, saying: "{words}" {{They}} greets the user too, after {name}, and can react to '
                 f"what {name} said.")
-        introduce = friends.introduce(self.save, self.character)
+        introduce = roster.introduce(self.character, self.company)
         if introduce:
             return introduce + "."
-        return self.character.fill("{Their} friend ") + " and ".join(self.company) + self.character.fill(
-            " is on the desktop with {them} today too, but this greeting is {their} own, to the user.")
+        friends = "{Their} friend " if len(self.company) == 1 else "{Their} friends "
+        return self.character.fill(friends) + " and ".join(self.company) + self.character.fill(
+            f" {self._are} on the desktop with {{them}} today too, but this greeting is {{their}} own, to the user.")
 
     @property
     def lineup(self):
@@ -421,13 +422,20 @@ class Session:
     def _company_note(self):
         """On a day her friend is on the desktop with her (desktop/scene.py): a hidden note on each of your messages,
         so she keeps straight who's who. Without it, "who bakes better?" made Vesper talk as if YOU were Pip."""
-        others = " and ".join(self.company)
+        others, are = " and ".join(self.company), self._are
+        else_ = "someone else" if len(self.company) == 1 else "other people"
+        whose = f"{others}'s" if len(self.company) == 1 else f"each of {others}'s"
         return self.character.fill(
-            f"(Not part of the user's message: {others} is on the desktop beside {{name}} and can hear everything, "
+            f"(Not part of the user's message: {others} {are} on the desktop beside {{name}} and can hear everything, "
             f"but this message is from the user, the human who owns the desktop, and {{name}} answers the user. "
-            f'In {{their}} reply, "you" is the user. {others} is someone else: when the message is about {others}, '
-            f"{{they}} talks about {others} by name. {{They}} never mixes up what is {{their}} own, what is {others}'s "
+            f'In {{their}} reply, "you" is the user. {others} {are} {else_}: when the message is about {others}, '
+            f"{{they}} talks about {others} by name. {{They}} never mixes up what is {{their}} own, what is {whose} "
             f"and what is the user's.)")
+
+    @property
+    def _are(self):
+        """"is" for one other character on the desktop, "are" for more."""
+        return "is" if len(self.company) == 1 else "are"
 
     # --- her mask: what she shows when her friend is on the desktop too ---
     # Told "never say these in front of Pip", Vesper still let her secrets slip ("someone dangerous is watching her"),

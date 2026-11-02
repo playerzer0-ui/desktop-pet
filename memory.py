@@ -3,7 +3,7 @@ it was made. (The examples say Pip and "she"; the prompts are filled in per char
 
 Three kinds:
     world      your answers to her "curious about your world" questions (saved the moment you answer)
-    milestone  her major quests and story moments (quests.py, story.py, friends.py)
+    milestone  her major quests and story moments (quests.py, story.py, roster.py)
     note       her diary: when you close her, the model writes up to 8 short notes about you from that sitting
 
 Diary notes come in three tiers, so her prompt stays the same size however long she knows you, and nothing is lost:

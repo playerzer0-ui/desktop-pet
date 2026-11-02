@@ -18,10 +18,10 @@ Its progress is kept in the save:
     s = story.Story(character)            one per sitting: begin_text, note, mood, after_reply, goodbye,
                                           duet / duet_done, answer_note / answered
 
-For a character with a friend on the desktop (friends.py), a story can be told by both of them, like Vesper's
+For a character with a friend on the desktop (roster.py), a story can be told by both of them, like Vesper's
 summons (day 1 together: Pip nearly finds her out in a chat; day 2 only Pip, worried she's gone; day 3 only
 Vesper, hurt, and she confesses). Each step can say:
-    day = "together"   both have to be there (friends.plan brings both that day)
+    day = "together"   both have to be there (roster.today brings both that day)
           "alone"      only she comes
           "away"       only her friend comes, and tells this step in their greeting (opens is written about the friend)
     ends = "duet"      the step is a chat with her friend on a set topic (duet = {starts, about}), and ends with it

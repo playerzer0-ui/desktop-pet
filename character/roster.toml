@@ -1,0 +1,48 @@
+# The cast as a whole (roster.py): who brings whom to the desktop, and who comes on a given day.
+# Each character's own folder says who they are; this file says how they fit together.
+# (The first character, the one main.py opens, is character.DEFAULT.)
+
+# Most characters on the desktop at once. Each one gets her own slot on the model server, with the whole context
+# (config.N_CTX) to herself, so every extra one costs memory, and replies get slower on a CPU.
+on_screen = 2
+
+# --- unlocks: a character who is invited by another ---
+# At trust at_trust, on her way out (Say goodbye, or when her time is up), `by` invites `who` instead of saying her
+# usual goodbye. The next day `who` comes on her own (her first visit: first_visit in her character.toml), and from
+# the day after that she can come in the lineups below.
+#   who        the invited character's folder in character/
+#   by         the folder of the one who invites her
+#   at_trust   the trust (1-10) `by` invites at
+#   invite     what `by` says on her way out (a stage direction, so written about `by`)
+#   memory     what `by` remembers afterwards
+#   introduce  how `by` opens the first day they come together (optional): she introduces `who`
+
+[[unlocks]]
+who = "mira"
+by = "pip"
+at_trust = 10
+invite = "before she goes, she shyly tells the user her plan: her best friend Vesper, a baker who works far too hard, needs a place to rest too, and Pip has been teaching her to dreamwalk. So tomorrow Vesper will come instead of her, and Pip asks the user to be kind to her. Then she says goodbye warmly"
+memory = "Pip told the user she would send her best friend Vesper, a baker, to rest on the desktop."
+introduce = "today she has brought her best friend Vesper along, who is standing right beside her on the desktop. She greets the user, reminds them she promised to bring her friend, and introduces Vesper properly: a loud, cheerful baker from a few doors down the street, who works far too hard and deserves some rest. She asks the user to be nice to her"
+
+# --- lineups: who comes on a given day ---
+# Once someone has been unlocked and had her own first day, who comes is picked once a day (on the day's first launch)
+# from the lineups whose members have all had their first day, by weight (any whole numbers). A story step that needs
+# a certain lineup (story.py) decides instead.
+#   members  folders, the first one leads (her daily time counts for everyone). At most on_screen of them.
+#   weight   how likely this lineup is
+#   note     in the leader's greeting: why the others aren't here (optional; a stage direction, written about her)
+
+[[lineups]]
+members = ["pip", "mira"]
+weight = 60
+
+[[lineups]]
+members = ["pip"]
+weight = 20
+note = "her best friend Vesper couldn't come today, as she's busy at her bakery, so it's just Pip today"
+
+[[lineups]]
+members = ["mira"]
+weight = 20
+note = "her best friend Pip couldn't come today, as she's busy looking after the chapel, so {they} came on {their} own"

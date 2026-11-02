@@ -10,7 +10,7 @@ Her mind is session.py, run by brain.py on its own thread. The screen never read
 after every job the brain sends a snapshot (trust summary, memories), and Status / memories show that.
 """
 import sys, time
-import data, friends, story, visits
+import data, roster, story, visits
 from save import load_save
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
@@ -401,8 +401,8 @@ def one_at_a_time(character):
     return lock
 
 def main(folder=DEFAULT):
-    """folder = which character to open (their folder in character/). After she has brought her friend over
-    (friends.py), the friend comes with her: both on the desktop at once (desktop/scene.py)."""
+    """folder = which character to open (their folder in character/). Once she has invited someone (roster.py),
+    who comes each day is picked from character/roster.toml: more than one means a Scene (desktop/scene.py)."""
     app = QApplication.instance() or QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     data.prepare()  # (the player's folder, config.DATA: saves, logs, cache, the model; old files moved there once)
@@ -411,35 +411,23 @@ def main(folder=DEFAULT):
                                         #  download, so two copies never download it at once)
     if not download.ensure_model(character.name):  # first launch: the model (~3 GB), in its own window
         return
-    save = load_save(character.save_path)
-    company = note = None
-    friend = friends.visiting_today(save)
-    if friend:  # the day after she invited her friend: the friend comes instead of her
-        character = Character(friend)
-        save = load_save(character.save_path)
-    else:  # from the day after that, mostly together; now and then one of them is busy back home
-        who = friends.plan(save, character)
-        story_day = friends.by_story(save)  # (a story picked today's lineup: no "she's busy today" line)
-        if who == "together":
-            company = Character(character.friend["folder"])
-        elif who == "only_her":  # (on a story's day, her friend's story is what she brings up instead)
-            note = (friends.tell_for_friend(character) if story_day else None) or                    character.fill(character.friend["only_her"]) + "."
-        elif who == "only_friend":
-            lines, character = character.friend, Character(character.friend["folder"])
-            note = None if story_day else character.fill(lines["only_friend"]) + "."
-            save = load_save(character.save_path)
-    for c in filter(None, (character, company)):
+    plan = roster.today(folder)  # (who comes today: character/roster.toml, saves/roster.json)
+    cast = [Character(f) for f in plan.members]
+    for c in cast:
         problems = check.mood_problems(c)
         if problems:
             raise SystemExit(f"{c.name}'s mood lists don't match (see desktop/check.py):\n  - "
                              + "\n  - ".join(problems))
-    # her story sent her home for now, or she invited her friend today: she doesn't come out (and no model is started)
-    away = story.away(save) or friends.gone_today(save)
-    resting = not away and visits.resting(character) and not story.ignores_time_limit(save, character)
-    if company and not (away or resting):  # (she decides whether they come today: her friend comes with her)
+    lead = cast[0]  # (she decides for everyone: her story, her daily time)
+    save = load_save(lead.save_path)
+    # her story sent her home for now, or she invited someone today: she doesn't come out (and no model is started)
+    away = story.away(save) or plan.invited_today
+    resting = not away and visits.resting(lead) and not story.ignores_time_limit(save, lead)
+    if len(cast) > 1 and not (away or resting):
         from desktop.scene import Scene
-        company.daily_minutes = None  # (they leave together, when her time is up)
-        pet = Scene([character, company])
+        for c in cast[1:]:
+            c.daily_minutes = None  # (they leave together, when her time is up)
+        pet = Scene(cast)
     else:
-        pet = App(character, resting=resting, away=away, greeting_note=note)  # (kept so it isn't garbage-collected)
+        pet = App(lead, resting=resting, away=away, greeting_note=plan.note)  # (kept so it isn't garbage-collected)
     sys.exit(app.exec())

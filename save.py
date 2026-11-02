@@ -11,12 +11,13 @@ class Save(dict):
         super().__init__(data)
         self.path = path
 
-def load_save(path):
+def load_save(path, default=None):
+    """default = what a missing file starts as (a character's first visit: trust 1)."""
     try:
         return Save(path, _read(path))
     except FileNotFoundError:
         # a first visit, or the save was deleted to start over (a write never leaves it missing: see write_save)
-        return Save(path, {"trust": 1})
+        return Save(path, {"trust": 1} if default is None else dict(default))
     except (ValueError, OSError) as e:  # cut short or garbled (json's errors are ValueErrors)
         problem = e
     try:

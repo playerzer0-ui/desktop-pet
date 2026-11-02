@@ -15,11 +15,48 @@ from save import Save, stage_of
 
 TMP = tempfile.mkdtemp(prefix="pet-tests-")
 
+import roster
+roster.PATH = os.path.join(TMP, "roster.json")  # (each test that needs one makes its own: use_roster)
+
 def tearDownModule():
     shutil.rmtree(TMP, ignore_errors=True)
 
 def temp_path(name="save"):
     return os.path.join(TMP, f"{name}-{time.time_ns()}.json")
+
+def use_roster(test, unlocked=None, today=None):
+    """A fresh saves/roster.json for this test (roster.py), with these unlocks and today's lineup. Returns roster."""
+    import roster
+    real = roster.PATH
+    roster.PATH = temp_path("roster")
+    test.addCleanup(lambda: setattr(roster, "PATH", real))
+    data = Save(roster.PATH, {"unlocked": unlocked or {}})
+    if today:
+        data["today"] = today
+    from save import write_save
+    write_save(data)
+    return roster
+
+def mira_unlock(invited_on="2026-11-01", visit_day=None, introduced=None):
+    """roster.json's unlocked part: Pip invited Vesper (folder mira)."""
+    return {"mira": {"by": "pip", "invited_on": invited_on, "visit_day": visit_day, "introduced": introduced}}
+
+def unlock_rule(who="mira"):
+    import roster
+    return next(u for u in roster.rules()["unlocks"] if u["who"] == who)
+
+def lineup(*members):
+    import roster
+    return next(l for l in roster.rules()["lineups"] if l["members"] == list(members))
+
+PIP_MIRA = frozenset(("pip", "mira"))  # (the pair with a duet file: Scene.pairs)
+
+def nova():
+    """A stand-in third character: Vesper's files under another name and folder (no duet file with anyone)."""
+    c = Character("mira")
+    c.folder, c.name = "nova", "Nova"
+    c.save_path, c.log_path = temp_path("nova"), os.path.join(TMP, "nova.log")
+    return c
 
 def pip():
     c = Character("pip")
@@ -723,12 +760,13 @@ class StoryQuestTest(unittest.TestCase):
         self.assertIsNone(major.due(save), "the story plays it, not the one-moment quest code")
 
 class FriendTest(unittest.TestCase):
-    """friends.py: at trust 10 Pip invites her friend Vesper on her way out, and the next day Vesper comes instead."""
+    """roster.py: at trust 10 Pip invites her friend Vesper on her way out, and the next day Vesper comes instead."""
 
     def setUp(self):
         import session
         self.session = session
         self.real = session.start_server, session.warm_up, session.ask
+        self.roster = use_roster(self)
 
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
@@ -753,25 +791,25 @@ class FriendTest(unittest.TestCase):
             return json.load(f)
 
     def test_pip_invites_vesper(self):
-        friend = pip().friend
-        self.assertEqual(friend["folder"], "mira")
-        self.assertEqual(friend["at_trust"], 10)
+        rule = unlock_rule("mira")
+        self.assertEqual(rule["by"], "pip")
+        self.assertEqual(rule["at_trust"], 10)
         self.assertEqual(Character("mira").name, "Vesper")
 
     def test_say_goodbye_at_trust_10_invites_her_friend_once(self):
-        import friends
         s = self.sitting()
         s.open()
         self.assertTrue(s.snapshot()["summary"]["talks_on_goodbye"])
         cue, kind = s.goodbye()
-        self.assertIn(pip().fill(pip().friend["invite"]), cue)
+        self.assertIn(pip().fill(unlock_rule("mira")["invite"]), cue)
         self.assertTrue(s.speak(cue, kind).leaving, "she goes home after inviting her friend")
         self.assertFalse(s.snapshot()["summary"]["talks_on_goodbye"], "it's said only once")
         self.assertIsNone(s.goodbye())
-        saved = self.saved()
-        self.assertEqual(saved["friend"]["folder"], "mira")
-        self.assertEqual(saved["memories"][-1]["kind"], "milestone")
-        self.assertIsNone(friends.visiting_today(saved), "not the same day")
+        self.assertEqual(self.roster.state()["unlocked"]["mira"]["by"], "pip")
+        self.assertNotIn("friend", self.saved(), "her own save holds only her own things")
+        self.assertEqual(self.saved()["memories"][-1]["kind"], "milestone")
+        today = self.roster.today()
+        self.assertEqual((today.members, today.invited_today), (["pip"], True), "not the same day: nobody comes")
 
     def test_time_up_at_trust_10_invites_instead_of_her_goodbye(self):
         s = self.sitting(minutes=241)
@@ -780,7 +818,7 @@ class FriendTest(unittest.TestCase):
         self.assertIn("Vesper", cue)
         turn = s.speak(cue, kind)
         self.assertTrue(turn.time_up and turn.leaving, "no see-you-tomorrow: her friend comes instead")
-        self.assertIn("friend", self.saved())
+        self.assertIn("mira", self.roster.state()["unlocked"])
 
     def test_no_invite_below_trust_10(self):
         s = self.sitting(minutes=241, trust_level=9)
@@ -788,21 +826,22 @@ class FriendTest(unittest.TestCase):
         self.assertIsNone(s.goodbye())
         cue, _ = s.wants_to_speak()
         self.assertNotIn("Vesper", cue)
-        self.assertNotIn("friend", self.saved())
+        self.assertEqual(self.roster.state()["unlocked"], {})
 
     def test_the_friends_day(self):
-        import friends
         D = datetime.date
-        save = {"friend": {"folder": "mira", "invited_on": "2026-11-01", "visit_day": None}}
-        with mock_write_save(friends):
-            self.assertIsNone(friends.visiting_today(save, D(2026, 11, 1)), "the day she invites: not Vesper yet")
-            self.assertTrue(friends.gone_today(save, D(2026, 11, 1)), "...and Pip has gone home for the day")
-            self.assertFalse(friends.gone_today(save, D(2026, 11, 4)))
-            self.assertEqual(friends.visiting_today(save, D(2026, 11, 4)), "mira", "your next visit, days later")
-            self.assertEqual(friends.visiting_today(save, D(2026, 11, 4)), "mira", "opened again the same day")
-            self.assertIsNone(friends.visiting_today(save, D(2026, 11, 5)), "then Pip is back")
-            self.assertFalse(friends.gone_today(save, D(2026, 11, 5)))
-        self.assertIsNone(friends.visiting_today({}), "never invited")
+        roster = use_roster(self, mira_unlock("2026-11-01"))
+        today = lambda day: roster.today(day=day, need=lambda *a: None)
+        first = today(D(2026, 11, 1))
+        self.assertEqual((first.members, first.invited_today), (["pip"], True),
+                         "the day she invites: not Vesper yet, and Pip has gone home for the day")
+        self.assertEqual(today(D(2026, 11, 4)).members, ["mira"], "your next visit, days later")
+        self.assertFalse(today(D(2026, 11, 4)).invited_today)
+        self.assertEqual(today(D(2026, 11, 4)).members, ["mira"], "opened again the same day")
+        self.assertEqual(today(D(2026, 11, 5)).members, ["pip", "mira"], "then Pip is back, bringing her along")
+        use_roster(self)
+        self.assertEqual(roster.today(day=D(2026, 11, 5)).members, ["pip"], "never invited")
+        self.assertEqual(roster.today("mira").members, ["mira"], "opened by name: just her")
 
     def test_vespers_first_greeting_is_about_pip_sending_her(self):
         mira = Character("mira")
@@ -814,10 +853,64 @@ class FriendTest(unittest.TestCase):
         s.open()
         self.assertNotIn(mira.fill(mira.first_visit), s.messages[-2]["content"], "only the very first time")
 
-def mock_write_save(module):
-    """Stand in for write_save in module (for plain dicts that have no file)."""
-    from unittest import mock
-    return mock.patch.object(module, "write_save", lambda data: None)
+class RosterTest(unittest.TestCase):
+    """roster.py: character/roster.toml checked, and saves/roster.json made from the old saves once."""
+
+    def write_rules(self, text):
+        path = temp_path("rules").replace(".json", ".toml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    def test_the_real_roster_loads(self):
+        import roster
+        r = roster.rules()
+        self.assertEqual([(u["by"], u["who"]) for u in r["unlocks"]], [("pip", "mira")])
+        self.assertEqual({tuple(l["members"]): l["weight"] for l in r["lineups"]},
+                         {("pip", "mira"): 60, ("pip",): 20, ("mira",): 20})
+
+    def test_mistakes_fail_loudly(self):
+        import roster
+        unlock = 'who = "mira"\nby = "pip"\nat_trust = 10\ninvite = "x"\nmemory = "x"\n'
+        for text, problem in [
+                ('[[unlocks]]\nwho = "mira"\nby = "pip"\n', "missing"),
+                ('[[unlocks]]\n' + unlock.replace('"mira"', '"nobody"'), "isn't a character"),
+                ('[[unlocks]]\n' + unlock.replace('by = "pip"', 'by = "mira"'), "nobody has invited"),
+                ('[[unlocks]]\n' + unlock.replace("10", "11"), "at_trust"),
+                ('[[lineups]]\nmembers = ["pip", "mira"]\nweight = 1\n', "neither the first"),
+                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "pip"]\nweight = 1\n', "different"),
+                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip"]\nweight = -1\n', "weight"),
+                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip"]\nweight = 0\n', "all 0"),
+                ('on_screen = 0\n', "on_screen"),
+                ('on_screen = 1\n[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "mira"]\nweight = 1\n',
+                 "at most 1")]:
+            with self.subTest(problem=problem), self.assertRaisesRegex(ValueError, problem):
+                roster.rules(self.write_rules(text))
+
+    def test_old_saves_move_into_the_roster_once(self):
+        """Before roster.json, Pip's save kept her invite (save["friend"]): the first launch moves it over."""
+        roster = use_roster(self)
+        os.remove(roster.PATH)
+        from unittest import mock
+        from save import write_save
+        old = Save(temp_path("pip"), {"trust": 10, "friend": {
+            "folder": "mira", "invited_on": "2026-10-20", "visit_day": "2026-10-21", "introduced": "2026-10-22",
+            "today": {"day": "2026-11-02", "who": "only_friend", "story": True}}})
+        write_save(old)
+        real_character = roster.Character
+        def character(folder):
+            c = real_character(folder)
+            if folder == "pip":
+                c.save_path = old.path
+            return c
+        with mock.patch.object(roster, "Character", character):
+            data = roster.state()
+        self.assertEqual(data["unlocked"]["mira"], {"by": "pip", "invited_on": "2026-10-20",
+                                                    "visit_day": "2026-10-21", "introduced": "2026-10-22"})
+        self.assertEqual(data["today"], {"day": "2026-11-02", "members": ["mira"], "story": "mira"})
+        self.assertTrue(os.path.exists(roster.PATH), "written, so it's moved only once")
+        today = roster.today(day=datetime.date(2026, 11, 2))
+        self.assertEqual((today.members, today.note), (["mira"], None), "her story's day: no 'Pip is busy' line")
 
 class ClockNudgeTest(unittest.TestCase):
     """idle.CLOCK: she speaks up at 7:00, 12:00, 18:00 and 23:00, once a day each, within 30 minutes after."""
@@ -1469,7 +1562,7 @@ class SceneTest(unittest.TestCase):
         from PySide6.QtWidgets import QApplication
         cls.qt = QApplication.instance() or QApplication([])
 
-    def scene(self):
+    def scene(self, characters=None):
         from desktop import app as A, scene as S
         brains = []
         class Signal:
@@ -1486,7 +1579,7 @@ class SceneTest(unittest.TestCase):
         real = A.Brain
         A.Brain = lambda character, **kw: StubBrain(**kw)
         try:
-            scene = S.Scene([pip(), Character("mira")])
+            scene = S.Scene(characters or [pip(), Character("mira")])
         finally:
             A.Brain = real
         scene.ticker.stop()  # (the test ticks by hand)
@@ -1558,6 +1651,85 @@ class SceneTest(unittest.TestCase):
         scene.vanished(pip_)
         self.assertEqual(self.quits, [True])
 
+    # --- three on the desktop (a stand-in third character: Vesper's files under another name) ---
+
+    def test_three_each_with_her_own_slot(self):
+        scene, brains = self.scene([pip(), Character("mira"), nova()])
+        self.assertEqual([(b.kw["slot"], b.kw["slots"]) for b in brains], [(0, 3), (1, 3), (2, 3)])
+        self.assertEqual([b.kw["company"] for b in brains], [["Vesper", "Nova"], ["Pip", "Nova"], ["Pip", "Vesper"]])
+        xs = sorted(p.body.foot_x for p in scene.pets)
+        self.assertTrue(all(b - a > 100 for a, b in zip(xs, xs[1:])), f"they came out on top of each other: {xs}")
+
+    def test_three_greet_in_order(self):
+        from session import Turn
+        scene, _ = self.scene([pip(), Character("mira"), nova()])
+        pip_, ves, nov = scene.pets
+        opened = {"ves": [], "nov": []}
+        def opens(pet, name):  # (like a real brain: busy from the moment her greeting is asked for)
+            def open_(heard=None):
+                opened[name].append(heard)
+                pet.brain.working = True
+            return open_
+        ves.brain.open, nov.brain.open = opens(ves, "ves"), opens(nov, "nov")
+        nov.on_ready("loaded")
+        ves.on_ready("loaded")
+        pip_.on_ready("loaded")
+        pip_.on_speaking("opening")
+        pip_.on_spoke(Turn("Hello, everyone!", "opening", None, "happy", 1.0, {}, 10, 10, 460, 460))
+        pip_.bubble.active = False
+        scene.tick()
+        self.assertEqual(opened, {"ves": [("Pip", "Hello, everyone!")], "nov": []}, "Vesper is second")
+        ves.on_speaking("opening")
+        ves.brain.working = False  # (written: now it's on screen)
+        scene.tick()
+        self.assertEqual(opened["nov"], [], "Nova talked over Vesper's greeting")
+        ves.bubble.active = False
+        scene.tick()
+        self.assertEqual(opened["nov"], [("Pip", "Hello, everyone!")], "then Nova, hearing Pip")
+
+    def test_only_two_with_a_duet_file_chat(self):
+        scene = self.chatty_scene([pip(), Character("mira"), nova()])
+        self.assertEqual(set(scene.pairs), {PIP_MIRA}, "Nova has no duet file with anyone")
+        scene.tick()
+        self.assertEqual({scene.duet["speaker"].character.folder, scene.duet["listener"].character.folder},
+                         {"pip", "mira"})
+        self.assertFalse(scene.pets[2].body.staying, "Nova isn't part of the chat: she wanders on")
+
+    def test_a_story_chat_needs_no_duet_file(self):
+        """A story step's chat (story.py) is had with whoever's story it is, file or not."""
+        scene, _ = self.scene([pip(), nova()])
+        self.assertEqual(scene.pairs, {})
+        pip_, nov = scene.pets
+        for p in scene.pets:
+            p.ready, p.wants_open, p.lines = True, False, []
+            p.brain.duet = p.lines.append
+            p.snap = {"summary": {"stage": 3}, "memories": []}
+        nov.snap["summary"]["story_duet"] = {"starts": "pip", "about": "the weather"}
+        from desktop import scene as S
+        scene.quiet_since -= S.STORY_QUIET + 1
+        scene.tick()
+        self.assertEqual((scene.duet["speaker"], scene.duet["listener"], scene.duet["left"]),
+                         (pip_, nov, S.STORY_LINES))
+
+    def test_with_two_friends_the_wording_is_plural(self):
+        import session
+        use_roster(self)
+        real = session.start_server, session.warm_up, session.ask
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        try:
+            c = pip()
+            c.save_path = save_with_minutes(0, trust_level=10)
+            s = session.Session(c, say=lambda *_: None, slot=0, slots=3, company=["Vesper", "Nova"])
+        finally:
+            session.start_server, session.warm_up, session.ask = real
+        self.assertEqual(s._with_company(), "Her friends Vesper and Nova are on the desktop with her today too, "
+                                            "but this greeting is her own, to the user.")
+        self.assertIn("Vesper and Nova are on the desktop beside Pip", s._company_note())
+        self.assertIn("are other people", s._company_note())
+        s.company = ["Vesper"]
+        self.assertIn("Vesper is on the desktop beside Pip", s._company_note())
+
     def test_pips_time_up_sends_both_home(self):
         from session import Turn
         scene, _ = self.scene()
@@ -1571,36 +1743,30 @@ class SceneTest(unittest.TestCase):
         self.assertTrue(ves.leaving and ves.going_home)
 
     def test_who_comes_is_picked_once_a_day(self):
-        import friends
         D = datetime.date
-        save = {"friend": {"folder": "mira", "invited_on": "2026-11-01", "visit_day": "2026-11-02"}}
+        roster = use_roster(self, mira_unlock("2026-11-01", visit_day="2026-11-02"))
         picks = []
         def pick(options, weights):
-            picks.append(dict(zip(options, weights)))
-            return ["only_friend"]
-        no_story = lambda save, character: None  # (not your real saves' stories)
-        with mock_write_save(friends):
-            self.assertIsNone(friends.plan(save, pip(), D(2026, 11, 2), pick, no_story), "Vesper's own day: no plan")
-            self.assertEqual(friends.plan(save, pip(), D(2026, 11, 3), pick, no_story), "together",
-                             "the first day together is always together: Pip introduces her")
-            save["friend"]["introduced"] = "2026-11-03"
-            self.assertEqual(friends.plan(save, pip(), D(2026, 11, 3), pick, no_story), "together", "kept for the day")
-            self.assertEqual(friends.plan(save, pip(), D(2026, 11, 4), pick, no_story), "only_friend", "a new day: picked")
-            self.assertEqual(friends.plan(save, pip(), D(2026, 11, 4), pick, no_story), "only_friend", "opened again")
-        self.assertEqual(picks, [pip().friend["chances"]], "picked only once, by her chances")
-
-    def test_chances_are_checked(self):
-        import character as C
-        base = {"folder": "mira", "at_trust": 10, "invite": "x", "memory": "x"}
-        self.assertEqual(C._friend(dict(base))["chances"], {"together": 1}, "left out: always together")
-        for chances in ({"sometimes": 5}, {"together": -1}, {"together": 0}, {"together": 1, "only_her": 1}):
-            with self.subTest(chances=chances), self.assertRaises(ValueError):
-                C._friend(dict(base, chances=chances))
+            picks.append({tuple(l["members"]): w for l, w in zip(options, weights)})
+            return [lineup("mira")]
+        today = lambda day: roster.today(day=day, pick=pick, need=lambda *a: None)  # (not your real saves' stories)
+        self.assertEqual(today(D(2026, 11, 2)).members, ["mira"], "Vesper's own day")
+        self.assertEqual(today(D(2026, 11, 3)).members, ["pip", "mira"],
+                         "the first day together is always together: Pip introduces her")
+        data = roster.state()
+        data["unlocked"]["mira"]["introduced"] = "2026-11-03"
+        from save import write_save
+        write_save(data)
+        self.assertEqual(today(D(2026, 11, 3)).members, ["pip", "mira"], "kept for the day")
+        self.assertEqual(today(D(2026, 11, 4)).members, ["mira"], "a new day: picked")
+        self.assertEqual(today(D(2026, 11, 4)).note, Character("mira").fill(lineup("mira")["note"]) + ".")
+        self.assertEqual(today(D(2026, 11, 4)).members, ["mira"], "opened again")
+        self.assertEqual(picks, [{("pip", "mira"): 60, ("pip",): 20, ("mira",): 20}], "picked only once, by weight")
 
     def test_alone_she_says_why_the_other_isnt_here(self):
         mira = Character("mira")
         mira.log_path = os.path.join(TMP, "mira.log")
-        note = mira.fill(pip().friend["only_friend"]) + "."
+        note = mira.fill(lineup("mira")["note"]) + "."
         self.assertIn("busy looking after the chapel, so she came on her own", note)
         import session
         real = session.start_server, session.warm_up, session.ask
@@ -1631,7 +1797,7 @@ class SceneTest(unittest.TestCase):
             p.brain.duet = p.lines.append
             p.snap = {"summary": {"stage": 3}, "memories": []}
         ves.snap["summary"]["story_duet"] = wanted
-        scene.pair.lines = (3, 3)  # (the test plays 3 lines: not a random 3 or 4)
+        scene.pairs[PIP_MIRA].lines = (3, 3)  # (the test plays 3 lines: not a random 3 or 4)
         done = []
         ves.brain.story_duet_done = lambda: done.append(True)
         scene.tick()
@@ -1685,15 +1851,15 @@ class SceneTest(unittest.TestCase):
         self.assertIn('Vesper says to Pip: "Your bread is flat!" Pip answers Vesper', answer)
         self.assertIn("wraps the little chat up", answer)
 
-    def chatty_scene(self):
-        """A scene where both are here, greeted and quiet, with their duet calls recorded."""
-        scene, _ = self.scene()
+    def chatty_scene(self, characters=None):
+        """A scene where everyone is here, greeted and quiet, with their duet calls recorded."""
+        scene, _ = self.scene(characters)
         for p in scene.pets:
             p.ready, p.wants_open = True, False
             p.snap = {"summary": {"stage": 1}, "memories": []}
             p.lines = []
             p.brain.duet = p.lines.append
-        scene.pair.lines = (3, 3)
+        scene.pairs[PIP_MIRA].lines = (3, 3)
         scene.quiet_since -= scene.duet_gap + 1
         return scene
 
@@ -1761,7 +1927,7 @@ class SceneTest(unittest.TestCase):
         words = ["Your bread is flat, Pip!", "It rises in spirit!", "Fine, fine, you win."]
         for i, said in enumerate(words):
             speaker = scene.duet["speaker"]
-            listener = scene._partner(speaker)
+            listener = scene.duet["listener"]
             self.assertEqual(len(speaker.lines), 1 + (i >= 2), f"line {i + 1}: wrong one asked to speak")
             self.assertTrue(is_direction(speaker.lines[-1]))
             if i:
@@ -1808,15 +1974,13 @@ class SceneTest(unittest.TestCase):
         self.assertLess(time.time() - s.idle.last, 5, "her own idle talk should wait after a duet line")
 
     def test_together_from_the_day_after_vespers_day(self):
-        import friends
         D = datetime.date
-        save = {"friend": {"folder": "mira", "invited_on": "2026-11-01", "visit_day": None}}
-        self.assertIsNone(friends.together(save, D(2026, 11, 3)), "not before her own day")
-        save["friend"]["visit_day"] = "2026-11-03"
-        self.assertIsNone(friends.together(save, D(2026, 11, 3)), "her own day: she comes alone")
-        self.assertEqual(friends.together(save, D(2026, 11, 4)), "mira")
-        self.assertEqual(friends.together(save, D(2027, 1, 1)), "mira", "and every day after")
-        self.assertIsNone(friends.together({}, D(2026, 11, 4)))
+        roster = use_roster(self, mira_unlock("2026-11-01", introduced="2026-11-01"))
+        always_together = lambda options, weights: [lineup("pip", "mira")]
+        today = lambda day: roster.today(day=day, pick=always_together, need=lambda *a: None).members
+        self.assertEqual(today(D(2026, 11, 3)), ["mira"], "her own day: she comes alone")
+        self.assertEqual(today(D(2026, 11, 4)), ["pip", "mira"])
+        self.assertEqual(today(D(2027, 1, 1)), ["pip", "mira"], "and every day after")
 
     def greeting(self, character, path, company, heard=None):
         """Her greeting's stage direction, from a real Session with the model stood in for."""
@@ -1838,15 +2002,10 @@ class SceneTest(unittest.TestCase):
 
     def test_pip_introduces_vesper_the_first_day_only(self):
         path = save_with_minutes(0, trust_level=10)
-        with open(path) as f:
-            data = json.load(f)
-        data["friend"] = {"folder": "mira", "invited_on": "2026-10-20", "visit_day": "2026-10-21"}
-        with open(path, "w") as f:
-            json.dump(data, f)
-        intro = pip().fill(pip().friend["introduce"])
+        roster = use_roster(self, mira_unlock("2026-10-20", visit_day="2026-10-21"))
+        intro = pip().fill(unlock_rule("mira")["introduce"])
         self.assertIn(intro, self.greeting(pip(), path, ["Vesper"]))
-        with open(path) as f:
-            self.assertTrue(json.load(f)["friend"]["introduced"])
+        self.assertTrue(roster.state()["unlocked"]["mira"]["introduced"])
         again = self.greeting(pip(), path, ["Vesper"])
         self.assertNotIn(intro, again, "she introduces her only once")
         self.assertIn("Her friend Vesper is on the desktop with her today", again)
@@ -2076,20 +2235,43 @@ class SummonsTest(unittest.TestCase):
         self.assertIn("real name", alone._major_due() or "")
 
     def test_the_lineup_follows_her_story(self):
-        import friends
+        import roster, story
         from unittest import mock
+        pip_save = Save(temp_path("pip"), {"trust": 10, "points": 465, "quests_done": []})
+        pip_save.gates = pip().gates
         def need(vesper_save):
-            with mock.patch.object(friends, "_friends_save", lambda c: (self.vesper(), vesper_save)):
-                return friends.stories_need({"trust": 10, "points": 465}, pip())
-        import story
+            saves = {"mira": (self.vesper(), vesper_save), "pip": (pip(), pip_save)}
+            with mock.patch.object(roster, "_save_of", lambda folder: saves[folder]):
+                found = roster.stories_need(["pip", "mira"], roster.rules())
+            return found and (found.members, found.owner)
         data = self.saved()
-        self.assertEqual(need(data), "together")
+        self.assertEqual(need(data), (["pip", "mira"], "mira"))
         story.Story(self.vesper())._progress(data).update(step=1)
-        self.assertEqual(need(data), "only_her", "day 2: only Pip comes")
+        self.assertEqual(need(data), (["pip"], "mira"), "day 2: only Pip comes")
         data["story"]["step"] = 2
-        self.assertEqual(need(data), "only_friend", "day 3: only Vesper comes")
+        self.assertEqual(need(data), (["mira"], "mira"), "day 3: only Vesper comes")
         data["story"]["step"] = 3
-        self.assertEqual(need(data), "together", "day 4: both")
+        self.assertEqual(need(data), (["pip", "mira"], "mira"), "day 4: both")
+
+    def test_on_her_away_day_pip_tells_it(self):
+        """Day 2 of her story: only Pip comes, and her greeting tells why Vesper is gone (roster.today's note).
+        Opened again that day, it's told already: Pip's usual 'Vesper is busy' line instead."""
+        import roster, story
+        from unittest import mock
+        use_roster(self, mira_unlock("2026-10-01", visit_day="2026-10-02", introduced="2026-10-03"))
+        data = self.saved()
+        story.Story(self.vesper())._progress(data).update(step=1)
+        from save import write_save
+        write_save(data)
+        pip_save = Save(temp_path("pip"), {"trust": 10, "points": 465, "quests_done": []})
+        pip_save.gates = pip().gates
+        saves = lambda folder: {"mira": (self.vesper(), self.saved()), "pip": (pip(), pip_save)}[folder]
+        with mock.patch.object(roster, "_save_of", saves):
+            first = roster.today()
+            self.assertEqual((first.members, first.story), (["pip"], "mira"))
+            self.assertIn("Vesper's bakery has been shut", first.note)
+            again = roster.today()
+        self.assertEqual(again.note, pip().fill(lineup("pip")["note"]) + ".")
 
     def test_bad_steps_are_caught(self):
         import character as C
@@ -2102,7 +2284,7 @@ class SummonsTest(unittest.TestCase):
                 C._check_step("step", dict(step), {"happy"})
 
 class RealNameTest(unittest.TestCase):
-    """Vesper's gate 4 (her real name, a private quest): she comes alone on a day it's due (friends.stories_need),
+    """Vesper's gate 4 (her real name, a private quest): she comes alone on a day it's due (roster.stories_need),
     and once you've accepted her, the rest of that sitting is already her stage 5 self (Session.restage)."""
 
     def setUp(self):
@@ -2181,25 +2363,28 @@ class RealNameTest(unittest.TestCase):
         self.assertEqual((trust.stage(s.save), s.shown_stage, s.restage_due), (4, 2, False))
 
     def test_she_comes_alone_on_the_day_its_due(self):
-        import friends
         from unittest import mock
-        pip_save = Save(temp_path("pip"), {"trust": 10, "points": 465, "quests_done": [], "friend": {
-            "folder": "mira", "invited_on": "2026-10-01", "visit_day": "2026-10-02", "introduced": "2026-10-03"}})
-        always_together = lambda options, weights: ["together"]
+        roster = use_roster(self, mira_unlock("2026-10-01", visit_day="2026-10-02", introduced="2026-10-03"))
+        pip_save = Save(temp_path("pip"), {"trust": 10, "points": 465, "quests_done": []})
+        pip_save.gates = pip().gates
+        always_together = lambda options, weights: [lineup("pip", "mira")]
         def plan(vesper_save, day):
-            with mock.patch.object(friends, "_friends_save", lambda c: (self.vesper(), vesper_save)):
-                return friends.plan(pip_save, pip(), today=day, pick=always_together)
+            saves = {"mira": (self.vesper(), vesper_save), "pip": (pip(), pip_save)}
+            with mock.patch.object(roster, "_save_of", lambda folder: saves[folder]):
+                return roster.today(day=day, pick=always_together)
         at_gate = self.saved()
-        self.assertTrue(friends.private_due(at_gate, self.vesper()))
-        self.assertEqual(plan(at_gate, datetime.date(2026, 11, 1)), "only_friend")
-        self.assertFalse(friends.by_story(pip_save), "not a story: Pip's usual 'busy today' line explains it")
+        self.assertTrue(roster.private_due(at_gate, self.vesper()))
+        alone = plan(at_gate, datetime.date(2026, 11, 1))
+        self.assertEqual(alone.members, ["mira"])
+        self.assertIsNone(alone.story, "not a story...")
+        self.assertIn("busy looking after the chapel", alone.note, "...so Pip's usual 'busy today' line explains it")
         below = self.saved()
         below["points"] = trust.TRUST_POINTS[7]  # (still climbing stage 4: nothing due)
-        self.assertFalse(friends.private_due(below, self.vesper()))
-        self.assertEqual(plan(below, datetime.date(2026, 11, 2)), "together", "the usual chances")
+        self.assertFalse(roster.private_due(below, self.vesper()))
+        self.assertEqual(plan(below, datetime.date(2026, 11, 2)).members, ["pip", "mira"], "the usual chances")
         done = self.saved()
         done["quests_done"].append("major-real-name")
-        self.assertEqual(plan(done, datetime.date(2026, 11, 3)), "together")
+        self.assertEqual(plan(done, datetime.date(2026, 11, 3)).members, ["pip", "mira"])
 
 class DirectionsTest(unittest.TestCase):
     def test_a_cue_is_told_apart_from_the_user(self):
