@@ -172,9 +172,11 @@ private = true  # (remembered, but never in her prompt with Pip there)
 memory = "Pip nearly found out that Vesper could dreamwalk long before her lessons. Vesper vanished for a day, came back hurt, and told the user that someone dangerous pays her to watch Pip. The user told her to keep Pip safe."
 points = 10
 
-# Like Pip's run-away story, but with Pip in it. Each step's day says who has to come (friends.plan brings them):
-#   day      "together" both, "alone" only Vesper, "away" only Pip, who tells the step in her greeting
-#   ends     "duet" = the step is a chat with Pip on a set topic (duet = {starts, about}); "answer" = she judges
+# Like Pip's run-away story, but with Pip in it. Each step says who has to come (roster.today brings them):
+#   needs    the folders of exactly who comes that day, the first one leading (hers among them)
+#   told_by  she stays away, and this one comes alone and tells the step in her greeting (opens is about the teller)
+#            (or the older day = "together" / "alone" / "away", said about Pip, who invited her)
+#   ends     "duet" = the step is a chat on a set topic (duet = {starts, about, with}); "answer" = she judges
 #            your messages with a hidden [done] / [not yet] tag until one settles it (done_when, needs_nice;
 #            waiting_on = what she asked, so she answers you instead of saying her opening again)
 #            "day" = the step lasts the whole day (any number of visits), over on a later day
@@ -183,18 +185,18 @@ points = 10
 #            an epilogue
 # injured is only ever hers on day 3: the epilogue (day 4) is her usual self, hiding it from Pip
 [[major_quests.3.steps]]  # day 1, both here: in a chat, Pip nearly finds her out
-day = "together"
+needs = ["pip", "mira"]
 opens = "she's in her usual cheerful, teasing mood"
 note = "(Not part of the message: if Pip asks how {name} learned dreamwalking so fast, {they} is caught completely off guard, because {they} could dreamwalk long before Pip's lessons. {They} laughs it off badly, stammers something silly, and changes the subject. {They} never says the truth.)"
 ends = "duet"
-duet = { starts = "pip", about = "how Vesper learned dreamwalking so quickly, when it took Pip years, asked out of the blue and full of admiration" }
+duet = { starts = "pip", with = "mira", about = "how Vesper learned dreamwalking so quickly, when it took Pip years, asked out of the blue and full of admiration" }
 
 [[major_quests.3.steps]]  # day 2, only Pip comes: Vesper has vanished (written about Pip: she tells it)
-day = "away"
+told_by = "pip"
 opens = "she's worried sick: her best friend Vesper's bakery has been shut since yesterday, the ovens cold, and nobody on the street knows where Vesper went. She asks the user whether Vesper said anything to them"
 
 [[major_quests.3.steps]]  # day 3, only Vesper comes: back, hurt, and she confesses
-day = "alone"
+needs = ["mira"]
 opens = "she's back, bruised and stiff and moving carefully, and laughs it off at first. Then she confesses quietly: after Pip nearly found her out, the people she reports to called her home, there was a fight, and she fell, and was brought back. Someone dangerous pays her to watch Pip's chapel, and her next report is due. She asks the user whether she should keep reporting on Pip"
 mood = "injured"
 note = "(Not part of the message: {name} is hurt and sore all over today, and it shows in how {they} talks and moves. {They} has just come back from being called home.)"
@@ -208,7 +210,7 @@ lingers = 1
 lingers_note = "(Not part of the message: {name} is still sore and bruised from the fight back home, and it shows a little in how {they} moves and talks, though {they} jokes about it.)"
 
 [[major_quests.3.steps]]  # day 4, both here: she looks her usual self, but her back still aches (she hides why)
-day = "together"
+needs = ["pip", "mira"]
 opens = "she seems her usual cheerful self, but she winces and rubs her back now and then, and mentions it's aching. She blames hauling heavy flour sacks at the bakery"
 note = "(Not part of the message: {name}'s back and body still ache, and now and then {they} mentions it lightly, rubbing {their} back or wincing. {They} says it's from hauling heavy flour sacks at the bakery, and if asked about yesterday or the day before, {they} says {they} was down with a fever.)"
 ends = "day"  # (the whole day: open the app again that day and her back still aches)

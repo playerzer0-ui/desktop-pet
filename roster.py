@@ -80,7 +80,7 @@ def rules(path=None):
     return {"on_screen": on_screen, "unlocks": unlocks, "lineups": lineups}
 
 def _partner(folder, r, among=None):
-    """Who `folder` comes along with in a story told by two (story.py's "together" / "away"): the one who invited
+    """Who `folder` comes along with in a story step that says day = "together" / "away": the one who invited
     her, else the first one she invited (among = only those, if given). None if nobody."""
     for u in r["unlocks"]:
         if u["who"] == folder and (among is None or u["by"] in among):
@@ -260,18 +260,22 @@ def private_due(data, character):
     return bool(quest and quest["private"])
 
 def stories_need(settled, r, day=None):
-    """The lineup a story step needs today (story.day_needed), as a Need, or None. The invited ones' stories are
-    asked first (in roster.toml's order), then the first character's. With no story step waiting, a private major
-    quest that's due brings that one on her own."""
+    """The lineup a story step needs today (story.who_comes: its needs, told_by or day), as a Need, or None. The
+    invited ones' stories are asked first (in roster.toml's order), then the first character's. A step that needs
+    someone who can't come yet (not invited, or before her own first day) waits. With no story step waiting, a
+    private major quest that's due brings that one on her own."""
     order = [u["who"] for u in r["unlocks"] if u["who"] in settled] + [DEFAULT]
     for folder in order:
         partner = _partner(folder, r, settled)
-        if partner is None:
-            continue
         c, data = _save_of(folder)
-        wanted = story.day_needed(data, c, day)
-        if wanted:
-            members = {"together": _pair(folder, partner, r), "alone": [folder], "away": [partner]}[wanted]
+        step = story.next_step(data, c, day)
+        wanted = step and story.who_comes(step, folder, partner)
+        if not wanted:
+            continue
+        members = wanted[0]
+        if step.get("day") == "together":  # (said about her partner: the one who invited the other leads)
+            members = _pair(folder, partner, r)
+        if set(members) <= set(settled):
             return Need(members, owner=folder)
     for folder in order:
         c, data = _save_of(folder)
@@ -280,12 +284,16 @@ def stories_need(settled, r, day=None):
     return None
 
 def _tell_for(teller, settled, r, day=None):
-    """On a day `teller` comes alone because someone's story keeps that one away (an "away" step), what she says
-    about it in her greeting (a stage direction's text), and that step is over. Else None."""
+    """On a day `teller` comes alone because someone's story keeps that one away (a step told_by her, or a
+    day = "away" step of her partner's), what she says about it in her greeting (a stage direction's text), and that
+    step is over. Else None."""
     for folder in settled:
-        if folder == teller or _partner(folder, r, settled) != teller:
+        if folder == teller:
             continue
         c, data = _save_of(folder)
+        step = story.next_step(data, c, day)
+        if not step or (step.get("told_by") != teller and _partner(folder, r, settled) != teller):
+            continue
         told = story.tell(data, c, Character(teller), day)
         if told:
             return told + "."

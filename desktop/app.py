@@ -35,14 +35,15 @@ def duration(minutes):
         parts.append(f"{mins} minute{'s' if mins != 1 else ''}")
     return " ".join(parts)
 
-def story_mood(character, lineup):
-    """The mood her story has her in today (story.mood_today), from her save, or None."""
+def story_mood(character, present):
+    """The mood her story has her in today (story.mood_today), from her save, or None.
+    present = the folders of everyone on the desktop with her (hers among them)."""
     save = load_save(character.save_path)
     save.gates = character.gates
     for key, empty in (("points", 0), ("quests_done", [])):  # (a save that's never been opened has neither)
         save.setdefault(key, empty)
     story.catch_up(save, character)  # (a story step that lasted all of an earlier day is over)
-    return story.mood_today(save, character, lineup)
+    return story.mood_today(save, character, present)
 
 class App:
     def __init__(self, character, resting=False, away=False, scene=None, slot=0, greeting_note=None):
@@ -55,7 +56,7 @@ class App:
         self.scene = scene
         company = [c.name for c in scene.characters if c is not character] if scene else []
         self.body, self.bubble = Body(character.sprites, character.portal), Bubble()
-        mood = story_mood(character, "together" if scene else "alone")
+        mood = story_mood(character, [c.folder for c in scene.characters] if scene else [character.folder])
         if mood:  # (her story has her hurt today, say: it shows from the portal on, not only after she speaks)
             self.body.set_mood(mood)
         self.input = InputBox(character.name)

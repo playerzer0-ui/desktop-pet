@@ -63,7 +63,7 @@ class Character:
             raise ValueError("with_friend_stage must be a trust stage, 1-5 (or left out: no mask)")
         self.quests = [(quest_id, int(stage), about)
                        for stage, asks in c["quests"].items() for quest_id, about in asks.items()]
-        self.major_quests = _major_quests(c.get("major_quests", {}), self.moods | self.story_moods)
+        self.major_quests = _major_quests(c.get("major_quests", {}), self.moods | self.story_moods, folder)
         # stage -> {id, starts, done_when, memory, points}, or a story over several days: {id, memory, points, steps}
         self.first_visit = c.get("first_visit")  # what their very first greeting is about (a stage direction), or None
         self.sprites = os.path.join(self.dir, "sprites")
@@ -143,7 +143,7 @@ def _by_stage(toml, key, required):
         raise ValueError(f"[{key}] needs a line for stage 1 (they have a daily_minutes limit)")
     return table
 
-def _major_quests(tables, moods):
+def _major_quests(tables, moods, folder=None):
     """[major_quests.N] from character.toml, checked: one per stage 1-4 at most, with every field filled in.
     Either one moment (starts, done_when) or a story told in steps over several days (steps: see story.py)."""
     found = {}
@@ -168,14 +168,28 @@ def _major_quests(tables, moods):
         except re.error as e:
             raise ValueError(f"{where} answer_words isn't a valid pattern: {e}")
         for i, step in enumerate(q.get("steps", []), 1):
-            _check_step(f"{where} step {i}", step, moods)
+            _check_step(f"{where} step {i}", step, moods, folder)
         if "steps" in q and not q["steps"]:
             raise ValueError(f"{where} has no steps")
         found[int(stage)] = q
     return found
 
-def _check_step(where, step, moods):
-    """One step of a story quest (story.py), with its defaults filled in."""
+def is_character(folder):
+    """True if character/<folder>/ is a character (has a character.toml)."""
+    return isinstance(folder, str) and os.path.isfile(os.path.join(HERE, "character", folder, "character.toml"))
+
+def folder_of(name):
+    """The folder of the character who goes by this name ("Vesper" -> "mira"), or None."""
+    root = os.path.join(HERE, "character")
+    for folder in sorted(os.listdir(root)):
+        if is_character(folder):
+            with open(os.path.join(root, folder, "character.toml"), "rb") as f:
+                if tomllib.load(f)["name"] == name:
+                    return folder
+    return None
+
+def _check_step(where, step, moods, folder=None):
+    """One step of a story quest (story.py), with its defaults filled in. folder = whose quest it is."""
     if "opens" not in step:
         raise ValueError(f"{where} is missing: opens")
     step.setdefault("leaves", False)
@@ -185,14 +199,7 @@ def _check_step(where, step, moods):
         raise ValueError(f'{where}: ends must be "after_it", "goodbyes", "duet", "answer" or "day"')
     if not isinstance(step.setdefault("completes", False), bool):
         raise ValueError(f"{where}: completes must be true or false (the quest is done when this step ends)")
-    if step.get("day", "together") not in ("together", "alone", "away"):
-        raise ValueError(f'{where}: day must be "together", "alone" or "away"')
-    if step.get("day") == "away" and step["ends"] != "after_it":
-        raise ValueError(f'{where}: an "away" step is told by her friend in their greeting, so it ends "after_it"')
-    if step["ends"] == "duet" and not {"starts", "about"} <= set(step.get("duet", {})):
-        raise ValueError(f'{where} ends with a duet, so it needs: duet = {{ starts = "<folder>", about = "..." }}')
-    if step["ends"] == "duet" and step.get("day") != "together":
-        raise ValueError(f'{where} ends with a duet, so it needs day = "together"')
+    _check_who(where, step, folder)
     if step["ends"] == "answer" and "done_when" not in step:
         raise ValueError(f"{where} ends with an answer, so it needs: done_when")
     step.setdefault("needs_nice", False)
@@ -210,3 +217,43 @@ def _check_step(where, step, moods):
         raise ValueError(f"{where}: mood {step['mood']!r} isn't one of the character's moods")
     if not isinstance(step["away_days"], int) or step["away_days"] < 0:
         raise ValueError(f"{where}: away_days must be a whole number, 0 or more")
+
+def _check_who(where, step, folder=None):
+    """Who has to be on the desktop for a story step (story.who_comes), one of:
+        needs = ["pip", "mira"]   exactly these come (folders, the first one leads), her own folder among them
+        told_by = "pip"           she stays away, and this one comes on her own and tells the step in her greeting
+        day = "together" / "alone" / "away"   the same, said about the one she comes with (roster.py's partner)
+    Or none of them: whoever comes that day. A step that ends with a duet chats with someone there."""
+    said = [key for key in ("needs", "told_by", "day") if key in step]
+    if len(said) > 1:
+        raise ValueError(f"{where}: use one of needs, told_by and day, not {' and '.join(said)}")
+    if "day" in step and step["day"] not in ("together", "alone", "away"):
+        raise ValueError(f'{where}: day must be "together", "alone" or "away"')
+    needs = step.get("needs")
+    if needs is not None:
+        if not isinstance(needs, list) or not needs or len(set(needs)) != len(needs):
+            raise ValueError(f"{where}: needs must be a list of different folders")
+        for f in needs:
+            if not is_character(f):
+                raise ValueError(f"{where}: needs {f!r}, which isn't a character in character/")
+        if folder and folder not in needs:
+            raise ValueError(f"{where}: needs must include {folder!r} herself (a step she's away for: told_by)")
+    if "told_by" in step:
+        if not is_character(step["told_by"]) or step["told_by"] == folder:
+            raise ValueError(f"{where}: told_by must be another character's folder in character/")
+    told = "told_by" in step or step.get("day") == "away"
+    if told and step["ends"] != "after_it":
+        raise ValueError(f"{where}: a step told for her while she's away (told_by, or day = \"away\") is told "
+                         'in a greeting, so it ends "after_it"')
+    if step["ends"] == "duet":
+        duet = step.get("duet", {})
+        if not {"starts", "about"} <= set(duet):
+            raise ValueError(f'{where} ends with a duet, so it needs: duet = {{ starts = "<folder>", about = "..." }}')
+        if step.get("day") != "together" and len(needs or []) < 2:
+            raise ValueError(f'{where} ends with a duet, so it needs two there: needs = ["...", "..."] '
+                             '(or day = "together")')
+        for key in ("starts", "with"):
+            if key in duet and needs and duet[key] not in needs:
+                raise ValueError(f"{where}: duet {key} = {duet[key]!r} isn't one of needs")
+        if duet.get("with") == duet["starts"]:
+            raise ValueError(f"{where}: a duet is with someone else (with = {duet['with']!r} starts it too)")

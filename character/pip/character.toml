@@ -162,6 +162,8 @@ points = 10
 #                  and ignoring daily_minutes
 #   goodbyes, begs, leaves_line   for ends = "goodbyes": how many, what she says when she begs to stay, and when
 #                  she finally goes
+#   needs, told_by who has to be on the desktop for the step (folders): needs = exactly these, told_by = she stays
+#                  away and that one comes and tells it (see Vesper's summons). Left out = whoever comes that day
 # The quest is done (points, memory) when the last step ends.
 [[major_quests.3.steps]]  # day 1: something is wrong at the chapel
 opens = "she suddenly feels that something is wrong at the chapel back home, as if something terrible has happened there. She apologizes, says she has to hurry back right now, and leaves in a rush"

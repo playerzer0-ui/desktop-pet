@@ -13,18 +13,19 @@ Its progress is kept in the save:
 
     story.away(save)                      at launch: she's away today (only the portal shows, no note)
     story.ignores_time_limit(save, c)     the step she's in ignores daily_minutes
-    story.day_needed(save, c)             who has to come for her next step: "together", "alone", "away" or None
-    story.tell(save, c, teller)           a step her friend tells for her ("away"): the text, and the step is over
+    story.needed(save, c, partner)        who has to come for her next step: (folders, teller), or None if anyone may
+    story.tell(save, c, teller)           a step someone tells for her (told_by): the text, and the step is over
     s = story.Story(character)            one per sitting: begin_text, note, mood, after_reply, goodbye,
                                           duet / duet_done, answer_note / answered
 
-For a character with a friend on the desktop (roster.py), a story can be told by both of them, like Vesper's
-summons (day 1 together: Pip nearly finds her out in a chat; day 2 only Pip, worried she's gone; day 3 only
-Vesper, hurt, and she confesses). Each step can say:
-    day = "together"   both have to be there (roster.today brings both that day)
-          "alone"      only she comes
-          "away"       only her friend comes, and tells this step in their greeting (opens is written about the friend)
-    ends = "duet"      the step is a chat with her friend on a set topic (duet = {starts, about}), and ends with it
+A story can be told by several characters (roster.today brings whoever a step needs), like Vesper's summons
+(day 1 with Pip: Pip nearly finds her out in a chat; day 2 only Pip, worried she's gone; day 3 only Vesper, hurt, and
+she confesses). Each step can say who comes (folders; see character._check_who):
+    needs = ["pip", "mira"]   exactly these come, the first one leading (hers among them)
+    told_by = "pip"           she stays away; this one comes alone and tells the step in her greeting (opens is
+                              written about the teller)
+    day = "together" / "alone" / "away"   the same, said about the one she comes with (roster.py's partner)
+    ends = "duet"      the step is a chat on a set topic (duet = {starts, about, with}), and ends with it
     ends = "answer"    like a single-moment major quest: she judges your messages with a hidden [done] / [not yet]
                        tag (done_when, needs_nice) until one settles it; waiting_on = what she asked
     ends = "day"       the step lasts the whole day it begins on, however many visits (its note on every line of
@@ -98,25 +99,55 @@ def _lingering_step(left, character):
                 return step
     return None
 
-def mood_today(save, character, lineup=None, today=None):
+def fits(step, owner, present):
+    """True if this step of `owner`'s can be played with these on the desktop (present = their folders, hers
+    among them; None = not known: then only a step that needs nobody in particular)."""
+    if "needs" in step:
+        return present is not None and set(present) == set(step["needs"])
+    if "told_by" in step or step.get("day") == "away":
+        return False  # (told by someone else while she's away: see tell)
+    day = step.get("day")
+    if day is None:
+        return True
+    if present is None:
+        return False
+    return len(present) > 1 if day == "together" else list(present) == [owner]
+
+def who_comes(step, owner, partner=None):
+    """Who has to come for this step: (folders, the first one leading; the teller, if someone tells it for her),
+    or None if anyone may. partner = who she comes with, for a step that says day = "together" / "away"."""
+    if "needs" in step:
+        return list(step["needs"]), None
+    if "told_by" in step:
+        return [step["told_by"]], step["told_by"]
+    day = step.get("day")
+    if day == "alone":
+        return [owner], None
+    if day == "together" and partner:
+        return [owner, partner], None
+    if day == "away" and partner:
+        return [partner], partner
+    return None
+
+def mood_today(save, character, present=None, today=None):
     """The mood her story has her in when she arrives (so her portal shows it, not neutral first): the step she's
-    in, or the one her greeting will begin (on a day with the right lineup), or a lingering one. Else None."""
+    in, or the one her greeting will begin (with the right ones on the desktop: present), or a lingering one."""
     step = current_step(save, character) or next_step(save, character, today)
-    if step and step.get("day") in (None, lineup) and not away(save, today):
+    if step and fits(step, character.folder, present) and not away(save, today):
         return step.get("mood")  # (a step beginning today: its mood, or none, whatever the last one left behind)
     left = lingering(save, today, character)
     return left["mood"] if left else None
 
-def day_needed(save, character, today=None):
-    """Who has to come for her next step ("together", "alone" or "away": see the top), or None if anyone may."""
+def needed(save, character, partner=None, today=None):
+    """Who has to come for her next step (who_comes), or None if anyone may (or no step is waiting)."""
     step = next_step(save, character, today)
-    return step.get("day") if step else None
+    return who_comes(step, character.folder, partner) if step else None
 
 def tell(save, character, teller, today=None):
-    """A step of hers that her friend tells ("away"), if it's due: its text (written about the teller, filled in for
-    them, for their greeting), and the step is over. Else None."""
+    """A step of hers that `teller` tells for her (told_by, or day = "away"), if it's due: its text (written about
+    the teller, filled in for them, for their greeting), and the step is over. Else None."""
     step = next_step(save, character, today)
-    if not step or step.get("day") != "away":
+    if not step or not (step.get("told_by") == teller.folder or step.get("day") == "away"):
         return None
     story = Story(character)
     story._progress(save)["begun"] = True
@@ -141,20 +172,20 @@ class Story:
             save["story"] = {"quest": quest["id"], "step": 0, "begun": False, "back_on": None, "goodbyes": 0}
         return save["story"]
 
-    def begin_text(self, save, greeting, today=None, lineup=None):
+    def begin_text(self, save, greeting, today=None, present=None):
         """What she says to begin a step now (a stage direction's text), or None.
         greeting = it's her greeting: any step that's due begins there. Otherwise it's a nudge on her own, and only
         the first step begins that way (when trust reaches the gate mid-sitting).
-        lineup = who's on the desktop: "together" (with her friend) or "alone". A step with a day only begins on
-        such a day ("away" steps never do here: her friend tells them, see tell)."""
+        present = the folders of who's on the desktop: a step that needs certain ones only begins with them there
+        (a step told for her never does here: see tell)."""
         today = today or datetime.date.today()
         progress = self._progress(save)
         if progress is None:
             return None
         if progress["begun"] or (progress["step"] > 0 and not greeting) or away(save, today):
             return None
-        day = _quest(self.character, progress["quest"])["steps"][progress["step"]].get("day")
-        if day and day != lineup:
+        step = _quest(self.character, progress["quest"])["steps"][progress["step"]]
+        if not fits(step, self.character.folder, present):
             return None
         progress.update(begun=True, back_on=None, begun_on=today.isoformat())
         save.pop("lingering", None)  # (a new step: the last one's lingering mood is over, even on the same day)
@@ -162,18 +193,18 @@ class Story:
         self.opening_now = True
         return self.character.fill(_quest(self.character, progress["quest"])["steps"][progress["step"]]["opens"])
 
-    def note(self, save, lineup=None):
+    def note(self, save, present=None):
         """The step's hidden note for each of her replies while it lasts (pet.ask's note), or the note of a mood
-        lingering after one (like Vesper still hurt after her confession), or None. (lineup: not used yet.)"""
+        lingering after one (like Vesper still hurt after her confession), or None. (present: not used yet.)"""
         step = current_step(save, self.character)
         if step and step.get("note"):
             return self.character.fill(step["note"])
         left = lingering(save, character=self.character)
         return self.character.fill(left["note"]) if left and left.get("note") else None
 
-    def mood(self, save, lineup=None):
+    def mood(self, save, present=None):
         """The mood she's stuck in while the step lasts, or while it lingers after (whatever her own tag says).
-        (lineup: not used yet.)"""
+        (present: not used yet.)"""
         step = current_step(save, self.character)
         if step and step.get("mood"):
             return step["mood"]

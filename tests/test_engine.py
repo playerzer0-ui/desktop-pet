@@ -2044,6 +2044,8 @@ class SceneTest(unittest.TestCase):
         self.assertIn('Pip is on the desktop with her today, and just greeted the user, saying: '
                       '"This is my best friend Vesper!"', cue)
 
+ALONE, BOTH = ["mira"], ["mira", "pip"]  # (who's on the desktop with Vesper: story.fits)
+
 class SummonsTest(unittest.TestCase):
     """Vesper's gate 3 story, told by both of them (story.py's day, duet and answer steps), on temporary saves:
     day 1 together, Pip nearly finds her out in a chat; day 2 only Pip, worried; day 3 only Vesper, hurt."""
@@ -2089,11 +2091,12 @@ class SummonsTest(unittest.TestCase):
         from desktop import check
         v = Character("mira")
         steps = v.major_quests[3]["steps"]
-        self.assertEqual([s.get("day") for s in steps], ["together", "away", "alone", "together"])
+        self.assertEqual([(s.get("needs"), s.get("told_by")) for s in steps],
+                         [(["pip", "mira"], None), (None, "pip"), (["mira"], None), (["pip", "mira"], None)])
         self.assertEqual([s["ends"] for s in steps], ["duet", "after_it", "answer", "day"])
         self.assertEqual([s["completes"] for s in steps], [False, False, True, False], "your answer opens stage 4")
         self.assertEqual([s.get("mood") for s in steps], [None, None, "injured", None], "injured: day 3 only")
-        self.assertEqual(steps[0]["duet"]["starts"], "pip")
+        self.assertEqual((steps[0]["duet"]["starts"], steps[0]["duet"]["with"]), ("pip", "mira"))
         self.assertEqual((steps[2]["mood"], v.story_moods), ("injured", {"injured"}))
         self.assertNotIn("injured", v.moods, "the model would pick injured on its own")
         self.assertEqual(check.mood_problems(v), [])
@@ -2102,7 +2105,7 @@ class SummonsTest(unittest.TestCase):
     def test_the_whole_story(self):
         import story
         # day 1: alone, her story waits (it needs Pip); together, it begins, and wants its chat with Pip
-        self.assertEqual(story.day_needed(self.saved(), self.vesper()), "together")
+        self.assertEqual(story.needed(self.saved(), self.vesper()), (["pip", "mira"], None))
         s = self.sitting()
         s.open()
         self.assertIsNone(s.snapshot()["summary"]["story_duet"], "it began without Pip there")
@@ -2115,13 +2118,13 @@ class SummonsTest(unittest.TestCase):
         self.assertEqual(s.story_duet_done(), "next")
         self.assertIsNone(s.snapshot()["summary"]["story_duet"])
         # day 2: only Pip comes, and tells it
-        self.assertEqual(story.day_needed(self.saved(), self.vesper()), "away")
+        self.assertEqual(story.needed(self.saved(), self.vesper()), (["pip"], "pip"))
         data = self.saved()
         told = story.tell(data, self.vesper(), pip())
         self.assertIn("Vesper's bakery has been shut", told)
         self.assertIsNone(story.tell(self.saved(), self.vesper(), pip()), "told once")
         # day 3: only Vesper, hurt; your answer settles it
-        self.assertEqual(story.day_needed(self.saved(), self.vesper()), "alone")
+        self.assertEqual(story.needed(self.saved(), self.vesper()), (["mira"], None))
         s = self.sitting()
         turn = s.open()
         self.assertEqual(turn.mood, "injured", "she should be hurt all day")
@@ -2137,13 +2140,13 @@ class SummonsTest(unittest.TestCase):
         self.assertIn("major-the-summons", saved["quests_done"])
         self.assertIn("came back hurt", saved["memories"][-1]["text"])
         s.close()
-        self.assertEqual(story.mood_today(self.saved(), self.vesper(), "alone"), "injured", "back alone today: hurt")
-        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), "together"),
+        self.assertEqual(story.mood_today(self.saved(), self.vesper(), ALONE), "injured", "back alone today: hurt")
+        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), BOTH),
                           "day 4 played the same day (a test): the injury showed")
         # day 4, both again: her usual self (not injured), her back aching, which she blames on flour sacks
-        self.assertEqual(story.day_needed(self.saved(), self.vesper()), "together")
+        self.assertEqual(story.needed(self.saved(), self.vesper()), (["pip", "mira"], None))
         tomorrow = datetime.date.today() + datetime.timedelta(days=1)
-        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), "together", tomorrow), "still injured")
+        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), BOTH, tomorrow), "still injured")
         s = self.sitting(company=["Pip"])
         turn = s.open(("Pip", "Good morning!"))
         self.assertIn("flour sacks", s.messages[-2]["content"])
@@ -2179,10 +2182,10 @@ class SummonsTest(unittest.TestCase):
     def test_hurt_from_the_portal_on(self):
         import story
         self.day3()
-        self.assertEqual(story.mood_today(self.saved(), self.vesper(), "alone"), "injured")
-        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), "together"), "day 3 is hers alone")
+        self.assertEqual(story.mood_today(self.saved(), self.vesper(), ALONE), "injured")
+        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), BOTH), "day 3 is hers alone")
         from desktop import app as A
-        self.assertEqual(A.story_mood(self.vesper(), "alone"), "injured")
+        self.assertEqual(A.story_mood(self.vesper(), ALONE), "injured")
 
     def test_she_answers_you_instead_of_saying_her_opening_again(self):
         self.day3()
@@ -2209,7 +2212,7 @@ class SummonsTest(unittest.TestCase):
         self.assertTrue(s.snapshot()["summary"]["mood_locked"])
         tomorrow = datetime.date.today() + datetime.timedelta(days=1)
         self.assertIsNone(story.lingering(self.saved(), tomorrow), "injured is for day 3 only")
-        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), "alone", tomorrow), "injured again, alone")
+        self.assertIsNone(story.mood_today(self.saved(), self.vesper(), ALONE, tomorrow), "injured again, alone")
 
     def test_with_pip_there_she_wears_her_mask(self):
         """'so how was yesterday?' had Vesper tell the user, with Pip right there, that someone pays her to watch
@@ -2275,13 +2278,60 @@ class SummonsTest(unittest.TestCase):
 
     def test_bad_steps_are_caught(self):
         import character as C
+        duet = {"starts": "pip", "about": "x"}
         for step, problem in [({"opens": "x", "ends": "duet", "day": "together"}, "needs: duet"),
-                              ({"opens": "x", "ends": "duet", "duet": {"starts": "pip", "about": "x"}}, "day"),
+                              ({"opens": "x", "ends": "duet", "duet": duet}, "two there"),
+                              ({"opens": "x", "ends": "duet", "needs": ["mira"], "duet": duet}, "two there"),
+                              ({"opens": "x", "ends": "duet", "needs": ["pip", "mira"],
+                                "duet": dict(duet, starts="nobody")}, "isn't one of needs"),
+                              ({"opens": "x", "ends": "duet", "needs": ["pip", "mira"],
+                                "duet": dict(duet, **{"with": "pip"})}, "someone else"),
                               ({"opens": "x", "ends": "answer"}, "done_when"),
                               ({"opens": "x", "day": "away", "ends": "answer", "done_when": "x"}, "away"),
+                              ({"opens": "x", "told_by": "pip", "ends": "answer", "done_when": "x"}, "after_it"),
+                              ({"opens": "x", "told_by": "nobody"}, "told_by"),
+                              ({"opens": "x", "told_by": "mira"}, "told_by"),
+                              ({"opens": "x", "needs": ["pip"]}, "herself"),
+                              ({"opens": "x", "needs": ["mira", "nobody"]}, "isn't a character"),
+                              ({"opens": "x", "needs": []}, "list"),
+                              ({"opens": "x", "needs": ["mira"], "day": "alone"}, "one of"),
                               ({"opens": "x", "day": "sometimes"}, "day must be")]:
             with self.subTest(step=step), self.assertRaisesRegex(ValueError, problem):
-                C._check_step("step", dict(step), {"happy"})
+                C._check_step("step", dict(step), {"happy"}, "mira")
+
+    def test_the_older_day_words_still_work(self):
+        """day = "together" / "alone" / "away": said about her partner (the one who invited her)."""
+        import story
+        self.assertEqual(story.who_comes({"day": "together"}, "mira", "pip"), (["mira", "pip"], None))
+        self.assertEqual(story.who_comes({"day": "alone"}, "mira", "pip"), (["mira"], None))
+        self.assertEqual(story.who_comes({"day": "away"}, "mira", "pip"), (["pip"], "pip"))
+        self.assertIsNone(story.who_comes({"day": "together"}, "mira"), "nobody to come with")
+        self.assertIsNone(story.who_comes({}, "mira", "pip"), "anyone may come")
+        self.assertTrue(story.fits({"day": "together"}, "mira", ["mira", "pip"]))
+        self.assertFalse(story.fits({"day": "together"}, "mira", ["mira"]))
+        self.assertTrue(story.fits({"day": "alone"}, "mira", ["mira"]))
+        self.assertFalse(story.fits({"day": "away"}, "mira", ["pip"]), "told for her, never played by her")
+        self.assertTrue(story.fits({"needs": ["pip", "mira"]}, "mira", ["mira", "pip"]))
+        self.assertFalse(story.fits({"needs": ["pip", "mira"]}, "mira", ["mira"]))
+        self.assertFalse(story.fits({"needs": ["mira"]}, "mira", None), "not known: only a step needing nobody")
+        import roster
+        from unittest import mock
+        legacy = lambda data, c, day=None: {"day": "together"} if c.folder == "mira" else None
+        with mock.patch.object(story, "next_step", legacy), \
+                mock.patch.object(roster, "_save_of", lambda folder: (Character(folder), {})):
+            need = roster.stories_need(["pip", "mira"], roster.rules())
+        self.assertEqual((need.members, need.owner), (["pip", "mira"], "mira"), "Pip invited her: Pip leads")
+
+    def test_a_step_needing_someone_not_here_yet_waits(self):
+        import roster, story
+        from unittest import mock
+        later = lambda data, c, day=None: {"needs": ["mira", "nova"]} if c.folder == "mira" else None
+        with mock.patch.object(story, "next_step", later), \
+                mock.patch.object(roster, "_save_of", lambda folder: (Character(folder), {})), \
+                mock.patch.object(roster, "private_due", lambda data, c: False):
+            self.assertIsNone(roster.stories_need(["pip", "mira"], roster.rules()), "Nova can't come yet")
+            need = roster.stories_need(["pip", "mira", "nova"], roster.rules())
+        self.assertEqual((need.members, need.owner), (["mira", "nova"], "mira"), "once she can: she leads, as written")
 
 class RealNameTest(unittest.TestCase):
     """Vesper's gate 4 (her real name, a private quest): she comes alone on a day it's due (roster.stories_need),
