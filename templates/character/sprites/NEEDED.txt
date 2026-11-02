@@ -1,0 +1,14 @@
+One PNG per mood in character.toml's moods (and story_moods), named after the mood, transparent background,
+the same size as Pip's and Vesper's (character/pip/sprites/, character/mira/sprites/):
+
+happy.png
+neutral.png
+sad.png
+worried.png
+scared.png
+angry.png
+regretful.png
+nostalgic.png
+bored.png
+
+Delete this file once they're in.

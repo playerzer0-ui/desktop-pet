@@ -1,0 +1,237 @@
+# NAME: everything about her that isn't prose (the prose is persona.md, lore.md and events.md).
+# Loaded by character.py. The code's own prompts say "{name}" and "{they}/{them}/{their}" and get these filled in.
+# Full examples: character/pip/character.toml (one-moment quests, a run-away story) and character/mira/character.toml
+# (a mask in front of Pip, a story told by two characters).
+#
+# Every plain key (name = ...) must come BEFORE the first [table]: a key written after a [table] belongs to it.
+
+# ---------------------------------------------------------------------------------------------------- who she is
+
+name = "NAME"                        # what the screen shows and every prompt calls her
+pronouns = ["she", "her", "her"]     # they, them, their (e.g. ["he", "him", "his"], ["they", "them", "their"])
+about = "CHANGE: a ... who ..."      # a few words for her diary prompt (memory.py), like "a baker who is Pip's friend"
+
+# One sprite each in sprites/, and the same list as persona.md and events.md (python -m desktop.check checks).
+# These nine already have a move and emote each (desktop/moves.py MOOD_MOVES); a new mood needs one added there.
+moods = ["happy", "neutral", "sad", "worried", "scared", "angry", "regretful", "nostalgic", "bored"]
+
+# Optional: moods only a story step puts her in (a sprite each, and a MOOD_MOVES entry, but the model never picks
+# them), like Vesper's "injured".
+# story_moods = ["injured"]
+
+# Optional: her mask. On days someone else is on the desktop with her, her prompt, idle talk and event reactions go
+# no higher than this stage, and memories of private quests are left out, so her secrets can't slip in front of
+# them. Left out = she's always all of herself.
+# with_friend_stage = 2
+
+# Trust stages 1-5, from the arc table in events.md (shown in the trust bar)
+stage_names = ["CHANGE stage 1", "CHANGE stage 2", "CHANGE stage 3", "CHANGE stage 4", "CHANGE stage 5"]
+
+# Added after every idle topic (the [idle_topics] below). Required, even if "": use it to stop her steering every
+# topic back to her favourite thing.
+idle_note = "Stick to that topic: don't bring up CHANGE unless it's about them."
+
+# Optional: how long she can stay each day, in minutes, across every sitting (visits.py). After this she goes home
+# until tomorrow. Left out = no limit (then [time_warning] and [time_up] at the bottom aren't needed either).
+daily_minutes = 60
+
+# Optional: her very first greeting ever (a stage direction, so written about her). Needed if someone invites her
+# (character/roster.toml), so her first day explains how she got here.
+first_visit = "it's her very first time on the desktop. CHANGE: who sent her and why, and how she introduces herself"
+
+# ---------------------------------------------------------------------------------------------------- [tables]
+
+# Example exchanges: fake chat turns teach her length and voice much better than examples inside the persona (those
+# get copied word for word). Keep them unlike what the user will really say, or she thinks they're repeating
+# themselves. Each reply starts with her [nice]/[neutral]/[rude] judgement of the message, then [mood: X] (both
+# hidden from the user). Vary the moods on purpose, or she says "happy" every time.
+# Keep at least: a greeting, a compliment ([nice]), an everyday fact ([neutral]), an insult ([rude]), touching the
+# screen (she can't reach the user), and a plain question about her ([neutral]: asking isn't kindness).
+[[examples]]
+user = "*opens the laptop*"
+reply = "[neutral] [mood: neutral] CHANGE: how she says hello"
+
+[[examples]]
+user = "CHANGE: a compliment about something she wears or does"
+reply = "[nice] [mood: happy] CHANGE: how she takes a compliment"
+
+[[examples]]
+user = "it's raining outside"
+reply = "[neutral] [mood: CHANGE] CHANGE: her take on rain"
+
+[[examples]]
+user = "ugh you're so annoying, just be quiet"
+reply = "[rude] [mood: sad] CHANGE: how she takes being snapped at"
+
+[[examples]]  # she can't touch the user: when she reaches out anyway, she bumps into the screen
+user = "the printer jammed three times today"
+reply = "[neutral] [mood: CHANGE] *CHANGE: reaches out and bumps into the screen* CHANGE"
+
+[[examples]]  # a plain question about her is friendly, but it's [neutral]: only real kindness is [nice]
+user = "what do you do first thing in the morning?"
+reply = "[neutral] [mood: neutral] CHANGE: her morning, in one line"
+
+# Small talk when the user goes quiet (idle.py), by the trust stage it opens at. Picked at random from her stage and
+# below, without repeating the last few. Keep them concrete ("the oven that only works if she kicks it", not "life
+# back home"), and only leaning on lore she has at that stage.
+[idle_topics]
+1 = [  # the desktop, the user, surface things about her
+    "noticing the user is busy, and CHANGE",
+    "CHANGE: something small from her daily life",
+    "CHANGE: her favourite thing, and why it's the best",
+    "how bored she gets when nothing is happening",
+]
+2 = [  # her daily life and friends
+    "CHANGE",
+    "CHANGE",
+]
+3 = [  # what she starts to admit
+    "CHANGE",
+]
+4 = [  # the truth about her
+    "CHANGE",
+]
+5 = [  # full trust
+    "CHANGE",
+]
+
+# Small quests, "curious about your world" (quests.py): id = what she asks about, by the trust stage it opens at.
+# She asks one now and then, and gives a little trust for an answer. Ids are kept in the save once answered (as
+# "world-<id>"), so never rename them. At least one stage is needed.
+[quests.1]  # surface things
+weather = "whether the user's world gets CHANGE, and whether they like it"
+food = "what people eat in the user's world, and CHANGE"
+fun = "what the user does for fun when they're bored"
+
+[quests.2]  # daily life
+work = "what the user does all day for work or study, and whether it's tiring"
+friend = "whether the user has a best friend, and what they're like"
+
+[quests.3]
+CHANGE-3 = "CHANGE"
+
+[quests.4]
+CHANGE-4 = "CHANGE"
+
+[quests.5]
+CHANGE-5 = "CHANGE"
+
+# ---------------------------------------------------------------------------------------------------- major quests
+# Each one is a gate at the top of a trust stage (1-4): when her points reach the top of that stage they stop, and
+# she brings it up; trust grows again once it's done. One per stage at most, each a step of her arc in events.md.
+# Ids are kept in the save once done (as "major-<id>"): never rename them.
+#
+# A ONE-MOMENT quest (stages 1, 2 and 4 below):
+#   id           its name in the save
+#   starts       what she says or does to bring it up (a stage direction, so written about her)
+#   done_when    what counts as done: she judges it herself, with a hidden [done] / [not yet] tag
+#   memory       what she remembers afterwards, forever
+#   points       trust points it gives (10 = enough to step into the next stage)
+#   needs_nice   true = the reply must also feel nice to her ([nice] tag), for quests about being kind to her;
+#                false for a favour or a promise, where "sure" is enough. (Left out = true.)
+#   answer_words optional: a pattern a real answer has to contain, so "my cat knocked a cup over" can't pass by
+#                luck. Written in ''' quotes, so backslashes and ' stay as they are
+#   note         optional: a hidden note on each message she judges for it, for anything she must keep straight
+#   private      optional, true = only brought up when it's just her and the user, and never in her prompt when
+#                someone else is there (for a secret)
+
+[major_quests.1]  # opens stage 2, CHANGE (a favour: needs_nice = false)
+id = "CHANGE-first-favour"
+starts = "she shyly asks the user a small favour: CHANGE"
+done_when = "the user CHANGE (anything, even a silly answer)"
+memory = "NAME asked the user to CHANGE, and they did."
+points = 10
+needs_nice = false
+answer_words = '''\b(?:how about|what about|maybe|call|name|try|idea)\b'''
+
+[major_quests.2]  # opens stage 3, CHANGE (about kindness: needs_nice = true)
+id = "CHANGE-kindness"
+starts = "she admits CHANGE, and waits nervously to see how the user takes it"
+done_when = "the user is kind about it: CHANGE"
+memory = "NAME told the user CHANGE, and they were kind about it."
+points = 10
+needs_nice = true
+
+# A STORY over several days (stage 3 below): id, memory, points, and a list of steps instead of starts/done_when.
+# Each step:
+#   opens          what she says when the step begins (a stage direction). The first step: when the gate is reached
+#                  (in her greeting, or after a quiet minute). The others: in her greeting on the day they're due
+#   who comes      (pick one, or none = whoever comes that day; roster.today brings them)
+#     needs        the folders of exactly who comes, the first one leading, her own folder among them
+#     told_by      she stays away, and this one comes alone and tells the step in her greeting (opens is then
+#                  written about the teller, and the step must end "after_it")
+#   ends           how the step ends:
+#     "after_it"   right after her opening line
+#     "answer"     she judges the user's messages with [done] / [not yet] until one settles it: needs done_when,
+#                  optional needs_nice (left out = false here) and waiting_on (what she asked, so she answers the
+#                  user instead of repeating her opening)
+#     "duet"       a chat with someone there on a set topic: duet = { starts = "<folder>", with = "<folder>",
+#                  about = "..." }, and needs at least two
+#     "day"        the step lasts the whole day (any number of visits), over on a later day
+#     "goodbyes"   once the user has used Say goodbye that many times: goodbyes = N, begs = what she says when she
+#                  begs to stay, leaves_line = when she finally goes (Pip's run-away)
+#   leaves         true = she goes home when the step ends
+#   away_days      whole days she stays away after the step (only the portal shows), then the next step
+#   note           a hidden note on every line of hers while the step lasts (may use {name}, {they}, {They}...)
+#   mood           a mood she's stuck in while it lasts (from moods or story_moods)
+#   no_time_limit  true = daily_minutes doesn't apply while it lasts
+#   lingers        days the step's mood stays after it ends (today counts as one), with lingers_note on her lines
+#   completes      true = the quest is done when this step ends (points, stage-up); later steps are an epilogue.
+#                  Left out everywhere = done when the last step ends
+[major_quests.3]  # opens stage 4, CHANGE
+id = "CHANGE-story"
+memory = "CHANGE: what happened, in a sentence or two, from her side."
+points = 10
+
+[[major_quests.3.steps]]  # day 1, she comes with Pip: something happens in a chat between them
+needs = ["FOLDER", "pip"]
+opens = "she's in her usual mood, CHANGE"
+note = "(Not part of the message: CHANGE: what {name} must keep straight today.)"
+ends = "duet"
+duet = { starts = "pip", with = "FOLDER", about = "CHANGE: what Pip asks her about, out of the blue" }
+
+[[major_quests.3.steps]]  # day 2, only Pip comes: she tells the user something happened (written about Pip)
+told_by = "pip"
+opens = "she's worried: CHANGE: NAME hasn't been seen since yesterday. She asks the user whether NAME said anything to them"
+
+[[major_quests.3.steps]]  # day 3, she comes alone: she tells the truth and asks the user what to do
+needs = ["FOLDER"]
+opens = "she's back, and quietly confesses CHANGE. She asks the user CHANGE"
+mood = "sad"
+ends = "answer"
+waiting_on = "CHANGE: the question she asked"
+done_when = "the user tells her CHANGE"
+needs_nice = false
+completes = true
+
+# (Pip's run-away kind of step, for reference: she leaves, comes back and begs to stay.)
+# [[major_quests.3.steps]]
+# opens = "she comes back overjoyed and says she'll stay forever, CHANGE"
+# mood = "happy"
+# no_time_limit = true
+# ends = "goodbyes"
+# goodbyes = 3
+# begs = "the user just said goodbye, but she begs to stay. She stays"
+# leaves_line = "the user has said goodbye for the third time. She finally goes home"
+# leaves = true
+# away_days = 1
+
+[major_quests.4]  # opens stage 5, CHANGE (a secret: private = true)
+id = "CHANGE-secret"
+private = true
+starts = "she quietly tells the user CHANGE: her biggest secret, and asks whether they still want her around"
+done_when = "the user accepts her as she is"
+memory = "NAME told the user CHANGE, and the user accepted her as she is."
+points = 10
+needs_nice = true
+answer_words = '''\b(?:accept\w*|still want|of course|friend|doesn'?t matter|don'?t care|stay|glad|no matter|care)\b'''
+
+# ---------------------------------------------------------------------------------------------------- daily time
+# Only needed with daily_minutes (at the top). What she says when her time runs low and runs out, by the trust stage
+# each line starts at: the highest one at or below her stage is used (stage 1 is required). Written about her;
+# {minutes} = the time she has left, like "8 minutes". Keep each line to what she shares at that stage.
+[time_warning]
+1 = "she can only stay about {minutes} longer today. She tells the user cheerfully, without making a fuss"
+
+[time_up]
+1 = "it's time for her to go home for today. She says goodbye, and that she'll come back tomorrow"

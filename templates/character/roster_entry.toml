@@ -1,0 +1,29 @@
+# Paste these into character/roster.toml (not into her folder), under the matching sections there, and fill them in.
+# Delete this file from her folder afterwards.
+
+# --- who invites her ---
+# At trust at_trust, on her way out (Say goodbye, or when her time is up), `by` invites her instead of saying her
+# usual goodbye. The next day she comes on her own (first_visit in her character.toml), and from the day after that
+# she can come in the lineups below.
+# `by` must be someone who can already come (Pip, or someone invited earlier in the file).
+[[unlocks]]
+who = "FOLDER"
+by = "pip"
+at_trust = 10
+invite = "before she goes, she tells the user CHANGE: that tomorrow NAME will come instead of her, and why. Then she says goodbye warmly"
+memory = "Pip told the user she would send NAME to the desktop."
+introduce = "today she has brought NAME along, who is standing right beside her on the desktop. She introduces NAME: CHANGE"
+
+# --- who comes on a given day ---
+# Picked once a day from the lineups whose members have all had their first day, by weight (any whole numbers).
+# members: the first one leads. At most on_screen of them (the top of roster.toml). note: in the leader's greeting,
+# why the others aren't here (a stage direction about the leader; optional). Add lineups with her alone, with each
+# friend, or several at once (raise on_screen first).
+[[lineups]]
+members = ["FOLDER", "pip"]
+weight = 20
+
+[[lineups]]
+members = ["FOLDER"]
+weight = 10
+note = "CHANGE: why her friends couldn't come today, so {they} came on {their} own"

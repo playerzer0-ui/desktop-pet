@@ -1,0 +1,39 @@
+# Copy to character/duets/FOLDER-pip.toml (her folder and the other one's, either order, one file per pair), not
+# into her folder. Delete this file from her folder afterwards.
+#
+# NAME and Pip chatting with each other on the desktop (duets.py), on days they come together. After a few quiet
+# minutes one of them starts a little chat with the other, they take turns for a few lines, and the last line wraps
+# it up. Nobody earns trust from it, and the user can't talk to them until it's over.
+
+every = [4, 10]  # minutes of quiet (nobody talking, nobody typing) before they chat: random in this range
+lines = [3, 4]   # how many lines a chat has: random in this range
+
+# Topics, by the trust stage they open at: the LOWER of the two characters' stages. Each one only leans on lore both
+# of them have at that stage, and never on a secret the other doesn't know.
+#   starts   who starts the chat (a folder: one of the two in the file name)
+#   about    what about (it finishes "starts a little chat with her about ...")
+
+[[topics]]
+stage = 1
+starts = "FOLDER"
+about = "CHANGE: teasing Pip about something small"
+
+[[topics]]
+stage = 1
+starts = "pip"
+about = "CHANGE: Pip fussing over NAME"
+
+[[topics]]
+stage = 2
+starts = "FOLDER"
+about = "CHANGE: their daily lives back home"
+
+[[topics]]
+stage = 3
+starts = "pip"
+about = "CHANGE"
+
+[[topics]]
+stage = 5
+starts = "FOLDER"
+about = "CHANGE: something warm between them"

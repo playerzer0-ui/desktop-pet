@@ -3293,5 +3293,54 @@ class StartupFailureTest(unittest.TestCase):
             session.Session = real
         self.assertEqual(got, ["Can't find llama-server.exe. Install it with: winget install ggml.llamacpp"])
 
+class TemplateTest(unittest.TestCase):
+    """templates/character/ is the blank character to copy when adding a new one. Copied into a throwaway game folder
+    (as FOLDER, next to Pip and Vesper), with its roster entry and duet file put where they belong, it passes the same
+    checks as python -m desktop.check, so it never drifts out of date with the code. It has no sprites (only a list)."""
+
+    def test_the_template_character_passes_the_cast_check(self):
+        from unittest import mock
+        import character, duets
+        from desktop import check
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        template = os.path.join(repo, "templates", "character")
+        game = tempfile.mkdtemp(prefix="pet-template-")
+        try:
+            cast = os.path.join(game, "character")
+            for folder in ("pip", "mira", "duets"):
+                shutil.copytree(os.path.join(repo, "character", folder), os.path.join(cast, folder))
+            shutil.copytree(template, os.path.join(cast, "FOLDER"))
+            shutil.copy(os.path.join(template, "duet.toml"), os.path.join(cast, "duets", "FOLDER-pip.toml"))
+            with open(os.path.join(repo, "character", "roster.toml"), encoding="utf-8") as f:
+                rules = f.read()
+            with open(os.path.join(template, "roster_entry.toml"), encoding="utf-8") as f:
+                rules += "\n" + f.read()
+            with open(os.path.join(cast, "roster.toml"), "w", encoding="utf-8") as f:
+                f.write(rules)
+            with mock.patch.object(character, "HERE", game), mock.patch.object(roster, "HERE", game), \
+                    mock.patch.object(roster, "RULES", os.path.join(cast, "roster.toml")), \
+                    mock.patch.object(duets, "DUET_DIR", os.path.join(cast, "duets")):
+                self.assertIn("FOLDER", [u["who"] for u in roster.rules()["unlocks"]])
+                problems = check.cast_problems()
+                new = Character("FOLDER")
+        finally:
+            shutil.rmtree(game, ignore_errors=True)
+        self.assertEqual([p for p in problems if not p.startswith("NAME: character/FOLDER/sprites/ is missing")], [])
+        self.assertEqual(new.name, "NAME")
+        self.assertEqual(sorted(new.major_quests), [1, 2, 3, 4])
+        self.assertEqual(len(new.major_quests[3]["steps"]), 3)
+        self.assertEqual(len(new.events), 2)
+        # the guide lives in README.md: persona.md and lore.md go into her prompt as they are, so they have no notes
+        for name in ("persona.md", "lore.md"):
+            with open(os.path.join(template, name), encoding="utf-8") as f:
+                self.assertNotIn("<!--", f.read())
+
+    def test_the_game_never_loads_the_template(self):
+        """It's outside character/, so it isn't a character, and the build (which packs character/) leaves it out."""
+        import character
+        self.assertFalse(character.is_character("FOLDER"))
+        self.assertNotIn("NAME", character.cast())
+        self.assertEqual([u["who"] for u in roster.rules()["unlocks"]], ["mira"])
+
 if __name__ == "__main__":
     unittest.main()
