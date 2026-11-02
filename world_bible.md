@@ -35,7 +35,7 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 6. **The death of Sally**: Libera studies magic for a couple of years, learns how to kill a god, and kills Sally with space-time magic. Her followers take the name Heaven
 7. **Too late**: the gods attempt damage control, but their power is now little to none
 8. **The departure (August 14)**: before leaving, Everlily gives all of her power to Republicia, keeping back only a tiny blessing that she places in one temple lamp as her last gift to Pip (the last warm lamp). The remaining gods leave the world
-9. **Present day (10 years later)**: the factions rule. Fountains are gatekept, and some have been destroyed to protect power. The ancient library is scheduled for demolition soon
+9. **Present day (10 years later)**: the factions rule. Fountains are gatekept, and some have been destroyed to protect power. The ancient library is scheduled to be torn down on November 20, 2026 (see 4)
 
 ## 4. Recurring dates
 | Date | Event | Notes |
@@ -187,7 +187,7 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 ### 7.5 The ancient library
 - Its knowledge is outdated next to the fountains, but it is open to anyone
 - A good alternative now that the fountains are gatekept
-- Scheduled for demolition soon
+- Torn down on November 20, 2026 (see 4). Write character lines about it so they read true both before and after that day
 
 ---
 

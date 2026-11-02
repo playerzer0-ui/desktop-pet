@@ -1,4 +1,6 @@
-"""A startup check that every list of a character's moods agrees. For Pip they live in five places:
+"""Startup checks of the character files: mistakes that would otherwise fail quietly, found before anything starts.
+
+Each character's moods (mood_problems) agree. For Pip they live in five places:
 
     character/pip/character.toml   moods = [...]: the ones pet.ask() accepts from her tag (anything else is dropped)
     character/pip/persona.md       the list the model is told to choose from
@@ -9,10 +11,14 @@
 A mood missing from one of them fails quietly (a dropped tag, an event that never waits, a sprite that never
 shows), so main() refuses to start until they match.
 
-    python -m desktop.check [character]    run it on its own (Pip if no character is named)
+And the cast as a whole (cast_problems): character/roster.toml, every character in it (even one not invited yet,
+so a mistake shows up the day you add her, not weeks later), the folders their story steps name, and the duet files.
+
+    python -m desktop.check [character]    run it on its own (the whole cast, and this character if she isn't in it)
 """
 import os, re, sys
-from character import Character, DEFAULT
+import duets, roster
+from character import Character, DEFAULT, is_character
 from desktop import moves
 
 def persona_moods(text):
@@ -59,6 +65,67 @@ def mood_problems(character):
             problems.append(f"event '{e['name']}' has Mood after: '{e['mood_after']}', which {toml} doesn't have")
     return problems
 
+def cast_problems(also=()):
+    """Every mistake in the cast's files, as readable lines (an empty list = all good): roster.toml, each character
+    in it (and `also`: folders opened by name that aren't in it), their story steps' folders, and the duet files."""
+    try:
+        r = roster.rules()
+    except (ValueError, OSError) as e:
+        return [f"character/roster.toml: {e}"]
+    cast = [DEFAULT] + [u["who"] for u in r["unlocks"]]
+    problems = []
+    for folder in cast + [f for f in also if f not in cast]:
+        try:
+            c = Character(folder)
+        except (ValueError, KeyError, OSError) as e:  # (a missing field, a bad value, a file that isn't there)
+            problems.append(f"character/{folder}: {type(e).__name__}: {e}")
+            continue
+        problems += [f"{c.name}: {p}" for p in mood_problems(c)]
+        problems += step_problems(c, cast, r["on_screen"])
+    problems += duet_problems()
+    return problems
+
+def step_problems(character, cast, on_screen):
+    """Story steps (story.py) that name someone who isn't in the cast (the step would wait forever), or need more
+    on the desktop than on_screen allows."""
+    problems = []
+    for stage, quest in sorted(character.major_quests.items()):
+        for i, step in enumerate(quest.get("steps", []), 1):
+            where = f"{character.name}'s [major_quests.{stage}] step {i}"
+            needs = step.get("needs") or []
+            named = needs + [step.get("told_by")] + [step.get("duet", {}).get(k) for k in ("starts", "with")]
+            for folder in dict.fromkeys(f for f in named if f):
+                if folder not in cast:
+                    problems.append(f"{where} names {folder!r}, who isn't in the cast (character/roster.toml): "
+                                    "the step would wait for her forever")
+            if len(needs) > on_screen:
+                problems.append(f"{where} needs {len(needs)} on the desktop, but on_screen in roster.toml is "
+                                f"{on_screen}")
+    return problems
+
+def duet_problems():
+    """Duet files (character/duets/<one>-<other>.toml) named for folders that aren't characters, the same pair
+    twice, or with a mistake inside."""
+    problems, seen = [], {}
+    for name in sorted(os.listdir(duets.DUET_DIR)) if os.path.isdir(duets.DUET_DIR) else []:
+        if not name.endswith(".toml"):
+            continue
+        folders = name[:-5].split("-", 1)
+        if len(folders) != 2 or not all(is_character(f) for f in folders):
+            problems.append(f"character/duets/{name}: its name should be <folder>-<folder>.toml, two characters "
+                            "in character/")
+            continue
+        pair = frozenset(folders)
+        if pair in seen:
+            problems.append(f"character/duets/{name} and {seen[pair]} are the same pair: only one of them is used")
+            continue
+        seen[pair] = name
+        try:
+            duets.Pair(os.path.join(duets.DUET_DIR, name))
+        except (ValueError, KeyError, OSError) as e:
+            problems.append(f"character/duets/{name}: {e}")
+    return problems
+
 if __name__ == "__main__":
-    found = mood_problems(Character(sys.argv[1] if len(sys.argv) > 1 else DEFAULT))
-    print("\n".join(found) or "all mood lists match")
+    found = cast_problems(also=sys.argv[1:2])
+    print("\n".join(found) or "the cast's files are all good")

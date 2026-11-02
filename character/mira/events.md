@@ -99,7 +99,7 @@ CONTENT
 - Reaction by stage:
   - Stage 2: acts quiet / says her friend Pip prays all day today, so she brought her soup
   - Stage 3: acts soft / explains it's the day the gods left, ten years ago, and that Pip still waits for an answer
-  - Stage 4: acts uneasy / admits that Feras leaving is the reason Lind can bring people back with no price at all
+  - Stage 4: acts uneasy / admits people in the Bloodcult whisper that Lind's old pact with Feras is why he can bring anyone back with no price at all, and that the pact still holds now that the gods are gone
   - Stage 5: acts gentle / says she sat with Pip and prayed too, just to keep her company
 - Unlocks: none
 - Tone note: a quiet day. Vesper isn't religious; she's there for her friend

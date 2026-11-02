@@ -155,10 +155,11 @@ class App:
         """Her right-click menu. Talking, Status and memories wait while she's talking (they'd cut her reply short)."""
         menu = QMenu()
         talking = self.talking
-        menu.addAction("Talk to her", self.talk).setEnabled(
+        say = self.character.fill  # (her own name and pronouns: "Talk to him" for a he)
+        menu.addAction(say("Talk to {them}"), self.talk).setEnabled(
             self.body.here and not talking and not self.others_talking() and not self.saying_goodbye
             and not self.leaving)
-        for label, action in (("Status", self.status), ("What she remembers", self.memories)):
+        for label, action in (("Status", self.status), (say("What {they} remembers"), self.memories)):
             menu.addAction(label, action).setEnabled(not talking)
         menu.addSeparator()
         menu.addAction("Say goodbye", self.leave)
@@ -177,7 +178,7 @@ class App:
             return
         entries = self.snap["memories"]
         if not entries:
-            self.bubble.say("*tilts her head* We've only just met!", stay=5)
+            self.bubble.say(self.character.fill("*tilts {their} head* We've only just met!"), stay=5)
             return
         recent = "<br>".join(f"✎ {m['text']}" for m in entries[-4:])
         self.bubble.say(f"*smiles* I remember {len(entries)} things about you.", stay=12,
@@ -206,7 +207,8 @@ class App:
             else:
                 QApplication.quit()
             return
-        self.bubble.say("*writes in her little diary*", note=self._note("saying goodbye…", GRAY))
+        self.bubble.say(self.character.fill("*writes in {their} little diary*"),
+                        note=self._note("saying goodbye…", GRAY))
         self.brain.close()
 
     # --- her ---
@@ -312,25 +314,29 @@ class App:
         if turn.feeling == "nice":
             emote = "heart"  # you were kind to her
         self.body.emote(emote)
-        notes = []
+        notes, say = [], self.character.fill
         if turn.kind == "quest":
-            notes.append(self._note("✦ She's curious about your world. Answer her to earn her trust!", GOLD))
+            notes.append(self._note(say("✦ {They} is curious about your world. Answer {them} to earn {their} trust!"),
+                                    GOLD))
         if turn.quest_done:
-            notes.append(self._note("✦ Quest complete: she learned something about your world", GOLD))
+            notes.append(self._note(say("✦ Quest complete: {they} learned something about your world"), GOLD))
         if turn.major_raised:
-            notes.append(self._note("✻ Something is on her mind. Her trust can only grow once you answer it", GOLD))
+            notes.append(self._note(say("✻ Something is on {their} mind. {Their} trust can only grow once you answer it"),
+                                    GOLD))
         if turn.major_done:
-            notes.append(self._note("✻ A turning point: she'll remember this, and her trust can grow again", ROSE))
+            notes.append(self._note(say("✻ A turning point: {they}'ll remember this, and {their} trust can grow again"),
+                                    ROSE))
         if turn.trust_after > turn.trust_before:
             notes.append(self._note(f"♥ {self.character.name} trusts you more · trust {turn.trust_after}/10", ROSE))
         if turn.stage_up:
             stage, name = turn.stage_after
-            notes.append(self._note(f"✻ Stage {stage} · {name}: she'll open up more next time", ROSE))
+            notes.append(self._note(f"✻ Stage {stage} · {name}: " + say("{they}'ll open up more next time"), ROSE))
         self.bubble.finish("<br>".join(notes))
         self.follow()
 
     def on_closed(self, notes):
-        said = f"✎ She'll remember {len(notes)} new thing{'s' if len(notes) != 1 else ''} from today" if notes else ""
+        said = (self.character.fill("✎ {They}'ll remember ") + f"{len(notes)} new thing{'s' if len(notes) != 1 else ''}"
+                " from today") if notes else ""
         if self.story_leaving:  # (she's said her own goodbye: no wave, no "see you tomorrow", she just fades)
             if said:
                 self.bubble.say("", note=self._note(said, GRAY), stay=2.5)
@@ -407,18 +413,17 @@ def main(folder=DEFAULT):
     app = QApplication.instance() or QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     data.prepare()  # (the player's folder, config.DATA: saves, logs, cache, the model; old files moved there once)
+    problems = check.cast_problems(also=[folder])  # (every character's files, before any of them is loaded)
+    if problems:
+        raise SystemExit("Some character files have mistakes (python -m desktop.check lists them again):\n  - "
+                         + "\n  - ".join(problems))
     character = Character(folder)
     running = one_at_a_time(character)  # (kept until the app exits: that's what holds the lock. Before the model
                                         #  download, so two copies never download it at once)
-    if not download.ensure_model(character.name):  # first launch: the model (~3 GB), in its own window
+    if not download.ensure_model(character):  # first launch: the model (~3 GB), in its own window
         return
     plan = roster.today(folder)  # (who comes today: character/roster.toml, saves/roster.json)
     cast = [Character(f) for f in plan.members]
-    for c in cast:
-        problems = check.mood_problems(c)
-        if problems:
-            raise SystemExit(f"{c.name}'s mood lists don't match (see desktop/check.py):\n  - "
-                             + "\n  - ".join(problems))
     lead = cast[0]  # (she decides for everyone: her story, her daily time)
     save = load_save(lead.save_path)
     # her story sent her home for now, or she invited someone today: she doesn't come out (and no model is started)

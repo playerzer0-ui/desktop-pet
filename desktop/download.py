@@ -73,11 +73,12 @@ class _Bridge(QObject):  # (the download runs on its own thread; Qt widgets only
     finished = Signal(str)  # "" when done, else what went wrong ("stopped" if the player closed it)
 
 class DownloadWindow(QWidget):
-    def __init__(self, name="Pip"):
+    def __init__(self, who=None):
         super().__init__(None, Qt.Window | Qt.WindowStaysOnTopHint)
         self.setWindowTitle("Desktop Pet: first launch")
         self.setFixedWidth(440)
-        self.title = QLabel(f"{name} needs her mind before she can visit.")
+        line = "{name} needs {their} mind before {they} can visit."
+        self.title = QLabel(who.fill(line) if who else "Your desktop pet needs a mind before visiting.")
         self.title.setFont(QFont("Segoe UI", 11, QFont.Bold))
         self.text = QLabel(f"It's a one-time download of {_size(config.MODEL_SIZE)}. If it's interrupted, "
                            "it carries on from where it stopped next time.", wordWrap=True)
@@ -151,12 +152,12 @@ class DownloadWindow(QWidget):
             self.done.quit()
         super().closeEvent(e)
 
-def ensure_model(name="Pip"):
+def ensure_model(who=None):
     """True once the model is there: right away if it already is, else after the download window is done.
     False if the player closed the window (the game should quit then). Needs a QApplication."""
     if os.path.exists(config.MODEL):
         return True
-    window = DownloadWindow(name)
+    window = DownloadWindow(who)
     window.show()
     window.start()
     window.done.exec()

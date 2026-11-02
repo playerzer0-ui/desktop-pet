@@ -853,6 +853,62 @@ class FriendTest(unittest.TestCase):
         s.open()
         self.assertNotIn(mira.fill(mira.first_visit), s.messages[-2]["content"], "only the very first time")
 
+class CastCheckTest(unittest.TestCase):
+    """desktop/check.py's cast_problems: mistakes across characters, found before anything starts."""
+
+    def test_the_real_files_are_all_good(self):
+        from desktop import check
+        self.assertEqual(check.cast_problems(), [])
+
+    def test_a_step_needing_more_than_fit_on_screen(self):
+        import roster
+        from desktop import check
+        from unittest import mock
+        r = roster.rules()
+        with mock.patch.object(roster, "rules", lambda: dict(r, on_screen=1)):
+            problems = check.cast_problems()
+        self.assertTrue(any("Vesper's [major_quests.3] step 1 needs 2 on the desktop, but on_screen" in p
+                            for p in problems), problems)
+
+    def test_a_step_naming_someone_not_in_the_cast(self):
+        """Vesper opened by name, with nobody invited in roster.toml: her steps name her, who isn't in the cast."""
+        import roster
+        from desktop import check
+        from unittest import mock
+        with mock.patch.object(roster, "rules", lambda: {"on_screen": 2, "unlocks": [], "lineups": []}):
+            problems = check.cast_problems(also=["mira"])
+        self.assertTrue(any("names 'mira', who isn't in the cast" in p for p in problems), problems)
+
+    def test_a_character_that_doesnt_load(self):
+        from desktop import check
+        problems = check.cast_problems(also=["nobody"])
+        self.assertTrue(any(p.startswith("character/nobody:") for p in problems), problems)
+
+    def test_duet_files(self):
+        import duets
+        from desktop import check
+        from unittest import mock
+        folder = tempfile.mkdtemp(dir=TMP)
+        real = os.path.join(duets.DUET_DIR, "pip-mira.toml")
+        for name in ("pip-mira.toml", "mira-pip.toml", "pip-nobody.toml"):
+            shutil.copy(real, os.path.join(folder, name))
+        with open(os.path.join(folder, "mira-mira.toml"), "w", encoding="utf-8") as f:
+            f.write('[[topics]]\nstage = 1\nstarts = "pip"\nabout = "x"\n')
+        with mock.patch.object(duets, "DUET_DIR", folder):
+            problems = check.duet_problems()
+        self.assertTrue(any("pip-nobody.toml: its name" in p for p in problems), problems)
+        self.assertTrue(any("are the same pair" in p for p in problems), problems)
+        self.assertTrue(any("mira-mira.toml" in p and "starts = 'pip'" in p for p in problems), problems)
+
+    def test_the_game_wont_start_with_a_mistake(self):
+        from desktop import app as A
+        from unittest import mock
+        with mock.patch.object(A.data, "prepare", lambda: []), \
+                mock.patch.object(A.check, "cast_problems", lambda also=(): ["Pip: sprites/ is missing: happy"]):
+            with self.assertRaises(SystemExit) as e:
+                A.main("pip")
+        self.assertIn("Pip: sprites/ is missing: happy", str(e.exception.code))
+
 class RosterTest(unittest.TestCase):
     """roster.py: character/roster.toml checked, and saves/roster.json made from the old saves once."""
 
@@ -1284,7 +1340,7 @@ class DesktopTest(unittest.TestCase):
         b.finish()
         self.assertEqual(b.page, "Fresh start.")
 
-    def app(self, loaded=True, resting=False, away=False):
+    def app(self, loaded=True, resting=False, away=False, character=None):
         """The App with a stand-in brain; a.brain.calls lists what it was asked to do (start, close, ...)."""
         from desktop import app as A
         class Signal:
@@ -1300,7 +1356,7 @@ class DesktopTest(unittest.TestCase):
         real = A.Brain
         A.Brain = lambda character, **kw: StubBrain()
         try:
-            a = A.App(pip(), resting=resting, away=away)
+            a = A.App(character or pip(), resting=resting, away=away)
         finally:
             A.Brain = real
         if loaded:
@@ -1372,6 +1428,32 @@ class DesktopTest(unittest.TestCase):
         self.assertEqual(b.height(), b.layout().totalHeightForWidth(b.width()), "the text doesn't fit")
         self.assertEqual(b.geometry().bottom(), 699, "the bubble covers her head")
         b.hide()
+
+    def test_the_screen_uses_his_own_pronouns(self):
+        """Nothing on screen says "her" for a character who isn't a she (pronouns in character.toml)."""
+        from session import Turn
+        from desktop import download
+        him = pip()
+        him.pronouns = {"they": "he", "them": "him", "their": "his"}
+        a = self.app(character=him)
+        menu = a.build_menu()
+        labels = [x.text() for x in menu.actions()]
+        self.assertIn("Talk to him", labels)
+        self.assertIn("What he remembers", labels)
+        a.snap = {"summary": {}, "memories": []}
+        acted = []  # (her *actions* aren't shown as words: they're acted out)
+        a.bubble.acted.connect(acted.append)
+        a.memories()
+        self.assertEqual(acted, ["tilts his head"])
+        a.bubble.start()
+        a.on_spoke(Turn("Do you have rain where you live?", "quest", None, "neutral", 1.0, {}, 3, 3, 15, 15,
+                        major_raised=True))
+        self.assertIn("He is curious about your world. Answer him to earn his trust!", a.bubble.final_note)
+        self.assertIn("Something is on his mind. His trust", a.bubble.final_note)
+        self.assertNotRegex(a.bubble.final_note, r"\b(she|her|She|Her)\b")
+        window = download.DownloadWindow(him)
+        self.assertEqual(window.title.text(), "Pip needs his mind before he can visit.")
+        window.deleteLater()
 
     def test_resting_she_doesnt_come_out(self):
         a = self.app(loaded=False, resting=True)

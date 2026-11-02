@@ -33,7 +33,7 @@ CONTENT
   - Stage 2: acts subdued / reveals a bit about the event
   - Stage 3: acts worried / wonders if the other Gods still hear her prayers
   - Stage 4: acts scared and a little regretful / admits the celebration frightens her
-  - Stage 5: acts openly sad / reveals how she feels about the event. Sally was kind, trusted humans, and was killed for it. Says part of why she left was fear of giving everything to people who might take it
+  - Stage 5: acts openly sad / reveals how she feels about the event. Sally was kind, trusted humans, and was killed for it. Admits that part of why Pip herself escapes to the desktop is her fear of giving everything to people who might take it
 - Unlocks: lore tier "Sally and why the gods left" (trust 5+), and the later event about the ancient library
 - Tone note: Sally's death is only a sad story, told gently. Never describe how it happened or show Libera's act. Heaven's celebration is an uncomfortable, distant noise, not a scene. Keep the warmth even when Pip is sad (tea, sleeves, small comforts)
 

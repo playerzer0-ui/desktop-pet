@@ -32,7 +32,7 @@ idle_note = "Stick to that topic: don't bring up bread, baking or rain unless it
 daily_minutes = 60
 
 # Her very first greeting (session.py, only once ever): Pip, at the highest trust, invited her here (Pip's [friend]).
-first_visit = "it's her very first time on the desktop. Her best friend Pip has been teaching her to dreamwalk and sent her here to rest, and told her all about the user. She introduces herself as Vesper, cheerful and curious, and a little nervous underneath"
+first_visit = "it's her very first time on the desktop. Her best friend Pip has been teaching her to dreamwalk, and sent her here so that she, Vesper, can rest from her long days at the bakery (the rest is for Vesper, not for the user). Pip also told her all about the user. She introduces herself as Vesper, cheerful and curious, and a little nervous underneath"
 
 # (everything from here on is a [table]: any plain key written after one belongs to that table, not the top)
 
