@@ -15,7 +15,7 @@ The rest comes from character.toml: name, pronouns, moods, stage_names, examples
 (Pronouns fill {they} {them} {their}, and {They} etc. at the start of a sentence. The code's prompts are
 written with singular verbs, "{They} greets", which suits she/he.)
 """
-import os, re, tomllib
+import datetime, os, re, tomllib
 import events
 from config import HERE, LOG_DIR, SAVES_DIR
 
@@ -87,15 +87,37 @@ class Character:
         with open(os.path.join(self.dir, name), encoding="utf-8") as f:
             return f.read()
 
-    def staged(self, name, stage):
-        """A file from their folder with only what they're ready to share at this trust stage (see for_stage)."""
-        return for_stage(self.text(name), stage)
+    def staged(self, name, stage, today=None):
+        """A file from their folder with only what they're ready to share at this trust stage (see for_stage), and
+        only the dated lines that are true today (see on_date)."""
+        return for_stage(on_date(self.text(name), today), stage)
 
     def fill(self, text):
         """Put her name and pronouns into a prompt written with {name}, {they}, {them}, {their} (or {They}...)."""
         for key, word in self.pronouns.items():
             text = text.replace("{" + key + "}", word).replace("{" + key.capitalize() + "}", word.capitalize())
         return text.replace("{name}", self.name)
+
+DATED = re.compile(r"\[(until|from) (\d{4}-\d\d-\d\d)\]\s*")
+
+def on_date(text, today=None):
+    """Lines that are only true for a while, for things that happen on a set day (the library's last day):
+        - [until 2026-11-20] the library is to be torn down on November 20, 2026
+        - [from 2026-11-20] the library was torn down on November 20, 2026
+    "until" lines are kept before that day, "from" lines from that day on, with the mark taken out. The model
+    doesn't work it out from the date itself (told it was later, she still said the library was standing).
+    The prompt changes on that day, so it's read once more then (pet.warm_up caches by its text)."""
+    today = (today or datetime.date.today()).isoformat()
+    kept = []
+    for line in text.splitlines():
+        mark = DATED.search(line)
+        if mark:
+            when, day = mark.groups()
+            if (today < day) != (when == "until"):
+                continue
+            line = DATED.sub("", line, count=1)
+        kept.append(line)
+    return "\n".join(kept)
 
 def for_stage(text, stage):
     """Character files are sorted by trust: '# Stage N' blocks, each holding '##'/'###' sections.

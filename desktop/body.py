@@ -131,6 +131,7 @@ class Body(QWidget):
         self.portal_at = time.time()                # when the portal opened (or, once arriving, when she started)
         self.landed = self.portal is None           # she's dropped out of the portal onto the floor
         self.motes, self.vanish_at = [], 0.0        # vanish(): the pieces of her, and when she started going
+        self.keep_clear = lambda: []                # spots she doesn't wander onto (the others: desktop/scene.py)
 
         self.last = time.time()
         self.timer = QTimer(self)
@@ -241,8 +242,7 @@ class Body(QWidget):
             self.facing = 1 if self.target >= self.foot_x else -1
             self.mode, self.phase = "walk", 0.0
         elif self.mode == "idle" and not self.held and not self.staying and now > self.idle_until:
-            left, right = self._screen().left() + SIZE / 2, self._screen().right() - SIZE / 2
-            self.target = max(left, min(right, self.foot_x + random.choice([-1, 1]) * random.uniform(120, 420)))
+            self.target = self._wander_target()
             self.facing = 1 if self.target > self.foot_x else -1
             self.mode, self.phase = "walk", 0.0
 
@@ -270,6 +270,17 @@ class Body(QWidget):
             self.foot_y = floor
         self._place()
         self.update()
+
+    def _wander_target(self, tries=10):
+        """Somewhere along the floor to wander to, not on top of anyone else (keep_clear: where the others stand or
+        are headed, desktop/scene.py). If nowhere is free, she stays where she is."""
+        left, right = self._screen().left() + SIZE / 2, self._screen().right() - SIZE / 2
+        taken = self.keep_clear()
+        for _ in range(tries):
+            x = max(left, min(right, self.foot_x + random.choice([-1, 1]) * random.uniform(120, 420)))
+            if all(abs(x - other) >= SIZE for other in taken):
+                return x
+        return self.foot_x
 
     def _place(self):
         pos = QPoint(int(self.foot_x - W / 2), int(self.foot_y - FEET))

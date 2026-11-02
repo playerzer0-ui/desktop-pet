@@ -31,7 +31,8 @@ CACHE_DIR = os.path.join(DATA, "cache")  # each character's already-read system 
 PORT = int(os.environ.get("PET_PORT", 8080))  # override if port 8080 is taken
 SERVER = f"http://127.0.0.1:{PORT}"  # (not "localhost": on Windows that tries IPv6 ::1 first, where llama-server
                                      #  isn't listening, and every request waited ~2 s for that to fail)
-N_CTX = 8192  # context size
+N_CTX = 12288  # context size, per character (Pip's stage 5 prompt alone is ~4.5k tokens: at 8192 she began
+               # forgetting the chat after about 10 exchanges)
 
 MODEL_FILE = "Qwen3.5-4B-Q5_K_M.gguf"
 # where it's downloaded from (first launch: desktop/download.py; setup.ps1 / setup.sh), and its checksum

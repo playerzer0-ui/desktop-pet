@@ -909,6 +909,70 @@ class CastCheckTest(unittest.TestCase):
                 A.main("pip")
         self.assertIn("Pip: sprites/ is missing: happy", str(e.exception.code))
 
+class TodayTest(unittest.TestCase):
+    def test_dated_lore_lines(self):
+        """[until day] / [from day] lines in a character's files (character.on_date): the library's last day."""
+        from character import on_date
+        text = "## Library\n- always\n- [until 2026-11-20] still open\n- [from 2026-11-20] torn down"
+        before, on_the_day = on_date(text, datetime.date(2026, 11, 19)), on_date(text, datetime.date(2026, 11, 20))
+        self.assertEqual(before, "## Library\n- always\n- still open")
+        self.assertEqual(on_the_day, "## Library\n- always\n- torn down")
+        pip_before = pip().staged("lore.md", 2, datetime.date(2026, 11, 2))
+        pip_after = pip().staged("lore.md", 2, datetime.date(2026, 11, 25))
+        self.assertIn("is to be torn down on November 20, 2026", pip_before)
+        self.assertNotIn("was torn down", pip_before)
+        self.assertIn("was torn down on November 20, 2026", pip_after)
+        self.assertNotIn("is to be torn down", pip_after)
+        self.assertNotIn("[until", pip_before + pip_after)
+
+    def test_the_diary_knows_the_dates_of_the_coming_week(self):
+        """It wrote "exam on Friday 2026-11-05", a Thursday: now it's given the next 7 days' dates. And a note the
+        model wrote as "- - ..." keeps no dash."""
+        from unittest import mock
+        prompts = []
+        def chat(messages, **kw):
+            prompts.append(messages[1]["content"])
+            return "- - The user has an exam on Friday."
+        save = {"trust": 1}
+        lines = [{"role": "user", "content": m} for m in ("I have an exam on Friday", "I'm nervous about it",
+                                                          "I've studied every day this week")]
+        with mock.patch.object(memory.llm, "chat", chat):
+            notes = memory.write_diary(save, lines, 0, pip())
+        friday = next(datetime.date.today() + datetime.timedelta(days=n) for n in range(1, 8)
+                      if (datetime.date.today() + datetime.timedelta(days=n)).weekday() == 4)
+        self.assertIn(friday.strftime("Friday %Y-%m-%d"), prompts[0])
+        self.assertEqual([n["text"] for n in notes], ["The user has an exam on Friday."])
+
+    """She's told today's date (memory.as_message), memories or not: her lore has dated things in it (the library's
+    last day), and without the date she'd talk about them the same way before and after."""
+
+    def test_with_no_memories_she_still_knows_the_date(self):
+        message = memory.as_message({"trust": 1}, pip())
+        today = datetime.date.today().isoformat()
+        self.assertIn(today, message["content"])
+        self.assertIn("same calendar dates", message["content"])
+        self.assertTrue(message["content"].startswith("(Not a message from the user"))
+
+    def test_with_memories_the_date_is_there_too(self):
+        save = {"memories": [{"when": "2026-10-20 10:00", "kind": "note", "text": "The user's name is Jerry."}]}
+        content = memory.as_message(save, pip())["content"]
+        self.assertIn("Right now it is", content)
+        self.assertIn("Jerry", content)
+
+    def test_her_prompt_has_it(self):
+        import session
+        real = session.start_server, session.warm_up
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        try:
+            c = pip()
+            c.save_path = save_with_minutes(0)
+            s = session.Session(c, say=lambda *_: None)
+        finally:
+            session.start_server, session.warm_up = real
+        self.assertIn(datetime.date.today().isoformat(), s.messages[s.keep - 1]["content"])
+        self.assertEqual(s.keep, s.fixed + 1, "after the cached part, so a new day never forces the slow re-read")
+
 class RosterTest(unittest.TestCase):
     """roster.py: character/roster.toml checked, and saves/roster.json made from the old saves once."""
 
@@ -1921,6 +1985,30 @@ class SceneTest(unittest.TestCase):
         picked = [pair.pick(1, rng)["about"] for _ in range(len(stage1) // 2)]
         self.assertEqual(len(set(picked)), len(picked), "a topic came up again too soon")
         self.assertTrue(all(pair.pick(2, rng)["stage"] <= 2 for _ in range(30)))
+
+    def test_they_wander_but_never_onto_each_other(self):
+        """Wandering, she never picks a spot where the other one stands or is headed (Body._wander_target)."""
+        from desktop.body import SIZE
+        scene, _ = self.scene()
+        a, b = scene.pets
+        b.body.foot_x, b.body.target = a.body.foot_x + 150, a.body.foot_x - 200
+        for _ in range(300):
+            x = a.body._wander_target()
+            self.assertTrue(x == a.body.foot_x or all(abs(x - o) >= SIZE for o in (b.body.foot_x, b.body.target)),
+                            f"she'd wander onto the other one: {x}")
+
+    def test_duet_lines_speak_to_each_other_in_new_words(self):
+        """In testing, Pip talked about Vesper instead of to her, Vesper said Pip's line again, and touched Pip's herb
+        back home as if they were there."""
+        import duets
+        ves = Character("mira")
+        first = duets.opener(ves, pip(), {"about": "bread", "starts": "mira", "stage": 1})
+        answer = duets.reply(pip(), ves, "Your bread is flat!")
+        for cue in (first, answer):
+            self.assertIn("speaks straight to", cue)
+            self.assertIn("nothing from back home", cue)
+        self.assertIn("She speaks straight to Pip, not about Pip", first)
+        self.assertIn("never repeating what Vesper just said", answer)
 
     def test_lines_are_stage_directions_with_the_other_ones_words(self):
         import duets

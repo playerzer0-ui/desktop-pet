@@ -109,12 +109,16 @@ MEMORIES = ("(Not a message from the user: these are {name}'s memories from {the
             "anything or that {they} has never talked with the user. Older memories can come back to {them} during the "
             "chat, when something the user says reminds {them}.)\n")
 
+TODAY = ("(Not a message from the user: right now it is {now}. Days in {name}'s world fall on the same calendar "
+         "dates as the user's, so {they} knows what day it is back home too.)")
+
 def as_message(save, character):
-    """The memories as a chat message for the character's prompt (character.py), or None if they have none yet."""
+    """The memories as a chat message for the character's prompt (character.py). With none yet, just today's date
+    (so she knows whether a dated thing in her lore, like the library's last day, has come yet)."""
     memories = in_prompt(save)
-    if not memories:
-        return None
     now = datetime.datetime.now()
+    if not memories:
+        return {"role": "user", "content": character.fill(TODAY).replace("{now}", now.strftime("%A %Y-%m-%d %H:%M"))}
     lines = [f"- {ago(m['when'], now)} ({m['when']}): {m['text']}" for m in memories]
     intro = character.fill(MEMORIES).replace("{now}", now.strftime("%A %Y-%m-%d %H:%M"))
     return {"role": "user", "content": intro + "\n".join(lines)}
@@ -195,7 +199,9 @@ def write_diary(save, messages, start, character, slot=0):
     # shown to her as already remembered: what's in her prompt, plus old notes this sitting mentions (so a change
     # to one of them, like an exam that's now done, is written as an update)
     shown = [m["text"] for m in in_prompt(save) + recall(save, heard, limit=10)]
-    today = datetime.date.today().strftime("%A %Y-%m-%d")
+    day = datetime.date.today()
+    today = day.strftime("%A %Y-%m-%d") + ". The next 7 days are " + ", ".join(
+        (day + datetime.timedelta(days=n)).strftime("%A %Y-%m-%d") for n in range(1, 8))  # (it got "Friday" wrong)
     everyone = cast()  # (every character's names: a note about one of them is never about the user)
     world = world_names(character)
     user_lines = "\n".join(line for line in lines if line.startswith("User: "))
@@ -208,7 +214,7 @@ def write_diary(save, messages, start, character, slot=0):
                                                  + ("\n".join("- " + k for k in shown) or "(nothing yet)")
                                                  + "\n\nWhat the user said this time:\n" + "\n".join(lines[-80:])}],  # (a long sitting: its last 80)
                     slot=slot, max_tokens=250, temperature=0.3)
-    notes = [re.sub(r"^-\s*", "", line).strip() for line in text.splitlines() if line.strip().startswith("-")]
+    notes = [re.sub(r"^(?:-\s*)+", "", line.strip()).strip() for line in text.splitlines() if line.strip().startswith("-")]
     new = []
     for note in notes[:NOTES_PER_SITTING]:
         lasting = bool(LASTING_MARK.match(note))

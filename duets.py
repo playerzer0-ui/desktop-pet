@@ -74,11 +74,17 @@ def opener(speaker, listener, topic):
     them = listener.pronouns["them"]
     return direction(speaker.fill(f"{{name}} turns to {listener.name} and starts a little chat with {them} about "
                                   f"{topic['about']}. {{They}} talks to {listener.name}, not to the user (who can see "
-                                  f"and hear them both, and is \"you\" or \"the user\": never guess their gender)."))
+                                  f"and hear them both, and is \"you\" or \"the user\": never guess their gender). "
+                                  + TOGETHER.format(listener=listener.name)))
+
+TOGETHER = ("{{They}} speaks straight to {listener}, not about {listener}. They are both standing on the user's desktop, "
+            "far from home: nothing from back home (an oven, a lamp, a plant) is here to touch.")
 
 def reply(speaker, listener, heard, last=False):
     """The stage direction for a line answering what the listener just said (heard)."""
-    text = speaker.fill(f'{listener.name} says to {{name}}: "{heard}" {{name}} answers {listener.name}, not the user.')
+    text = speaker.fill(f'{listener.name} says to {{name}}: "{heard}" {{name}} answers {listener.name}, not the user, '
+                        f"in {{their}} own new words, never repeating what {listener.name} just said. "
+                        + TOGETHER.format(listener=listener.name))
     if last:
         text += speaker.fill(" {They} wraps the little chat up.")
     return direction(text)

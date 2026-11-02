@@ -120,7 +120,7 @@ CONTENT
 - Mood after: happy
 - Reaction by stage:
   - Stage 1: acts proud and loud / says it's her bakery's birthday and she gave out free buns
-  - Stage 2: acts happy / tells how Pip was her very first customer and paid in blessings instead of coins
+  - Stage 2: acts happy / says it's her bakery's birthday today, and tells how, years ago, Pip was her very first customer and paid in blessings instead of coins
   - Stage 3: acts thoughtful / says she never planned to stay in the Republic this long
   - Stage 4: acts regretful / admits it's really the day Lind sent her here, and the bakery started as a disguise
   - Stage 5: acts content / says it stopped being a disguise a long time ago: it's her home

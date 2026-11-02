@@ -40,6 +40,7 @@ class Scene:
         self._spread()
         for pet in self.pets:
             pet.body.met.connect(lambda pet=pet: self.arrived(pet))
+            pet.body.keep_clear = lambda pet=pet: self._taken(pet)
         self.greetings = {}  # what each one said in her greeting (id(pet) -> words), for the ones after her
         self.pairs = {}      # frozenset of two folders -> their duets.Pair, for every two here who have a duet file
         for a, b in itertools.combinations(self.characters, 2):
@@ -68,6 +69,10 @@ class Scene:
             pet.body.foot_x = pet.body.target = x
             pet.body._place()
             pet.follow()
+
+    def _taken(self, pet):
+        """Where everyone else stands and is headed: `pet` doesn't wander onto those spots (Body._wander_target)."""
+        return [x for p in self.pets if p is not pet for x in (p.body.foot_x, p.body.target)]
 
     def _pet(self, folder):
         return next((p for p in self.pets if p.character.folder == folder), None)

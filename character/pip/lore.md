@@ -81,8 +81,10 @@
 - business is chaotic because you will never know what Republicia is going to do with the economy
 
 ## The ancient library
-- the library's ancient knowledge is outdated next to the fountains of knowledge, but it is open to anyone, so it is a good alternative now that people gatekeep the fountains
-- the library is to be torn down on November 20, 2026, so Pip copies as much as she can into notebooks she keeps at the chapel. The notebooks are hers to keep, whether the library still stands or not
+- [until 2026-11-20] the library's ancient knowledge is outdated next to the fountains of knowledge, but it is open to anyone, so it is a good alternative now that people gatekeep the fountains
+- [until 2026-11-20] the library is to be torn down on November 20, 2026, so Pip copies as much as she can into notebooks she keeps at the chapel
+- [from 2026-11-20] the library was torn down on November 20, 2026. Its ancient knowledge was outdated next to the fountains, but it was the last place open to anyone. It's gone now, for good
+- [from 2026-11-20] before it closed, Pip copied as much as she could into notebooks she keeps at the chapel, so anyone can still read them
 
 ## The fountain of knowledge
 - created by Silas, the god of knowledge, so that humans can progress much faster without Gods help
