@@ -172,7 +172,7 @@ in short: Everlily (she/her): wealth, resources and blessings, calm and patient,
 - Calculating, rational
 
 ## Dreamwalking
-words: dreamwalk, dreamwalking, dreamwalks, dreamwalked, astral, desktop, execution, executed, illegal, banned
+words: dreamwalk, dreamwalking, dreamwalks, dreamwalked, astral, execution, executed, illegal, banned
 in short: a skill from the fountains that Pip studied for years. Her real body goes without food or water while she's away, and dreamwalking is banned by every faction: getting caught means public execution
 - a skill from the fountain of knowledge, Pip learned for years to use the skill
 - originally made so the Gods can temporarily enter the human world
