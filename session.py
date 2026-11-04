@@ -24,6 +24,7 @@ from quests import Quests, MajorQuests, QUIET_FIRST
 from config import N_CTX
 from server import start_server
 from pet import new_conversation, ask, context_used, warm_up
+from lore import Lore
 from save import write_save
 
 @dataclass
@@ -82,7 +83,8 @@ class Session:
         self._build_prompt()
         self.transcript = []  # every line of this sitting's chat, for her diary (old lines leave self.messages)
         t0 = time.time()
-        self.prompt_was = warm_up(self.messages, self.fixed, self.slot)  # "read" (slow, first time since persona/lore changed) or "loaded"
+        # "read" (slow, first time since persona/lore changed) or "loaded", and how many tokens her prompt is
+        self.prompt_was, self.context_tokens = warm_up(self.messages, self.fixed, self.slot)
         self.warm_up_seconds = time.time() - t0
         self.idle = Idle(self.character)
         self.quests = Quests(self.character)
@@ -223,6 +225,7 @@ class Session:
                                        or roster.invite_due(self.save, self.character))  # or invites someone)
         summary["mood_locked"] = self.story.mood(self.save, self.present)  # (her mood doesn't settle back to neutral)
         summary["story_duet"] = self.story.duet(self.save)  # (a chat with her friend her story wants: scene.py)
+        summary["context"] = (self.context_tokens, self.n_ctx)  # (tokens of her slot in use, out of all of it)
         return {"summary": summary, "memories": [dict(m) for m in self.memories]}
 
     @property
@@ -274,6 +277,12 @@ class Session:
             note = "\n\n".join(filter(None, [memory.recall_note(recalled, self.character), note]))  # (judging last)
         if kind == "user" and self.company:  # (who's who, when her friend is on the desktop with her)
             note = "\n\n".join(filter(None, [self._company_note(), note]))
+        # the lore details your message (or her last reply, for "who's that?") or this direction is about
+        last = self.transcript[-1]["content"] if kind == "user" and self.transcript else None
+        told = self.lore.note(text, last)
+        if told:
+            self.log("lore details: " + " · ".join(self.lore.shown))
+            note = "\n\n".join(filter(None, [told, note]))
         try:
             reply, timings, feeling, mood, judged = self._ask(text, on_text, note, on_mood)
         except llm.ServerGone:
@@ -314,6 +323,8 @@ class Session:
                     trust_before, self.save["trust"], points_before, self.save["points"], bool(done),
                     self.replies, self.character.stage_names[trust.stage(self.save)], raising, bool(major_done),
                     self.minutes_left is not None and self.minutes_left <= 0, leaving, outcome == "done")
+        if turn.context_used:  # (her slot's context in use now, for Status: prompt + chat + this reply)
+            self.context_tokens = turn.context_used
         self._log_turn(turn, text, tagged=mood is not None)
         return turn
 
@@ -323,6 +334,7 @@ class Session:
         chat = self.messages[self.keep:] if self.messages else []
         self.prompt_stage = self.shown_stage
         self.messages = new_conversation(self.character, stage=self.prompt_stage)
+        self.lore = Lore(self.character, self.prompt_stage)  # (the details her short lore leaves out: lore.py)
         self.fixed = len(self.messages)  # system prompt + examples: the part warm_up caches
         remembered = memory.as_message(self._public(), self.character)  # her memories of you from earlier visits
         if remembered:
@@ -346,7 +358,7 @@ class Session:
         was, t0 = self.prompt_stage, time.time()
         self._build_prompt()
         try:
-            how = warm_up(self.messages, self.fixed, self.slot)
+            how, self.context_tokens = warm_up(self.messages, self.fixed, self.slot)
         except llm.ServerGone:
             self.reconnect()  # (reads the new prompt back in)
             how = "read"
@@ -500,7 +512,7 @@ class Session:
         self.log("lost llama-server: restarting it and retrying")
         start_server(self.say, self.slots)
         if reread:
-            warm_up(self.messages, self.fixed, self.slot)
+            _, self.context_tokens = warm_up(self.messages, self.fixed, self.slot)
 
     def _count_stay(self):
         trust.stayed(self.save, (time.time() - self.opened) / 60)

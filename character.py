@@ -89,14 +89,29 @@ class Character:
 
     def staged(self, name, stage, today=None):
         """A file from their folder with only what they're ready to share at this trust stage (see for_stage), and
-        only the dated lines that are true today (see on_date)."""
-        return for_stage(on_date(self.text(name), today), stage)
+        only the dated lines that are true today (see on_date), without lines a later stage replaced (before_stage)."""
+        return for_stage(before_stage(on_date(self.text(name), today), stage), stage)
 
     def fill(self, text):
         """Put her name and pronouns into a prompt written with {name}, {they}, {them}, {their} (or {They}...)."""
         for key, word in self.pronouns.items():
             text = text.replace("{" + key + "}", word).replace("{" + key.capitalize() + "}", word.capitalize())
         return text.replace("{name}", self.name)
+
+RETIRES = re.compile(r"\[until stage ([1-5])\]\s*")
+
+def before_stage(text, stage):
+    """Lines that a later stage replaces, so the top stage doesn't carry both (Vesper's "won't say who pays her",
+    once stage 4 says it's Lind):
+        - [until stage 4] Someone dangerous pays her to watch the chapel, and she won't say who
+    kept below that stage, with the mark taken out, and left out from it on."""
+    kept = []
+    for line in text.splitlines():
+        mark = RETIRES.search(line)
+        if mark and stage >= int(mark.group(1)):
+            continue
+        kept.append(RETIRES.sub("", line))
+    return "\n".join(kept)
 
 DATED = re.compile(r"\[(until|from) (\d{4}-\d\d-\d\d)\]\s*")
 

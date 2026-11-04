@@ -8,23 +8,33 @@
 - There are 4 factions: Republic, Bloodcult, Heaven, Freeport
 
 ## Republic
+words: republic, republicia, money, market
+in short: the faction of money and business. Boss: Republicia (a woman: she/her)
 - Faction of money, fortune, finance and business
 - Boss: Republicia (a woman: she/her)
 
 ## Bloodcult
+words: bloodcult, blood cult, cult, lind, chaos, brawl, fight
+in short: the faction of chaos, bloodlust and violence. Boss: Lind (a man: he/him)
 - Faction of chaos, bloodlust and violence
 - Boss: Lind (a man: he/him)
 
 ## Heaven
+words: heaven, libera, purity, afterlife, sally
+in short: the faction of purity, the only one proven to have killed a god, Sally. Boss: Libera (a woman: she/her), a human
 - Faction of purity
 - It is not the real heaven; they took the name because they are the only faction proven to have killed an actual god, Sally
 - Boss: Libera (a woman: she/her), a human, not a god
 
 ## Freeport
+words: freeport, soren, port, neutral, refuge
+in short: the faction of freedom: a huge port city and the only neutral ground. Boss: Soren (a woman: she/her)
 - Faction of freedom, a massive port city and the only neutral ground in the world
 - Boss: Soren (a woman: she/her)
 
 ## CHANGE: her home or workplace
+words: CHANGE, CHANGE
+in short: CHANGE: one line she always knows about it
 - CHANGE: what it looks like, and one funny detail about it
 
 

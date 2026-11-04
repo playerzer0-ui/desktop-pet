@@ -1,8 +1,9 @@
 import glob, hashlib, os, re
 import llm
-from config import N_CTX, MODEL, CACHE_DIR
+from config import N_CTX, MODEL, CACHE_DIR, FORGET_AT
 from save import load_save, stage_of
 from character import Character
+from lore import split as split_lore
 from sentences import ends
 
 def trim_to_sentence(text):
@@ -20,8 +21,12 @@ def new_conversation(character=None, stage=None):
     character = character or Character()
     if stage is None:
         stage = stage_of(load_save(character.save_path)["trust"])
-    system_prompt = (character.staged("persona.md", stage)
-        + "\n\n# Background lore\n" + character.staged("lore.md", stage))
+    lore, details = split_lore(character.staged("lore.md", stage))  # (the short version: lore.py)
+    system_prompt = character.staged("persona.md", stage) + "\n\n# Background lore\n"
+    if details:
+        system_prompt += character.fill("(Many topics here are in short. When one comes up, more of what {name} "
+                                        "knows about it is added in a note.)\n")
+    system_prompt += lore
     if stage < 5:
         system_prompt += character.fill("\n\n# Trust\n{name} happily talks about everything written above. {They} "
             "also knows more that isn't written here, but {they} isn't ready to share it yet. If asked about it, "
@@ -50,7 +55,8 @@ def warm_up(messages, fixed, slot=0):
     so they're read fresh once and saved under a new name. Anything after them (the character's memories,
     which change often) is read on top each time: only a few lines, so it's quick.
     slot = the server slot this character uses (llm.py).
-    Returns "loaded" or "read" (whether the cached part was loaded or had to be read)."""
+    Returns ("loaded" or "read", tokens): whether the cached part was loaded or had to be read, and how many tokens
+    the whole prompt is (what it takes of her context before the chat starts: Status shows it)."""
     cached = prefix_of(messages[:fixed])  # the part that rarely changes
     everything = prefix_of(messages)
 
@@ -65,9 +71,9 @@ def warm_up(messages, fixed, slot=0):
         for old in sorted(glob.glob(os.path.join(CACHE_DIR, "*.bin")), key=os.path.getmtime)[:-5]:
             os.remove(old)
 
-    if everything != cached:  # read the memories on top of the cached part
-        llm.read(everything, slot)
-    return how
+    # read the memories on top of the cached part. Read even when there are none: the server then just finds it all
+    # cached (~0.3 s), and says how big the prompt is
+    return how, llm.read(everything, slot)
 
 def prefix_of(messages):
     """The exact text a request starts with when it holds these messages: everything before the next question."""
@@ -154,7 +160,7 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0,
     forget_oldest(messages, keep, context_used(timings))
     return reply.strip(), timings, feeling, mood, answered
 
-def forget_oldest(messages, keep, used, full=0.75, down_to=0.5):
+def forget_oldest(messages, keep, used, full=FORGET_AT, down_to=0.5):
     """When the context is over `full` of N_CTX, forget the oldest chat lines (question + answer pairs, never the
     first `keep` messages) in one go, until it's down to about `down_to`. One big cut instead of a pair every reply:
     each cut makes the server re-read everything after `keep`, so after one slow reply the next many are fast again.

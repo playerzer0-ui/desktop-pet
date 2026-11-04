@@ -35,6 +35,36 @@ Trust runs 1-10, and two trust levels make a stage (1-2 is stage 1, ... 9-10 is 
 `# Stage 1` ... `# Stage N` block, and sections with the same `##` heading are merged, so you can add to "## Bakery"
 in a later stage without repeating it. Anything she must not say yet simply goes in a later block.
 
+A line that a later stage replaces can retire there, so the top stage doesn't carry both:
+
+```
+- [until stage 4] Someone dangerous pays her to watch the chapel, and she won't say who
+```
+
+### Short lore, details on demand (`lore.md`)
+
+Her prompt is read once and cached, so it should stay small: every token in it is one less for the chat. A lore
+section can be split into a summary that's always in her prompt and details that only come in when it comes up:
+
+```
+## Bloodcult
+words: bloodcult, lind, cult, brawl, resurrect
+in short: the faction of chaos and violence. Boss: Lind (a man: he/him)
+- details, as many lines as you like...
+```
+
+- `words:` the words or phrases that bring the details in (plurals and 's count too), checked against your
+  message, her last reply, and anything the game has her talk about (idle topics, quests, events, duets). Pick
+  names and the words people would really use: "who brings people back?" needs `resurrect`, not just `lind`
+- `in short:` always in her prompt. Put the facts she must never get wrong here (names, he/she, who did what): if
+  no word matches, the summary is all she has
+- the details stay for her next 2 replies (for follow-up questions), at most 3 sections at once
+- a later stage block can add to the same `## Section`: more words, another `in short:`, more details
+- a section without `words:` stays whole in her prompt (fine for small, always-needed ones, like the Overview)
+
+`python -m desktop.check` warns about a section with `words:` but no `in short:` (her prompt would know nothing
+about it).
+
 Lines can also be dated, for something that changes on a real day (see the library in `character/pip/lore.md`):
 
 ```

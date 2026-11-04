@@ -3,7 +3,8 @@
     llm.chat_stream(messages, max_tokens=200, ...)  a reply as it's written: yields the server's chunks
     llm.chat(messages, max_tokens=250, ...)         a whole reply at once (the diary)
     llm.template(messages)                          the exact prompt text these messages become
-    llm.read(prompt)                                have the model read a prompt without answering (warm-up)
+    llm.read(prompt)                                have the model read a prompt without answering (warm-up):
+                                                    returns its size in tokens
     llm.save_slot(name) / llm.restore_slot(name)    the server's prompt cache, as a file in cache/
     llm.is_up() / llm.model_path() / llm.slots()    is it running, with which model, and how many slots (server.py)
 
@@ -57,8 +58,10 @@ def template(messages):
     return response.json()["prompt"]
 
 def read(prompt, slot=0):
-    """Have the model read a prompt (into its cache) without writing anything. False if the server refused."""
-    return _post("/completion", {"prompt": prompt, "n_predict": 0, "cache_prompt": True, "id_slot": slot}).ok
+    """Have the model read a prompt (into its cache) without writing anything. Returns how many tokens the prompt
+    is (what it takes of the slot's context), or 0 if the server refused."""
+    response = _post("/completion", {"prompt": prompt, "n_predict": 0, "cache_prompt": True, "id_slot": slot})
+    return response.json().get("tokens_evaluated", 0) if response.ok else 0
 
 def save_slot(name, slot=0):
     """Save what the model has read so far to cache/<name>. False if it couldn't (then it's just read again

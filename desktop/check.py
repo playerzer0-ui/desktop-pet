@@ -17,7 +17,7 @@ so a mistake shows up the day you add her, not weeks later), the folders their s
     python -m desktop.check [character]    run it on its own (the whole cast, and this character if she isn't in it)
 """
 import os, re, sys
-import duets, roster
+import duets, lore, roster
 from character import Character, DEFAULT, is_character
 from desktop import moves
 
@@ -65,6 +65,18 @@ def mood_problems(character):
             problems.append(f"event '{e['name']}' has Mood after: '{e['mood_after']}', which {toml} doesn't have")
     return problems
 
+def lore_problems(character):
+    """lore.md sections with "words:" (lore.py) that leave her prompt nothing at some stage: with no "in short:"
+    line, the model wouldn't even know the topic exists until a word happens to bring the details in."""
+    problems = []
+    for stage in range(1, 6):
+        prompt, sections = lore.split(character.staged("lore.md", stage))
+        for heading in sections:
+            if not re.search(rf"^## {re.escape(heading)}\n- ", prompt, re.M):
+                problems.append(f"character/{character.folder}/lore.md: '## {heading}' has words: but no "
+                                f"'in short:' line by stage {stage}, so her prompt has nothing about it")
+    return sorted(set(problems))
+
 def cast_problems(also=()):
     """Every mistake in the cast's files, as readable lines (an empty list = all good): roster.toml, each character
     in it (and `also`: folders opened by name that aren't in it), their story steps' folders, and the duet files."""
@@ -81,6 +93,7 @@ def cast_problems(also=()):
             problems.append(f"character/{folder}: {type(e).__name__}: {e}")
             continue
         problems += [f"{c.name}: {p}" for p in mood_problems(c)]
+        problems += [f"{c.name}: {p}" for p in lore_problems(c)]
         problems += step_problems(c, cast, r["on_screen"])
     problems += duet_problems()
     return problems

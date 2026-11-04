@@ -446,7 +446,7 @@ class SessionMajorQuestTest(unittest.TestCase):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "happy", (self.judged.pop(0) if self.judged else None)
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         session.ask = ask
 
     def tearDown(self):
@@ -558,7 +558,7 @@ class SessionTimeLimitTest(unittest.TestCase):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "happy", None
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         session.ask = ask
 
     def tearDown(self):
@@ -643,7 +643,7 @@ class StoryQuestTest(unittest.TestCase):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "sad", None  # (she says sad: a step's mood should win)
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         session.ask = ask
         self.path = gated_save(points=trust.TRUST_POINTS[6] - 1, trust_level=6)  # the top of stage 3: gate 3
 
@@ -772,7 +772,7 @@ class FriendTest(unittest.TestCase):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "happy", None
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         session.ask = ask
 
     def tearDown(self):
@@ -963,7 +963,7 @@ class TodayTest(unittest.TestCase):
         import session
         real = session.start_server, session.warm_up
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         try:
             c = pip()
             c.save_path = save_with_minutes(0)
@@ -1862,7 +1862,7 @@ class SceneTest(unittest.TestCase):
         use_roster(self)
         real = session.start_server, session.warm_up, session.ask
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         try:
             c = pip()
             c.save_path = save_with_minutes(0, trust_level=10)
@@ -1920,7 +1920,7 @@ class SceneTest(unittest.TestCase):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "happy", None
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         session.ask = ask
         try:
             mira.save_path = save_with_minutes(0, trust_level=3)
@@ -2129,7 +2129,7 @@ class SceneTest(unittest.TestCase):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "happy", None
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         session.ask = ask
         try:
             c = pip()
@@ -2160,7 +2160,7 @@ class SceneTest(unittest.TestCase):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "happy", None
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         session.ask = ask
         try:
             character.save_path = path
@@ -2190,7 +2190,7 @@ class SceneTest(unittest.TestCase):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "happy", None
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         session.ask = ask
         try:
             for company in (["Pip"], []):
@@ -2231,7 +2231,7 @@ class SummonsTest(unittest.TestCase):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
             return "ok", {}, "nice", "sad", self.judged
         session.start_server = lambda say, slots=1: None
-        session.warm_up = lambda messages, fixed, slot=0: "loaded"
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
         session.ask = ask
         self.path = gated_save(points=trust.TRUST_POINTS[6] - 1, trust_level=6)  # Vesper at the top of stage 3
         trust.start(self.path, self.vesper().gates)  # (marks gates 1 and 2, behind her, as done)
@@ -2514,7 +2514,7 @@ class RealNameTest(unittest.TestCase):
         self.reads = 0
         def warm(messages, fixed, slot=0):
             self.reads += 1
-            return "loaded"
+            return "loaded", 2000
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "[nice] [mood: happy] Oh!"}]
             return "Oh!", {}, "nice", "happy", True if note and "[done]" in note else None
@@ -2643,7 +2643,7 @@ class ReconnectTest(unittest.TestCase):
         self.calls = {"start": 0, "read": 0, "ask": 0, "diary": 0}
 
         def start(say, slots=1): self.calls["start"] += 1
-        def warm(messages, fixed, slot=0): self.calls["read"] += 1; return "loaded"
+        def warm(messages, fixed, slot=0): self.calls["read"] += 1; return "loaded", 2000
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             self.calls["ask"] += 1
             messages.append({"role": "user", "content": question})
@@ -2783,7 +2783,7 @@ class MemoryTiersTest(unittest.TestCase):
             notes.append(note)
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "Oh! [nice] [mood: happy]"}]
             return "Oh!", {}, "nice", "happy", None
-        session.start_server, session.warm_up, session.ask = (lambda *a, **k: None), (lambda *a, **k: "loaded"), ask
+        session.start_server, session.warm_up, session.ask = (lambda *a, **k: None), (lambda *a, **k: ("loaded", 2000)), ask
         try:
             sit = session.Session(c, say=lambda *_: None)
             sit.quests.next = time.time() + 3600
@@ -2806,7 +2806,7 @@ class EarlyMoodTest(unittest.TestCase):
             on_mood("sad")
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "[nice] [mood: sad] Oh."}]
             return "Oh.", {}, "nice", "sad", None
-        session.start_server, session.warm_up, session.ask = (lambda *a, **k: None), (lambda *a, **k: "loaded"), ask
+        session.start_server, session.warm_up, session.ask = (lambda *a, **k: None), (lambda *a, **k: ("loaded", 2000)), ask
         try:
             s = session.Session(pip(), say=lambda *_: None)
             told = []
@@ -2876,7 +2876,7 @@ class ForgetOldestTest(unittest.TestCase):
         def chat(messages, **settings):
             prompts.append(messages[-1]["content"])
             return "- The user adopted a cat named Mochi."
-        session.start_server, session.warm_up = (lambda *a, **k: None), (lambda *a, **k: "loaded")
+        session.start_server, session.warm_up = (lambda *a, **k: None), (lambda *a, **k: ("loaded", 2000))
         session.ask, llm.chat = ask, chat
         try:
             s = session.Session(pip(), say=lambda *_: None)
@@ -3078,7 +3078,7 @@ class PublishRoundTest(unittest.TestCase):
     def test_masked_vesper_asks_only_her_shown_stage(self):
         import session
         real = session.start_server, session.warm_up
-        session.start_server, session.warm_up = (lambda *a, **k: None), (lambda *a, **k: "loaded")
+        session.start_server, session.warm_up = (lambda *a, **k: None), (lambda *a, **k: ("loaded", 2000))
         v = Character("mira")
         stage_of_quest = {qid: st for qid, st, _ in v.quests}
         spies = next(about for qid, st, about in v.quests if qid == "spies")
@@ -3292,6 +3292,177 @@ class StartupFailureTest(unittest.TestCase):
         finally:
             session.Session = real
         self.assertEqual(got, ["Can't find llama-server.exe. Install it with: winget install ggml.llamacpp"])
+
+class ContextShownTest(unittest.TestCase):
+    """Status shows how full each character's context is: her prompt's size from the warm-up, then after every reply
+    the server's own count (prompt + chat + reply)."""
+
+    def setUp(self):
+        import session
+        self.session = session
+        self.real = session.start_server, session.warm_up, session.ask
+        self.used = 0
+
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok"}]
+            return "ok", {"cache_n": self.used - 50, "prompt_n": 30, "predicted_n": 20}, "neutral", "happy", None
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 3072)
+        session.ask = ask
+
+    def tearDown(self):
+        self.session.start_server, self.session.warm_up, self.session.ask = self.real
+
+    def test_from_the_warm_up_then_after_every_reply(self):
+        c = pip()
+        c.save_path = os.path.join(tempfile.mkdtemp(), "pip.json")
+        s = self.session.Session(c, say=lambda *_: None)
+        from config import N_CTX
+        self.assertEqual(s.snapshot()["summary"]["context"], (3072, N_CTX), "known before her first reply")
+        self.used = 4000
+        s.user_says("hello")
+        self.assertEqual(s.snapshot()["summary"]["context"], (4000, N_CTX))
+
+    def test_the_warm_up_says_how_big_her_prompt_is(self):
+        from unittest import mock
+        reads = []
+        def read(prompt, slot=0):
+            reads.append(prompt)
+            return 2009
+        with mock.patch.object(pet.llm, "read", read), mock.patch.object(pet.llm, "save_slot", lambda *a: True), \
+                mock.patch.object(pet.llm, "restore_slot", lambda *a: True), \
+                mock.patch.object(pet, "prefix_of", lambda messages: "x" * len(messages)), \
+                mock.patch.object(pet.os.path, "exists", lambda path: True):
+            self.assertEqual(pet.warm_up([{}] * 3, 3), ("loaded", 2009), "no memories: still read (it's all cached)")
+        self.assertEqual(reads, ["xxx"])
+
+    def test_llm_read_returns_the_servers_count(self):
+        from unittest import mock
+        import llm
+        answer = mock.Mock(ok=True, json=lambda: {"tokens_evaluated": 2009})
+        with mock.patch.object(llm, "_post", lambda *a, **k: answer):
+            self.assertEqual(llm.read("x"), 2009)
+        with mock.patch.object(llm, "_post", lambda *a, **k: mock.Mock(ok=False)):
+            self.assertEqual(llm.read("x"), 0)
+
+    def test_the_status_card_shows_it(self):
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from desktop import status
+        s = trust.summary(trust.start(gated_save(), pip().gates), {i: "x" for i in range(1, 6)})
+        self.assertIsNone(status.context_full(s), "unknown yet: the card shows …")
+        self.assertAlmostEqual(status.context_full(dict(s, context=(3072, 12288))), 0.25)
+        low = status.card(dict(s, context=(3072, 12288))).toImage()
+        high = status.card(dict(s, context=(10000, 12288))).toImage()
+        self.assertNotEqual(low, high)
+        self.assertEqual(low.height(), status.card(s).toImage().height())
+
+class LoreTest(unittest.TestCase):
+    """lore.py: a section with words: keeps only its "in short" lines in her prompt; its details come in as a note
+    on a message that mentions it, for a few replies. And [until stage N] lines (character.before_stage)."""
+    TEXT = ("## Overview\n- always all here\n"
+            "## Bloodcult\nwords: bloodcult, lind\nin short: the faction of chaos; boss Lind\n- Lind is immortal\n"
+            "### Feras\n- god of life and death\n"
+            "## Freeport\nwords: freeport, soren\nin short: the free port\n- Soren breaks bonds\n"
+            "## Odd\nin short: no words, so this is a plain line\n- kept too")
+
+    def lore(self, text=None):
+        from lore import Lore
+        stub = mock_character(text or self.TEXT)
+        return Lore(stub, 5)
+
+    def test_the_prompt_keeps_the_short_lines(self):
+        from lore import split
+        prompt, sections = split(self.TEXT)
+        self.assertEqual(prompt, "## Overview\n- always all here\n## Bloodcult\n- the faction of chaos; boss Lind\n"
+                                 "## Freeport\n- the free port\n## Odd\n- no words, so this is a plain line\n- kept too")
+        self.assertEqual(list(sections), ["Bloodcult", "Freeport"])
+        self.assertEqual(sections["Bloodcult"]["details"], "- Lind is immortal\n### Feras\n- god of life and death")
+
+    def test_a_mention_brings_the_details_for_a_few_replies(self):
+        import lore
+        l = self.lore()
+        self.assertIsNone(l.note("hello!"))
+        self.assertIn("Lind is immortal", l.note("who is Lind's right hand?"))  # (Lind's: the 's counts)
+        self.assertIn("Lind is immortal", l.note("and what can he do?"), "a follow-up still has it")
+        for _ in range(lore.LINGER - 1):
+            l.note("ok")
+        self.assertIsNone(l.note("ok"), f"gone after {lore.LINGER} more replies")
+        self.assertIsNone(l.note("Linda says hi"), "whole words only")
+        self.assertIn("Soren breaks bonds", l.note("who?", "I miss Freeport"), "her last reply, if you named nothing")
+        self.assertEqual(l.shown, ["Freeport"])
+        l.note("and Lind?", "Soren and Freeport again")
+        self.assertEqual(l.shown, ["Bloodcult", "Freeport"], "what you name first; her reply doesn't count then")
+
+    def test_at_most_a_few_sections_newest_first(self):
+        import lore
+        text = "\n".join(f"## S{i}\nwords: w{i}\nin short: s{i}\n- detail {i}" for i in range(6))
+        l = self.lore(text)
+        l.note("w0")
+        l.note("w1 w2")
+        l.note("w3")
+        self.assertEqual(l.shown, ["S3", "S1", "S2"], "what you just named first, then the newest from before")
+        self.assertEqual(len(l.shown), lore.MOST)
+
+    def test_lines_that_retire_at_a_later_stage(self):
+        from character import before_stage
+        text = "- [until stage 4] she won't say who\n- always"
+        self.assertEqual(before_stage(text, 3), "- she won't say who\n- always")
+        self.assertEqual(before_stage(text, 4), "- always")
+        mira = Character("mira")
+        self.assertIn("won't say who it is", mira.staged("persona.md", 3))
+        self.assertNotIn("won't say who it is", mira.staged("persona.md", 4))
+
+    def test_her_prompt_is_much_smaller_but_keeps_the_key_facts(self):
+        """Pip's top-stage prompt: the details are out, the facts she must never get wrong are in."""
+        from lore import Lore
+        prompt = pet.new_conversation(pip(), 5)[0]["content"]
+        for fact in ("Republicia (a woman: she/her)", "Lind (a man: he/him)", "Libera (a woman: she/her)",
+                     "Soren (a woman: she/her)", "killed a god, Sally", "Soren cannot break Lind's own immortality",
+                     "tired of endless demands", "costs her no mana"):
+            self.assertIn(fact, prompt)
+        self.assertNotIn("words:", prompt)
+        self.assertNotIn("in short:", prompt)
+        self.assertNotIn("market manipulation", prompt, "a detail: only in a note")
+        self.assertIn("market manipulation", Lore(pip(), 5).note("tell me about Republicia"))
+        self.assertLess(len(prompt), 13000)
+
+    def test_the_session_sends_it_with_one_request_only(self):
+        """The note goes with the request; her chat (and so her diary) keeps your message as you wrote it."""
+        import session
+        sent = []
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, **kw):
+            sent.append(note)
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok"}]
+            return "ok", {}, "neutral", "happy", None
+        real = session.start_server, session.warm_up, session.ask
+        session.start_server, session.warm_up, session.ask = (lambda *a, **k: None), (lambda *a, **k: ("loaded", 1)), ask
+        try:
+            c = pip()
+            c.save_path = os.path.join(tempfile.mkdtemp(), "pip.json")
+            s = session.Session(c, say=lambda *_: None)
+            s.quests.next = 1e12
+            s.user_says("who leads the Bloodcult?")
+        finally:
+            session.start_server, session.warm_up, session.ask = real
+        self.assertIn("## Bloodcult", sent[-1])
+        self.assertEqual(s.messages[-2]["content"], "who leads the Bloodcult?")
+        self.assertNotIn("Bloodcult takes it", " ".join(m["content"] for m in s.transcript))
+
+    def test_the_check_finds_a_section_with_no_summary(self):
+        from desktop import check
+        stub = mock_character("## Bloodcult\nwords: lind\n- Lind is immortal")
+        self.assertEqual(len(check.lore_problems(stub)), 5)
+        self.assertEqual(check.lore_problems(pip()), [])
+        self.assertEqual(check.lore_problems(Character("mira")), [])
+
+def mock_character(lore_text):
+    """A stand-in character whose lore.md is lore_text (for lore.py and the lore check)."""
+    from unittest import mock
+    stub = mock.Mock(folder="stub")
+    stub.staged = lambda name, stage, today=None: lore_text
+    stub.fill = pip().fill
+    return stub
 
 class TemplateTest(unittest.TestCase):
     """templates/character/ is the blank character to copy when adding a new one. Copied into a throwaway game folder

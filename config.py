@@ -33,6 +33,8 @@ SERVER = f"http://127.0.0.1:{PORT}"  # (not "localhost": on Windows that tries I
                                      #  isn't listening, and every request waited ~2 s for that to fail)
 N_CTX = 12288  # context size, per character (Pip's stage 5 prompt alone is ~4.5k tokens: at 8192 she began
                # forgetting the chat after about 10 exchanges)
+FORGET_AT = 0.75  # once her context is this full, she forgets the oldest chat lines (pet.forget_oldest; Status
+                 # marks it on her context bar)
 
 MODEL_FILE = "Qwen3.5-4B-Q5_K_M.gguf"
 # where it's downloaded from (first launch: desktop/download.py; setup.ps1 / setup.sh), and its checksum
