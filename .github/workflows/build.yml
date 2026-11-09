@@ -3,7 +3,7 @@
 # Run it: the repo's Actions tab -> "Build the game" -> "Run workflow". It also runs by itself when you push a
 # version tag (git tag v1.2.0, then git push origin v1.2.0).
 # Get the builds: open the run once it's green; at the bottom, under Artifacts, are DesktopPet-windows and
-# DesktopPet-linux. DesktopPet-windows is the game itself, zipped once (Extract All, then run DesktopPet.exe).
+# DesktopPet-linux. DesktopPet-windows is one zip with the DesktopPet folder in it (DesktopPet.exe inside that).
 # DesktopPet-linux is a zip of its own around DesktopPet-linux.tar.gz: GitHub's zips lose Linux's "runnable" flag,
 # and the tar.gz keeps it.
 # (Re-run on an old run builds that run's old commit: use "Run workflow" to build the latest code.)
@@ -84,13 +84,20 @@ jobs:
         run: |
           if (-not (Test-Path dist\DesktopPet\Uninstall.bat)) { Write-Host "::error::Uninstall.bat isn't in the build"; exit 1 }
 
-      # The game folder itself, not build.ps1's DesktopPet-windows.zip: GitHub zips whatever it keeps, so keeping
-      # the zip made a zip inside a zip. This way the download is one zip, with DesktopPet.exe right inside.
+      # The game folder, not build.ps1's DesktopPet-windows.zip: GitHub zips whatever it keeps, so keeping the zip
+      # made a zip inside a zip. GitHub zips a folder's contents, so the game folder goes into one of its own first:
+      # the download is one zip with a DesktopPet folder in it, and "Extract here" doesn't spill the game's files.
+      - name: Put the game in a folder of its own
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force dist\upload | Out-Null
+          Move-Item dist\DesktopPet dist\upload\DesktopPet
+
       - name: Keep the build
         uses: actions/upload-artifact@v7
         with:
           name: DesktopPet-windows
-          path: dist/DesktopPet
+          path: dist/upload
           if-no-files-found: error
 
   linux:
@@ -175,11 +182,11 @@ jobs:
           path: builds
 
       # butler gets the folders, not the tar.gz: it keeps the Linux files runnable, and after the first upload it only
-      # sends what changed. (The Windows build arrives as its folder already: builds/DesktopPet-windows.)
+      # sends what changed. (The Windows build arrives as its folder already: builds/DesktopPet-windows/DesktopPet.)
       - name: Unpack them
         run: |
           mkdir -p windows linux
-          cp -r builds/DesktopPet-windows windows/DesktopPet
+          cp -r builds/DesktopPet-windows/DesktopPet windows/DesktopPet
           tar -xzf builds/DesktopPet-linux/DesktopPet-linux.tar.gz -C linux
 
       - name: Get butler

@@ -77,8 +77,8 @@ class DownloadWindow(QWidget):
         super().__init__(None, Qt.Window | Qt.WindowStaysOnTopHint)
         self.setWindowTitle("Desktop Pet: first launch")
         self.setFixedWidth(440)
-        line = "{name} needs {their} mind before {they} can visit."
-        self.title = QLabel(who.fill(line) if who else "Your desktop pet needs a mind before visiting.")
+        line = "The portal to the other world is being built. This only happens once."
+        self.title = QLabel(line, wordWrap=True)
         self.title.setFont(QFont("Segoe UI", 11, QFont.Bold))
         self.text = QLabel(f"It's a one-time download of {_size(config.MODEL_SIZE)}. If it's interrupted, "
                            "it carries on from where it stopped next time.", wordWrap=True)

@@ -1516,7 +1516,7 @@ class DesktopTest(unittest.TestCase):
         self.assertIn("Something is on his mind. His trust", a.bubble.final_note)
         self.assertNotRegex(a.bubble.final_note, r"\b(she|her|She|Her)\b")
         window = download.DownloadWindow(him)
-        self.assertEqual(window.title.text(), "Pip needs his mind before he can visit.")
+        self.assertEqual(window.title.text(), "The portal to the other world is being built. This only happens once.")
         window.deleteLater()
 
     def test_resting_she_doesnt_come_out(self):
