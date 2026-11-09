@@ -10,7 +10,8 @@
 #   2. llama-server's files, copied from the one setup.sh found (only what the game needs)
 #   3. the build itself (DesktopPet.spec)
 #   4. a check that the built server starts, and that Qt has the system libraries it needs
-#   5. the licenses: THIRD_PARTY_NOTICES.txt and licenses/ in the build (build_notices.py)
+#   5. the licenses: THIRD_PARTY_NOTICES.txt and licenses/ in the build (build_notices.py), and uninstall.sh
+#      (uninstall/uninstall.sh: removes the game and everything it saved)
 #   6. the tar.gz
 cd "$(dirname "$0")" || exit 1
 PYTHON=".venv/bin/python"
@@ -86,8 +87,10 @@ if [ -n "$xcb" ]; then
 fi
 note "made on $(ldd --version | head -1 | sed 's/^ldd //'): players need this glibc or newer"
 
-step "5/6  Licenses"
+step "5/6  Licenses, and the uninstaller"
 "$PYTHON" build_notices.py "$game" || fail "Couldn't write the licenses."
+# uninstall.sh: removes the game and its data (~/.local/share/desktop-pet), for players who'd never find that folder
+cp uninstall/uninstall.sh "$game/uninstall.sh" && chmod +x "$game/uninstall.sh" || fail "Couldn't add the uninstaller."
 
 step "6/6  The tar.gz"
 archive="dist/DesktopPet-linux.tar.gz"

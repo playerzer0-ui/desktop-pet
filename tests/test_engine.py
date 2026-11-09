@@ -1691,6 +1691,26 @@ class DesktopTest(unittest.TestCase):
         self.assertFalse(enabled()["Talk to her"], "talking waits too, so you can't cut into her reply")
         self.assertTrue(enabled()["Say goodbye"])
 
+    def test_status_clicked_after_she_started_talking_doesnt_freeze_her(self):
+        """The menu was opened while she was quiet, she started a reply while it was open, then you clicked Status:
+        the card cut her reply off, her words were dropped, and her "…" stayed forever. Now the click waits."""
+        a = self.app()
+        a.bubble.active = False
+        a.snap = {"summary": trust.summary(trust.start(gated_save(), pip().gates), {i: "x" for i in range(1, 6)}),
+                  "memories": [{"text": "The user likes tea.", "kind": "note", "when": "2026-11-01"}]}
+        for label in ("Status", "What she remembers"):
+            menu = a.build_menu()  # (opened while she's quiet: enabled)
+            action = next(act for act in menu.actions() if act.text() == label)
+            self.assertTrue(action.isEnabled())
+            a.on_speaking("idle")  # (she starts a reply while the menu is open)
+            action.trigger()
+            self.assertTrue(a.bubble.active, f"{label} cut her reply off")
+            self.assertFalse(a.bubble.cancelled)
+            a.on_piece("Oh, hello there.")
+            self.pump(0.5)  # (her words type out on a timer)
+            self.assertFalse(a.body.thinking, "her words show, so the … goes away")
+            a.bubble.active = False
+
     def test_error_mid_reply_lets_her_wander(self):
         a = self.app()
         a.on_speaking("user")

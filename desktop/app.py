@@ -169,12 +169,14 @@ class App:
         self.snap = snap
 
     def status(self):
-        if not self.snap:
+        # (checked again here, not just when the menu opened: she may have started a reply while it was open, and
+        # the card would cut it off: her words were then dropped, and her "…" never went away)
+        if not self.snap or self.talking:
             return
         self.bubble.show_picture(status_card(self.snap["summary"]), stay=8)
 
     def memories(self):
-        if not self.snap:
+        if not self.snap or self.talking:  # (see status)
             return
         entries = self.snap["memories"]
         if not entries:

@@ -6,7 +6,8 @@
 #   2. llama-server's files, copied from the one setup.bat installed (only what the game needs)
 #   3. the icon, made from Pip's happy sprite
 #   4. the build itself (DesktopPet.spec)
-#   5. the licenses: THIRD_PARTY_NOTICES.txt and licenses\ in the build (build_notices.py)
+#   5. the licenses: THIRD_PARTY_NOTICES.txt and licenses\ in the build (build_notices.py), and Uninstall.bat
+#      (uninstall\uninstall.bat: removes the game and everything it saved)
 #   6. the zip
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
@@ -48,9 +49,11 @@ Write-Host "4/6  Building (a minute or two)" -ForegroundColor Cyan
 & $python -m PyInstaller DesktopPet.spec --noconfirm --clean --distpath dist --workpath build\pyinstaller --log-level WARN
 if ($LASTEXITCODE -ne 0) { throw "The build failed (see above)." }
 
-Write-Host "5/6  Licenses" -ForegroundColor Cyan
+Write-Host "5/6  Licenses, and the uninstaller" -ForegroundColor Cyan
 & $python build_notices.py (Join-Path $PSScriptRoot "dist\DesktopPet")
 if ($LASTEXITCODE -ne 0) { throw "Couldn't write the licenses." }
+# Uninstall.bat: removes the game and its data (%LOCALAPPDATA%\DesktopPet), for players who'd never find that folder
+Copy-Item (Join-Path $PSScriptRoot "uninstall\uninstall.bat") (Join-Path $PSScriptRoot "dist\DesktopPet\Uninstall.bat")
 
 Write-Host "6/6  The zip" -ForegroundColor Cyan
 $zip = Join-Path $PSScriptRoot "dist\DesktopPet-windows.zip"

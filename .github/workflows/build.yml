@@ -4,6 +4,7 @@
 # version tag (git tag v1.2.0, then git push origin v1.2.0).
 # Get the builds: open the run once it's green; at the bottom, under Artifacts, are DesktopPet-windows and
 # DesktopPet-linux (GitHub wraps each in a zip of its own: inside are DesktopPet-windows.zip / DesktopPet-linux.tar.gz).
+# Each has an uninstaller next to the game (Uninstall.bat / uninstall.sh): it removes the game and everything it saved.
 # Send them to itch.io too: tick "Upload to itch.io" when you run it (needs the BUTLER_API_KEY secret and the
 # ITCH_GAME variable, see the itch job at the bottom). Version tags always upload, when those are set.
 #
@@ -74,6 +75,16 @@ jobs:
           QT_QPA_PLATFORM: offscreen   # (build.ps1 makes the icon with Qt)
         run: .\build.ps1
 
+      # Uninstall.bat (uninstall/uninstall.bat, added by build.ps1): removes the game and %LOCALAPPDATA%\DesktopPet
+      - name: Check the uninstaller is in the zip
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead("dist\DesktopPet-windows.zip")
+          $found = $zip.Entries | Where-Object { $_.FullName -replace '\\', '/' -eq "DesktopPet/Uninstall.bat" }
+          $zip.Dispose()
+          if (-not $found) { Write-Host "::error::Uninstall.bat isn't in the zip"; exit 1 }
+
       - name: Keep the build
         uses: actions/upload-artifact@v7
         with:
@@ -126,6 +137,12 @@ jobs:
 
       - name: Build
         run: ./build.sh
+
+      # uninstall.sh (uninstall/uninstall.sh, added by build.sh): removes the game and ~/.local/share/desktop-pet
+      - name: Check the uninstaller is in the tar.gz
+        run: |
+          tar -tzvf dist/DesktopPet-linux.tar.gz DesktopPet/uninstall.sh | grep -q '^-rwx' ||
+            { echo "::error::uninstall.sh isn't in the tar.gz, or isn't runnable"; exit 1; }
 
       - name: Keep the build
         uses: actions/upload-artifact@v7
