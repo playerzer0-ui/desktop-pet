@@ -27,13 +27,14 @@ she confesses). Each step can say who comes (folders; see character._check_who):
     day = "together" / "alone" / "away"   the same, said about the one she comes with (roster.py's partner)
     ends = "duet"      the step is a chat on a set topic (duet = {starts, about, with}), and ends with it
     ends = "answer"    like a single-moment major quest: she judges your messages with a hidden [done] / [not yet]
-                       tag (done_when, needs_nice) until one settles it; waiting_on = what she asked
+                       tag (done_when, needs_nice) until one settles it; waiting_on = what she asked; answer_words =
+                       a pattern a real answer has to contain (optional)
     ends = "day"       the step lasts the whole day it begins on, however many visits (its note on every line of
                        hers), and is over on the first launch of a later day (catch_up)
     completes = true   the quest is done when this step ends (the gate opens): the steps after it are an epilogue
 And any step with a mood can keep it after it ends: lingers = days (today counts as one), with lingers_note.
 """
-import datetime
+import datetime, re
 import memory, quests, trust
 from save import write_save
 
@@ -295,6 +296,8 @@ class Story:
             return None
         if len(message.split()) < 2 or quests.is_dodge(message) or not quests.looks_like_words(message):
             return None
+        if step["answer_words"] and not re.search(step["answer_words"], message, re.I):
+            return None  # (as for a major quest: a kind "are you okay?" got Vesper's [done], and ended her confession)
         return self._end(save, today)
 
     def _end(self, save, today=None):

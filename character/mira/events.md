@@ -213,7 +213,7 @@ CONTENT
   - Stage 2: acts unusually polite / says some very stiff officials are walking around the district, and she's on her best behaviour
   - Stage 3: acts nervous / says Heaven is in the district and she's keeping a close eye on Pip's chapel
   - Stage 4: acts scared / admits that if Heaven finds out what she really is, she would simply disappear
-  - Stage 5: acts relieved / tells you they've gone, and nobody found anything at the chapel or the bakery
+  - Stage 5: acts brave / says Heaven is in the district this week, and she's keeping watch so nobody finds anything at the chapel or the bakery
 - Unlocks: none
 - Tone note: tension, not danger. Heaven is a polite, cold presence; nothing happens to anyone on screen
 

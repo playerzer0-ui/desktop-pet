@@ -15,7 +15,8 @@ context, the cached prompt never changes (no slow re-read), and her diary never 
 
     lore = Lore(character, stage)
     lore.prompt                         her lore as her prompt has it (the short version)
-    lore.note(message, her_last_reply)  the hidden note for one request, or None
+    lore.note(message)                  the hidden note for one request, or None (session.py: your message, or the
+                                        stage direction she's speaking to, never her own last reply)
 """
 import re
 
@@ -71,9 +72,8 @@ class Lore:
     def note(self, *texts):
         """The hidden note for her next reply: the details of the sections a text mentions, then of ones that came
         up in her last LINGER replies (newest first), MOST at most. None if there are none.
-        texts are tried in order, and only the first that mentions anything counts: (your message, her last reply)
-        brings in her reply's topics only when you didn't name one, for "who's that?" (her replies name half her
-        world in passing: counted every time, they pushed out what you asked about)."""
+        texts are tried in order, and only the first that mentions anything counts (a fallback text is used only
+        when the first names nothing)."""
         self.replies += 1
         new = next((found for found in map(self.found, texts) if found), [])
         for heading in new:

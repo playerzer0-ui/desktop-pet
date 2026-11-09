@@ -163,8 +163,9 @@ needs_nice = true
 #   ends           how the step ends:
 #     "after_it"   right after her opening line
 #     "answer"     she judges the user's messages with [done] / [not yet] until one settles it: needs done_when,
-#                  optional needs_nice (left out = false here) and waiting_on (what she asked, so she answers the
-#                  user instead of repeating her opening)
+#                  optional needs_nice (left out = false here), waiting_on (what she asked, so she answers the
+#                  user instead of repeating her opening) and answer_words (a pattern a real answer has to
+#                  contain, as for a major quest: worth having, the model's [done] alone can be fooled)
 #     "duet"       a chat with someone there on a set topic: duet = { starts = "<folder>", with = "<folder>",
 #                  about = "..." }, and needs at least two
 #     "day"        the step lasts the whole day (any number of visits), over on a later day
@@ -202,6 +203,7 @@ ends = "answer"
 waiting_on = "CHANGE: the question she asked"
 done_when = "the user tells her CHANGE"
 needs_nice = false
+# answer_words = '''\b(?:CHANGE|CHANGE)\b'''  # (optional: words a real answer has to contain)
 completes = true
 
 # (Pip's run-away kind of step, for reference: she leaves, comes back and begs to stay.)

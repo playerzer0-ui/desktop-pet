@@ -182,7 +182,8 @@ points = 10
 #            (or the older day = "together" / "alone" / "away", said about Pip, who invited her)
 #   ends     "duet" = the step is a chat on a set topic (duet = {starts, about, with}); "answer" = she judges
 #            your messages with a hidden [done] / [not yet] tag until one settles it (done_when, needs_nice;
-#            waiting_on = what she asked, so she answers you instead of saying her opening again)
+#            waiting_on = what she asked, so she answers you instead of saying her opening again; answer_words =
+#            a pattern a real answer has to contain, in ''' quotes, as for a major quest)
 #            "day" = the step lasts the whole day (any number of visits), over on a later day
 #   lingers  days the step's mood stays after it ends (today counts as one), with lingers_note on her lines
 #   completes = true: the quest is done when this step ends (the stage-up comes here); the steps after it are
@@ -208,6 +209,8 @@ ends = "answer"
 waiting_on = "whether she should keep reporting on Pip to the people who called her home"
 done_when = "the user tells her to protect Pip: to stop reporting on her, lie in the report, or keep Pip safe some other way"
 needs_nice = false
+# (it has to say what to do: a kind "that sounds really scary, are you okay?" sometimes got her [done] too)
+answer_words = '''\b(?:protect\w*|safe\w*|stop\w*|quit\w*|lie|lies|lying|fake\w*|false\w*|boring|refuse\w*|hide|hiding|nothing|made up|make (?:something|stuff|it|things) up|don'?t (?:tell|report|send|write)|never (?:tell|report|send|write)|no more reports?|leave (?:her|pip) out)\b'''
 completes = true  # (your answer is what opens stage 4: day 4 below is the epilogue)
 # her injury doesn't heal the moment you answer: injured for the rest of today (only today: tomorrow she hides it)
 lingers = 1

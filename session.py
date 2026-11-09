@@ -277,9 +277,11 @@ class Session:
             note = "\n\n".join(filter(None, [memory.recall_note(recalled, self.character), note]))  # (judging last)
         if kind == "user" and self.company:  # (who's who, when her friend is on the desktop with her)
             note = "\n\n".join(filter(None, [self._company_note(), note]))
-        # the lore details your message (or her last reply, for "who's that?") or this direction is about
-        last = self.transcript[-1]["content"] if kind == "user" and self.transcript else None
-        told = self.lore.note(text, last)
+        # the lore details your message or this direction is about (lore.py). Not her own last reply: it names half
+        # her world in passing ("Blessings of Everlily" in every greeting), and searched as well, it kept handing her
+        # topics back to her (with her tags left on, "[neutral]" even brought in Freeport, "neutral ground", on
+        # almost every message). A "who's that?" about something she said has the short version in her prompt.
+        told = self.lore.note(text)
         if told:
             self.log("lore details: " + " · ".join(self.lore.shown))
             note = "\n\n".join(filter(None, [told, note]))
@@ -407,11 +409,11 @@ class Session:
         The first day she brings someone she invited along (roster.introduce), her greeting introduces them."""
         if not self.company:
             return None
-        if heard:
+        if heard:  # (told only to "greet too, and react", she often said it again: once word for word, as herself)
             name, words = heard
-            return self.character.fill(f"{{Their}} friend {name} is on the desktop with {{them}} today, and just "
-                f'greeted the user, saying: "{words}" {{They}} greets the user too, after {name}, and can react to '
-                f"what {name} said.")
+            return self.character.fill(f"{{Their}} friend {name} is on the desktop with {{them}} today, and has just "
+                f'greeted the user, saying: "{words}" Now {{name}} greets the user too, as {{name}}, in {{their}} own '
+                f"words and {{their}} own way: {{they}} never repeats or copies {name}'s greeting, and can react to it.")
         introduce = roster.introduce(self.character, self.company)
         if introduce:
             return introduce + "."

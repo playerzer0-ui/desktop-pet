@@ -54,8 +54,9 @@ in short: the faction of chaos and violence. Boss: Lind (a man: he/him)
 ```
 
 - `words:` the words or phrases that bring the details in (plurals and 's count too), checked against your
-  message, her last reply, and anything the game has her talk about (idle topics, quests, events, duets). Pick
-  names and the words people would really use: "who brings people back?" needs `resurrect`, not just `lind`
+  message and anything the game has her talk about (idle topics, quests, events, duets). Pick names and the words
+  people would really use: "who brings people back?" needs `resurrect`, not just `lind`. Leave out everyday words
+  ("friend", "fight", "leave", "warm"): "I had a fight with my sister" would bring in the Bloodcult
 - `in short:` always in her prompt. Put the facts she must never get wrong here (names, he/she, who did what): if
   no word matches, the summary is all she has
 - the details stay for her next 2 replies (for follow-up questions), at most 3 sections at once

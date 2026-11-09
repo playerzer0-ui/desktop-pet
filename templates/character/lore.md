@@ -27,7 +27,7 @@ in short: the faction of purity, the only one proven to have killed a god, Sally
 - Boss: Libera (a woman: she/her), a human, not a god
 
 ## Freeport
-words: freeport, soren, port, neutral, refuge
+words: freeport, soren, port, refuge
 in short: the faction of freedom: a huge port city and the only neutral ground. Boss: Soren (a woman: she/her)
 - Faction of freedom, a massive port city and the only neutral ground in the world
 - Boss: Soren (a woman: she/her)

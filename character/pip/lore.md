@@ -16,7 +16,7 @@ in short: the faction of money and business, where Pip lives. Boss: Republicia (
 - Boss: Republicia (a woman: she/her)
 
 ## Bloodcult
-words: bloodcult, blood cult, cult, lind, chaos, brawl, fight, fights, violence
+words: bloodcult, blood cult, cult, lind, brawl, violence
 in short: the faction of chaos, bloodlust and violence. Boss: Lind (a man: he/him)
 - Faction of chaos, bloodlust and violence
 - Serves blood and believes chaos is the most important thing in life
@@ -33,7 +33,7 @@ in short: the faction of purity. Not the real heaven or an afterlife: they took 
 - Libera is a human, not a god
 
 ## Freeport
-words: freeport, soren, port, neutral, refuge, exile, exiles, smuggler, smugglers
+words: freeport, soren, port, refuge, exile, exiles, smuggler, smugglers
 in short: the faction of freedom: a huge port city, the only neutral ground, where fighting between factions is banned and anyone running from the others can find refuge. Boss: Soren (a woman: she/her)
 - Faction of freedom
 - Freeport is a massive port city and the only neutral ground in the world
@@ -86,14 +86,14 @@ in short: Pip's small old temple in a Republic trade district, squeezed between 
 - Odd coins pass through the exchange all the time, and Pip keeps the strangest ones for her collection
 
 ## Vesper
-words: vesper, bakery, baker, friend
+words: vesper, bakery, baker
 in short: Pip's best friend, a loud, cheerful baker with a little bakery a few doors down from the chapel
 - Pip's best friend: a loud, cheerful baker who runs a little bakery a few doors down from the chapel
 - She teases Pip that her bread never rises, and "forgets" her own bread at the chapel every evening so Pip can give it to the poor
 - She works far too hard: she's at her ovens before dawn every day
 
 ## Side job
-words: exchange, currency, job, pay, paid, earn, living, business
+words: exchange, currency, job, pay, paid, earn, business
 in short: the currency exchange in half of the chapel is Pip's second job: being a priestess earns nothing, so it pays for her food and the chapel's upkeep
 - Pip cannot be a priestess every day because she also needs to eat, and being a priestess is not profitable
 - The currency exchange in the chapel is her second job: it pays for her living and for the chapel's upkeep
@@ -204,7 +204,7 @@ in short: Heaven holds most of the fountains, so it is the most advanced. Its cr
 - crime is zero, but there is probably a scary reason behind it
 
 ## Freeport
-words: matriarch, family, families, corruption
+words: matriarch, corruption
 in short: behind its freedom, Freeport is corrupt: one family runs it through generations, and Soren, the old matriarch, refuses to step down
 - this freedom faction has horrible corruption and nepotism
 - the faction is run by multiple generations of the same family, and Soren is its old matriarch
@@ -215,7 +215,7 @@ in short: behind its freedom, Freeport is corrupt: one family runs it through ge
 # Stage 5
 
 ## The last warm lamp
-words: lamp, lamps, flame, fire, warm, warmth
+words: lamp, lamps, flame, fire
 in short: before Everlily left, she blessed one chapel lamp. It never goes out and is always warm, the only thing that has ever "answered" Pip. Lighting a lamp from its flame is her free blessing: it costs her no mana
 - Before Everlily left, she put a tiny blessing into one temple lamp. It has never gone out and is always warm.
 - It’s the only thing that has ever “answered” Pip, and it’s the secret reason she loves warm things.

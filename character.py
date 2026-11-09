@@ -239,6 +239,12 @@ def _check_step(where, step, moods, folder=None):
     _check_who(where, step, folder)
     if step["ends"] == "answer" and "done_when" not in step:
         raise ValueError(f"{where} ends with an answer, so it needs: done_when")
+    if not isinstance(step.setdefault("answer_words", ""), str):
+        raise ValueError(f"{where}: answer_words must be text (a pattern a real answer has to contain)")
+    try:
+        re.compile(step["answer_words"])
+    except re.error as e:
+        raise ValueError(f"{where}: answer_words isn't a valid pattern: {e}")
     step.setdefault("needs_nice", False)
     if not isinstance(step.setdefault("lingers", 0), int) or step["lingers"] < 0:
         raise ValueError(f"{where}: lingers must be a whole number of days, 0 or more")

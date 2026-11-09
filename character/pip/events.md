@@ -167,7 +167,7 @@ CONTENT
   - Stage 2: acts busy / says the exchange is very busy this week, so she can't stay long
   - Stage 3: acts nervous / mentions visitors from Heaven are in the district, and she hopes they leave soon
   - Stage 4: acts worried / admits the chapel is disguised as just a currency exchange while they're here
-  - Stage 5: acts relieved / tells you they've gone, and she's lighting the altar lamps again
+  - Stage 5: acts calm but watchful / says Heaven is in the district this week, but this time she isn't hiding: she lights the altar lamps anyway
 - Unlocks: none
 - Tone note: tension, not danger. Heaven is a polite, cold presence; nothing happens to anyone on screen
 

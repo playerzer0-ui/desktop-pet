@@ -2231,8 +2231,10 @@ class SceneTest(unittest.TestCase):
         mira.log_path = os.path.join(TMP, "mira.log")
         cue = self.greeting(mira, save_with_minutes(0, trust_level=1), ["Pip"],
                             heard=("Pip", "This is my best friend Vesper!"))
-        self.assertIn('Pip is on the desktop with her today, and just greeted the user, saying: '
+        self.assertIn('Pip is on the desktop with her today, and has just greeted the user, saying: '
                       '"This is my best friend Vesper!"', cue)
+        # (told only to greet too, she often said Pip's greeting again: once word for word, calling herself Vesper)
+        self.assertIn("never repeats or copies Pip's greeting", cue)
 
 ALONE, BOTH = ["mira"], ["mira", "pip"]  # (who's on the desktop with Vesper: story.fits)
 
@@ -2291,6 +2293,30 @@ class SummonsTest(unittest.TestCase):
         self.assertNotIn("injured", v.moods, "the model would pick injured on its own")
         self.assertEqual(check.mood_problems(v), [])
         self.assertEqual(check.mood_problems(pip()), [], "injured is only Vesper's: Pip doesn't need it")
+
+    def test_a_kind_question_never_settles_her_confession(self):
+        """Live, "that sounds really scary, are you okay?" got her [done] and ended her story before you'd answered:
+        a real answer has to say what she should do (answer_words, as for a major quest)."""
+        import story
+        self.assertTrue(self.vesper().major_quests[3]["steps"][2]["answer_words"])
+        for message in ["that sounds really scary, are you okay?", "oh no, I'm so sorry you got hurt",
+                        "I think you should keep reporting, it's your job"]:
+            data = self.saved()
+            data["story"] = {"quest": "the-summons", "step": 2, "begun": True, "back_on": None, "goodbyes": 0}
+            self.assertIsNone(story.Story(self.vesper()).answered(data, message, "neutral", True), message)
+        for i, message in enumerate(["You should protect Pip. Stop reporting on her.",
+                                     "Keep Pip safe, don't tell them anything", "lie in your reports, make something up"]):
+            data = self.saved()
+            data["story"] = {"quest": "the-summons", "step": 2, "begun": True, "back_on": None, "goodbyes": 0}
+            # (the step ends either way: "done" the first time, "next" once the save has the quest done already)
+            self.assertEqual(story.Story(self.vesper()).answered(data, message, "neutral", True), "next" if i else "done",
+                             message)
+
+    def test_a_bad_answer_words_pattern_fails_at_load(self):
+        from character import _check_step
+        step = {"opens": "x", "ends": "answer", "done_when": "y", "answer_words": "(unclosed"}
+        with self.assertRaisesRegex(ValueError, "answer_words isn't a valid pattern"):
+            _check_step("[major_quests.3] step 3", step, {"neutral"})
 
     def test_the_whole_story(self):
         import story
@@ -3409,10 +3435,10 @@ class LoreTest(unittest.TestCase):
             l.note("ok")
         self.assertIsNone(l.note("ok"), f"gone after {lore.LINGER} more replies")
         self.assertIsNone(l.note("Linda says hi"), "whole words only")
-        self.assertIn("Soren breaks bonds", l.note("who?", "I miss Freeport"), "her last reply, if you named nothing")
+        self.assertIn("Soren breaks bonds", l.note("who?", "I miss Freeport"), "a later text, if the first named nothing")
         self.assertEqual(l.shown, ["Freeport"])
         l.note("and Lind?", "Soren and Freeport again")
-        self.assertEqual(l.shown, ["Bloodcult", "Freeport"], "what you name first; her reply doesn't count then")
+        self.assertEqual(l.shown, ["Bloodcult", "Freeport"], "the first text that names something; later ones don't count")
 
     def test_at_most_a_few_sections_newest_first(self):
         import lore
@@ -3468,6 +3494,32 @@ class LoreTest(unittest.TestCase):
         self.assertIn("## Bloodcult", sent[-1])
         self.assertEqual(s.messages[-2]["content"], "who leads the Bloodcult?")
         self.assertNotIn("Bloodcult takes it", " ".join(m["content"] for m in s.transcript))
+
+    def test_her_hidden_tags_never_bring_in_lore(self):
+        """Only your message brings lore in, not her own last reply: that is kept with its tags ("[neutral] [mood: ...]"),
+        and searched too, "neutral" brought in Freeport ("neutral ground") on every message that named no topic, and
+        Pip kept talking about Freeport."""
+        import session
+        sent = []
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, **kw):
+            sent.append(note)
+            messages += [{"role": "user", "content": question},
+                         {"role": "assistant", "content": "[neutral] [mood: neutral] Blessings of Everlily upon you!"}]
+            return "Blessings of Everlily upon you!", {}, "neutral", "neutral", None
+        real = session.start_server, session.warm_up, session.ask
+        session.start_server, session.warm_up, session.ask = (lambda *a, **k: None), (lambda *a, **k: ("loaded", 1)), ask
+        try:
+            c = pip()
+            c.save_path = os.path.join(tempfile.mkdtemp(), "pip.json")
+            s = session.Session(c, say=lambda *_: None)
+            s.quests.next = 1e12
+            from lore import Lore  # (a section brought in by a word her tags use, whatever the real word lists say)
+            s.lore = Lore(mock_character("## Calm\nwords: neutral, mood\nin short: calm\n- calm details"), 1)
+            s.user_says("hello there, how are you?")
+            s.user_says("what's your home like back in your world?")
+        finally:
+            session.start_server, session.warm_up, session.ask = real
+        self.assertFalse(any(n and "calm details" in n for n in sent), "her [neutral] [mood: ...] tags brought in lore")
 
     def test_the_check_finds_a_section_with_no_summary(self):
         from desktop import check
