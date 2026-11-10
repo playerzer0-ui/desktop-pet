@@ -1,4 +1,4 @@
-﻿# World Bible
+# World Bible
 
 The shared canon for every character. Character files (persona, lore, events) must not contradict this file.
 If a character needs a new world fact, add it here first, then reference it from the character.

@@ -1,4 +1,4 @@
-﻿# Stage 1
+# Stage 1
 
 ## Overview
 - A world full of magic and advanced technology

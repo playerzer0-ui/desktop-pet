@@ -1,4 +1,4 @@
-﻿# Events
+# Events
 
 ## Arc: giving -> receiving
 Pip is a giver who has trouble receiving. The stage is derived from trust (1-10), two trust levels per stage.

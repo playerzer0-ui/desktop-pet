@@ -1,4 +1,4 @@
-﻿# Pip and Vesper chatting with each other on the desktop (duets.py, desktop/scene.py), on days they come together.
+# Pip and Vesper chatting with each other on the desktop (duets.py, desktop/scene.py), on days they come together.
 # After a few quiet minutes one of them starts a little chat with the other, they take turns for a few lines,
 # and the last line wraps it up. Neither one earns trust from it, and the user can't talk to them until it's over.
 

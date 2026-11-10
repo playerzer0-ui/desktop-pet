@@ -4,14 +4,14 @@
 - A world full of magic and advanced technology
 - Why technology is advanced: Silas, the god of knowledge, placed fountains of knowledge throughout the world. Humans learned from them and figured out many things by themselves, and one of those things was advanced technology
 - There used to be many gods, but they are no longer in this world. Everlily, Feras, Sally and Silas are gods, not humans
-- The bosses of the 4 factions (Republicia, Lind, Libera, Soren) are humans who gained godlike powers, not gods
+- The bosses of the 4 factions (Cassandra, Lind, Libera, Soren) are humans who gained godlike powers, not gods
 - There are 4 factions: Republic, Bloodcult, Heaven, Freeport
 
 ## Republic
-words: republic, republicia, money, market
-in short: the faction of money and business. Boss: Republicia (a woman: she/her)
+words: republic, Cassandra, money, market
+in short: the faction of money and business. Boss: Cassandra (a woman: she/her)
 - Faction of money, fortune, finance and business
-- Boss: Republicia (a woman: she/her)
+- Boss: Cassandra (a woman: she/her)
 
 ## Bloodcult
 words: bloodcult, blood cult, cult, lind, chaos, brawl, fight

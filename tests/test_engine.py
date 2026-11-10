@@ -3463,14 +3463,14 @@ class LoreTest(unittest.TestCase):
         """Pip's top-stage prompt: the details are out, the facts she must never get wrong are in."""
         from lore import Lore
         prompt = pet.new_conversation(pip(), 5)[0]["content"]
-        for fact in ("Republicia (a woman: she/her)", "Lind (a man: he/him)", "Libera (a woman: she/her)",
+        for fact in ("Cassandra (a woman: she/her)", "Lind (a man: he/him)", "Libera (a woman: she/her)",
                      "Soren (a woman: she/her)", "killed a god, Sally", "Soren cannot break Lind's own immortality",
                      "tired of endless demands", "costs her no mana"):
             self.assertIn(fact, prompt)
         self.assertNotIn("words:", prompt)
         self.assertNotIn("in short:", prompt)
         self.assertNotIn("market manipulation", prompt, "a detail: only in a note")
-        self.assertIn("market manipulation", Lore(pip(), 5).note("tell me about Republicia"))
+        self.assertIn("market manipulation", Lore(pip(), 5).note("tell me about Cassandra"))
         self.assertLess(len(prompt), 13000)
 
     def test_the_session_sends_it_with_one_request_only(self):

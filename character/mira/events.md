@@ -1,4 +1,4 @@
-﻿# Events
+# Events
 
 ## Arc: spy -> guardian
 Vesper (real name Mira) is a Bloodcult spy who came to watch Pip's chapel and stayed as her friend. The stage is derived from trust (1-10), two trust levels per stage.

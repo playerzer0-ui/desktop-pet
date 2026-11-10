@@ -1,4 +1,4 @@
-﻿# Pip: everything about her that isn't prose (the prose is persona.md, lore.md and events.md).
+# Pip: everything about her that isn't prose (the prose is persona.md, lore.md and events.md).
 # Loaded by character.py. The code's own prompts say "{name}" and "{they}/{them}/{their}" and get these filled in.
 
 name = "Pip"

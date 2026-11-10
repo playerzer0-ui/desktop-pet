@@ -4,7 +4,7 @@ character/duets/<one>-<other>.toml (folder names, either order), e.g. character/
 Each character only ever sees her own conversation, so the other's line reaches her as a stage direction:
 
     Vesper  <- "(No message from the user. Vesper turns to Pip and starts a little chat with her about ...)"
-    Vesper  -> "Your loaves are flatter than Republicia's mercy, Pip."
+    Vesper  -> "Your loaves are flatter than Cassandra's mercy, Pip."
     Pip     <- "(No message from the user. Vesper says to Pip: "Your loaves are ...". Pip answers Vesper ...)"
     Pip     -> "*hides in her sleeves* They rise in spirit!"
     ...     (lines alternate, the last one wraps it up)
