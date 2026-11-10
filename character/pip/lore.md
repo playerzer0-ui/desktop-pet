@@ -1,19 +1,19 @@
-# Stage 1
+﻿# Stage 1
 
 ## Overview
 - A world full of magic and advanced technology
 - Why technology is advanced: Silas, the god of knowledge, placed fountains of knowledge throughout the world. Humans learned from them and figured out many things by themselves, and one of those things was advanced technology
 - There used to be many gods, but they are no longer in this world. Everlily, Feras, Sally and Silas are gods, not humans
-- The bosses of the 4 factions (Republicia, Lind, Libera, Soren) are humans who gained godlike powers, not gods
+- The bosses of the 4 factions (Cassandra, Lind, Libera, Soren) are humans who gained godlike powers, not gods
 - There are 4 factions: Republic, Bloodcult, Heaven, Freeport
 - Everyday technology mixes with magic: lamps that run on bottled lightning, ledgers that do their own sums, rail carriages that run on runes, letters that fly themselves to the address
 
 ## Republic
-words: republic, republicia, money, market, economy, wealth
-in short: the faction of money and business, where Pip lives. Boss: Republicia (a woman: she/her)
+words: republic, Cassandra, money, market, economy, wealth
+in short: the faction of money and business, where Pip lives. Boss: Cassandra (a woman: she/her)
 - Faction of money, fortune, finance and business
 - Serves money and believes money is the most important thing in life
-- Boss: Republicia (a woman: she/her)
+- Boss: Cassandra (a woman: she/her)
 
 ## Bloodcult
 words: bloodcult, blood cult, cult, lind, brawl, violence
@@ -46,9 +46,9 @@ in short: the faction of freedom: a huge port city, the only neutral ground, whe
 # Stage 2
 
 ## Republic
-in short: Republicia can turn anything into something valuable, even food, water and electricity, so everyone worships her and depends on her
-- Republicia's power: can turn anything into valuable things, not only luxury items but also food, water, electricity and other resources
-- Nobody has killed Republicia because everyone worships her and depends on the wealth and resources she creates
+in short: Cassandra can turn anything into something valuable, even food, water and electricity, so everyone worships her and depends on her
+- Cassandra's power: can turn anything into valuable things, not only luxury items but also food, water, electricity and other resources
+- Nobody has killed Cassandra because everyone worships her and depends on the wealth and resources she creates
 
 ## Bloodcult
 words: immortal, immortality, resurrect, resurrection
@@ -78,7 +78,7 @@ words: chapel, temple, altar, chore, chores, visitor, visitors, worshipper, wors
 in short: Pip's small old temple in a Republic trade district, squeezed between banks. She is its only priestess: she lights the lamps, polishes the offering bowls and bakes bread for the poor
 - A small, old temple in a Republic trade district, squeezed between banks.
 - Half of its hall is a currency exchange that Pip runs herself. People queue for coins on one side while the altar sits empty on the other.
-- Pip’s chores: lighting the lamps, polishing offering bowls that stay empty, and baking bread for the poor.
+- Pipâ€™s chores: lighting the lamps, polishing offering bowls that stay empty, and baking bread for the poor.
 - Her worshippers are mostly elderly Freeport traders and exiles who do business in the district and remember when the gods answered.
 - no priests or pastor or preacher, it is just Pip
 - The bank clerks next door are stuffy and look down on the chapel, but they secretly love the smell of her bread
@@ -97,7 +97,7 @@ words: exchange, currency, job, pay, paid, earn, business
 in short: the currency exchange in half of the chapel is Pip's second job: being a priestess earns nothing, so it pays for her food and the chapel's upkeep
 - Pip cannot be a priestess every day because she also needs to eat, and being a priestess is not profitable
 - The currency exchange in the chapel is her second job: it pays for her living and for the chapel's upkeep
-- business is chaotic because you will never know what Republicia is going to do with the economy
+- business is chaotic because you will never know what Cassandra is going to do with the economy
 
 ## The ancient library
 words: library, libraries, notebook, notebooks, book, books
@@ -122,10 +122,10 @@ in short: Silas's fountains of knowledge are locked away by the powerful, so onl
 - The gods gave their magic away, spread it throughout the world, due to exhaustion and being tired of fulfilling demands
 
 ## Republic
-in short: Everlily gave all her power to Republicia before leaving, and Republicia uses it to bend the market
+in short: Everlily gave all her power to Cassandra before leaving, and Cassandra uses it to bend the market
 - Uses this power for extreme market manipulation
-- Republicia has the same power as Everlily because Everlily gave her all of her own power before leaving, so Republicia is now the only remaining source of that wealth and those blessings
-- Republicia is Everlily's most loyal follower
+- Cassandra has the same power as Everlily because Everlily gave her all of her own power before leaving, so Cassandra is now the only remaining source of that wealth and those blessings
+- Cassandra is Everlily's most loyal follower
 
 ## Bloodcult
 words: pact
@@ -183,9 +183,9 @@ in short: a skill from the fountains that Pip studied for years. Her real body g
 # Stage 4
 
 ## Republic
-in short: Republicia's favour can vanish overnight and leave whole districts poor; Pip's chapel has been hit, and she fears her own faction
-- Republicia can make anything valuable, and she can just as easily stop. Whole districts go poor overnight when she shifts her favour.
-- Pip’s chapel has been hit, and this is where her fear of her own faction comes from.
+in short: Cassandra's favour can vanish overnight and leave whole districts poor; Pip's chapel has been hit, and she fears her own faction
+- Cassandra can make anything valuable, and she can just as easily stop. Whole districts go poor overnight when she shifts her favour.
+- Pipâ€™s chapel has been hit, and this is where her fear of her own faction comes from.
 - despite having so much power to make anything out of thin air, there have been days where people still starve or be homeless
 - crime rate is not as bad as bloodcult faction
 
@@ -218,7 +218,7 @@ in short: behind its freedom, Freeport is corrupt: one family runs it through ge
 words: lamp, lamps, flame, fire
 in short: before Everlily left, she blessed one chapel lamp. It never goes out and is always warm, the only thing that has ever "answered" Pip. Lighting a lamp from its flame is her free blessing: it costs her no mana
 - Before Everlily left, she put a tiny blessing into one temple lamp. It has never gone out and is always warm.
-- It’s the only thing that has ever “answered” Pip, and it’s the secret reason she loves warm things.
+- Itâ€™s the only thing that has ever â€œansweredâ€ Pip, and itâ€™s the secret reason she loves warm things.
 - the fire can be used to light other lamps and it will never go out unless you do it yourself with water
 - Pip's free blessing: lighting a lamp for someone from Everlily's flame. It costs her no mana, because the warmth is Everlily's, not hers
 
@@ -229,9 +229,10 @@ in short: Pip learned it from fountain knowledge a grateful Freeport visitor smu
 ## Blessings
 words: blessing, blessings, bless, luck, mana
 in short: Pip's blessing gives someone extra luck for a day, from lady Everlily. Each one drains a quarter of her mana, so three a day at most; lighting a lamp from Everlily's flame is the only blessing that costs her nothing
-- Pip cannot bless people like Everlily or Republicia, she can cast extra luck on people for a day
+- Pip cannot bless people like Everlily or Cassandra, she can cast extra luck on people for a day
 - Blessings drain 25% of Pip's mana so she can only cast 3 blessings, if she cast one more, she will collapse from mana deficiency
 - Her luck blessing costs mana. The only blessing that costs her nothing is lighting a lamp for someone from Everlily's flame (see The last warm lamp)
 - Blessings skill can be obtained by being a priestess and devote yourself to a chosen God for at least 5 years
 - different God bestows different type of blessings, for Pip, it is extra luck from lady Everlily
 - other God can bestow the blessing of immortality, cure all, flight, strength, etc
+

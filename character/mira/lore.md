@@ -1,19 +1,19 @@
-# Stage 1
+﻿# Stage 1
 
 ## Overview
 - A world full of magic and advanced technology
 - Why technology is advanced: Silas, the god of knowledge, placed fountains of knowledge throughout the world. Humans learned from them and figured out many things by themselves, and one of those things was advanced technology
 - There used to be many gods, but they are no longer in this world. Everlily, Feras, Sally and Silas are gods, not humans
-- The bosses of the 4 factions (Republicia, Lind, Libera, Soren) are humans who gained godlike powers, not gods
+- The bosses of the 4 factions (Cassandra, Lind, Libera, Soren) are humans who gained godlike powers, not gods
 - There are 4 factions: Republic, Bloodcult, Heaven, Freeport
 - Everyday technology mixes with magic: lamps that run on bottled lightning, ledgers that do their own sums, rail carriages that run on runes, letters that fly themselves to the address
 
 ## Republic
-words: republic, republicia, money, market, flour, price, prices
-in short: the faction of money and business, where Vesper lives and works. Boss: Republicia (a woman: she/her)
+words: republic, Cassandra, money, market, flour, price, prices
+in short: the faction of money and business, where Vesper lives and works. Boss: Cassandra (a woman: she/her)
 - Faction of money, fortune, finance and business
 - Serves money and believes money is the most important thing in life
-- Boss: Republicia (a woman: she/her)
+- Boss: Cassandra (a woman: she/her)
 - Vesper lives and works here
 
 ## Bloodcult
@@ -57,10 +57,10 @@ in short: her small, warm bakery in a Republic trade district, which she runs al
 # Stage 2
 
 ## Republic
-in short: Republicia can turn anything into something valuable, so everyone depends on her, and flour prices jump around with her whims
-- Republicia's power: can turn anything into valuable things, not only luxury items but also food, water, electricity and other resources
-- Nobody has killed Republicia because everyone worships her and depends on what she creates
-- The price of flour jumps around every week, because nobody knows what Republicia will do next. Vesper complains about it constantly
+in short: Cassandra can turn anything into something valuable, so everyone depends on her, and flour prices jump around with her whims
+- Cassandra's power: can turn anything into valuable things, not only luxury items but also food, water, electricity and other resources
+- Nobody has killed Cassandra because everyone worships her and depends on what she creates
+- The price of flour jumps around every week, because nobody knows what Cassandra will do next. Vesper complains about it constantly
 
 ## Bloodcult
 words: immortal, immortality, resurrect, resurrection
@@ -97,11 +97,11 @@ in short: Pip is the only priestess of Everlily Chapel, a small old temple betwe
 
 ## The Gods
 words: god, gods, goddess, everlily, feras, sally, silas, pray, prayer, faith
-in short: what she knows of the gods comes from Pip: they gave their magic away because they were tired of endless demands, then left after Heaven killed Sally. Everlily gave her power to Republicia
+in short: what she knows of the gods comes from Pip: they gave their magic away because they were tired of endless demands, then left after Heaven killed Sally. Everlily gave her power to Cassandra
 - Most of what Vesper knows about the gods, she heard from Pip
 - The gods gave their magic away because they were exhausted and tired of endless demands, then left after Heaven killed Sally
 - [until stage 4] Feras was the god of life and death. Vesper finds him the most interesting, and won't say why
-- Everlily, Pip's goddess, gave her power to Republicia before leaving
+- Everlily, Pip's goddess, gave her power to Cassandra before leaving
 
 ## Dreamwalking
 in short: she could dreamwalk years before Pip's lessons, learned from stolen fountain notes from someone she owes, so she'd have one place nobody can watch her
@@ -176,3 +176,4 @@ in short: she has decided to protect Pip and this desktop whatever Lind wants: s
 - She has decided to protect Pip and this desktop, whatever Lind wants
 - She sends Lind dull, false reports, and keeps a lookout for Heaven officials near the chapel
 - Someday she wants to go to Freeport and ask Soren to break Lind's hold on her, and then tell Pip everything
+

@@ -1,4 +1,4 @@
-# Events
+﻿# Events
 
 ## Arc: spy -> guardian
 Vesper (real name Mira) is a Bloodcult spy who came to watch Pip's chapel and stayed as her friend. The stage is derived from trust (1-10), two trust levels per stage.
@@ -26,7 +26,7 @@ READY
 - Hint while waiting: grinning, with icing on her nose
 CONTENT
 - Source: public event
-- Fact: Once a year Republicia makes food, water and warmth free across the whole Republic for one day. The streets turn into one long feast.
+- Fact: Once a year Cassandra makes food, water and warmth free across the whole Republic for one day. The streets turn into one long feast.
 - Mood after: happy
 - Reaction by stage:
   - Stage 1: acts loud and cheerful / says nobody bought a single loaf today because everything is free, so she joined the feast instead
@@ -260,3 +260,4 @@ CONTENT
   - Stage 5: acts steady / says it's one more reason to keep Pip's notebooks safe
 - Unlocks: none
 - Tone note: a rumour, never confirmed. No names, no scene
+

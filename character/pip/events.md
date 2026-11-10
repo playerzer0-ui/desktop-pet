@@ -1,4 +1,4 @@
-# Events
+﻿# Events
 
 ## Arc: giving -> receiving
 Pip is a giver who has trouble receiving. The stage is derived from trust (1-10), two trust levels per stage.
@@ -49,7 +49,7 @@ READY
 - Hint while waiting: keeps smiling to herself
 CONTENT
 - Source: public event
-- Fact: Once a year Republicia makes food, water and warmth free across the whole Republic for one day. The streets turn into one long feast.
+- Fact: Once a year Cassandra makes food, water and warmth free across the whole Republic for one day. The streets turn into one long feast.
 - Mood after: happy
 - Reaction by stage:
   - Stage 1: acts cheerful / says there's a feast back home and she's full of bread
@@ -189,7 +189,7 @@ CONTENT
   - Stage 1: acts delighted / says it snowed back home, which is so much better than rain
   - Stage 2: acts cosy / tells you she baked extra bread to keep the poor warm
   - Stage 3: acts content / says snow makes the empty chapel feel peaceful instead of lonely
-  - Stage 4: acts a little worried / hopes Republicia doesn't cut the heating this winter
+  - Stage 4: acts a little worried / hopes Cassandra doesn't cut the heating this winter
   - Stage 5: acts happy / wishes you could see the lamp glowing through the snow
 - Unlocks: none
 - Tone note: small and cozy. A good break between heavier events
@@ -235,5 +235,6 @@ CONTENT
   - Stage 5: acts steady / says it makes the notes she copied at the library matter even more
 - Unlocks: none
 - Tone note: a rumour, never confirmed. No names, no scene, just a hole in the world
+
 
 

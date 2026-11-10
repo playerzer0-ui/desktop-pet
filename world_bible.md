@@ -1,4 +1,4 @@
-# World Bible
+﻿# World Bible
 
 The shared canon for every character. Character files (persona, lore, events) must not contradict this file.
 If a character needs a new world fact, add it here first, then reference it from the character.
@@ -34,13 +34,13 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 5. **The abuse**: people learn magic and some abuse it. The gods do not think much of it
 6. **The death of Sally**: Libera studies magic for a couple of years, learns how to kill a god, and kills Sally with space-time magic. Her followers take the name Heaven
 7. **Too late**: the gods attempt damage control, but their power is now little to none
-8. **The departure (August 14)**: before leaving, Everlily gives all of her power to Republicia, keeping back only a tiny blessing that she places in one temple lamp as her last gift to Pip (the last warm lamp). The remaining gods leave the world
+8. **The departure (August 14)**: before leaving, Everlily gives all of her power to Cassandra, keeping back only a tiny blessing that she places in one temple lamp as her last gift to Pip (the last warm lamp). The remaining gods leave the world
 9. **Present day (10 years later)**: the factions rule. Fountains are gatekept, and some have been destroyed to protect power. The ancient library is scheduled to be torn down on November 20, 2026 (see 4)
 
 ## 4. Recurring dates
 | Date | Event | Notes |
 |---|---|---|
-| March 3 (yearly) | Day of plenty | Republicia makes food, water and warmth free across the Republic for one day |
+| March 3 (yearly) | Day of plenty | Cassandra makes food, water and warmth free across the Republic for one day |
 | June 21 (yearly) | Lantern night | Freeport floats lanterns for ships that never came back |
 | August 14 (yearly) | The day the gods left | 10 years ago |
 | October 15 (yearly) | Sally's death anniversary | Heaven celebrates its victory publicly. The other factions keep quiet |
@@ -62,7 +62,7 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 - Domain: wealth, resources and blessings, to help humans face challenges
 - Supported giving magic to humans; she just wants what's best for them
 - Patient, calm, very chill
-- Before leaving: gave all of her power to Republicia, except one tiny blessing placed in the last warm lamp as her last gift to Pip
+- Before leaving: gave all of her power to Cassandra, except one tiny blessing placed in the last warm lamp as her last gift to Pip
 - Status: left the world
 
 ### Feras (a man: he/him)
@@ -93,14 +93,14 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 ### Overview
 | Faction | Serves | Believes | Boss | Boss power | Crime |
 |---|---|---|---|---|---|
-| Republic | Money | Money is the most important thing in life | Republicia (she/her) | Turns anything into something valuable | Moderate |
+| Republic | Money | Money is the most important thing in life | Cassandra (she/her) | Turns anything into something valuable | Moderate |
 | Bloodcult | Blood | Chaos is the most important thing in life | Lind (he/him) | Immortality and resurrection | All-time high |
 | Heaven | Purity | Only the pure chosen ones can be the best | Libera (she/her) | Space-time magic | Zero (officially) |
 | Freeport | Freedom | No one should be owned by anything | Soren (she/her) | Unbinding | High |
 
 ### Republic
 - Faction of money, fortune, finance and business
-- **Republicia** (a woman: she/her)
+- **Cassandra** (a woman: she/her)
   - Power: can turn anything into something valuable: luxury items, but also food, water, electricity and other resources
   - Has the same power as Everlily, because Everlily gave her all of it. She is now the only remaining source of that wealth and those blessings
   - Everlily's most loyal follower
@@ -173,7 +173,7 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 - Works even though the gods are gone: the devotee acts as the god's proxy, channelling that god's power in their absence
 - Each god grants a different type of blessing. Known examples: extra luck (Everlily), plus immortality, cure-all, flight and strength from unnamed gods
 - Blessings cost mana (see the character's own files for how much)
-- A priest's blessing is far weaker than a god's or Republicia's
+- A priest's blessing is far weaker than a god's or Cassandra's
 
 ### 7.4 The fountains of knowledge
 - Created by Silas so humans could progress much faster without the gods' help
@@ -203,7 +203,7 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 ### The last warm lamp (in Everlily Chapel)
 - Before leaving, Everlily put a tiny blessing into this one temple lamp. It has never gone out and is always warm
 - Its fire can light other lamps, and those flames never go out unless someone puts them out with water
-- Everlily's last gift to Pip, the one tiny blessing she kept back when she gave the rest of her power to Republicia
+- Everlily's last gift to Pip, the one tiny blessing she kept back when she gave the rest of her power to Cassandra
 - Lighting a lamp from it costs no mana, because the warmth is Everlily's
 - **Secret**: only Pip knows what it is
 
@@ -239,14 +239,14 @@ Use this to decide what a new character could plausibly know.
 | Vesper (real name Mira) | she/her | Republic, secretly Bloodcult | Baker a few doors down from Everlily Chapel, and Pip's best friend. **Secret**: a Bloodcult spy sent by Lind to watch the chapel's lamp; "Vesper" is the name Lind gave her, and nobody (not even Pip) knows her real name. Pip, at her highest trust, invites her to the desktop and believes she's teaching her to dreamwalk; **secretly** she learned it years ago | `character/mira/` |
 
 Named NPCs (exist in the world, not playable):
-- Republicia, Lind, Libera, Soren (faction bosses, see 6)
+- Cassandra, Lind, Libera, Soren (faction bosses, see 6)
 - Everlily, Feras, Sally, Silas (gods, see 5)
 
 ---
 
 ## 11. Tone rules (all characters)
 - Sad, scary or violent things are told gently, like a bedtime story: never graphic, never gory, no cruelty shown on screen
-- Big events (Sally's death, Bloodcult fights, Republicia's crashes) are distant news, not scenes
+- Big events (Sally's death, Bloodcult fights, Cassandra's crashes) are distant news, not scenes
 - Keep the mood warm even when the news is heavy
 
 ---
@@ -255,3 +255,4 @@ Named NPCs (exist in the world, not playable):
 Undecided points that new characters may bump into. Decide them here before using them.
 
 - None right now
+

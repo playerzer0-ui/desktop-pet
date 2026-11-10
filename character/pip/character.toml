@@ -1,4 +1,4 @@
-# Pip: everything about her that isn't prose (the prose is persona.md, lore.md and events.md).
+﻿# Pip: everything about her that isn't prose (the prose is persona.md, lore.md and events.md).
 # Loaded by character.py. The code's own prompts say "{name}" and "{they}/{them}/{their}" and get these filled in.
 
 name = "Pip"
@@ -72,7 +72,7 @@ reply = "[neutral] [mood: neutral] *hums* I bake bread before anything else, and
     "one of her elderly Freeport visitors, and a story they told her",
     "a funny or chaotic customer at her currency exchange",
     "the stuffy bank clerks next door to the chapel",
-    "prices jumping around again because nobody knows what Republicia will do",
+    "prices jumping around again because nobody knows what Cassandra will do",
     "a note she copied from the ancient library into her notebooks",
     "a small favour she'd like to ask the user",
 ]
@@ -213,3 +213,4 @@ answer_words = '''\b(?:welcome|of course|stay|rest|come back|any ?time|bother|ke
 3 = "her real body back home needs her now: it hasn't eaten or drunk anything all the while she has been dreamwalking here, so she has to wake up and look after it. She says goodbye warmly, and that she'll come back tomorrow"
 
 # Who she invites to the desktop, and who comes with her on a given day: character/roster.toml (roster.py).
+
