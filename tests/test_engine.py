@@ -253,7 +253,7 @@ class DiaryTest(unittest.TestCase):
             llm.chat = real
         self.assertEqual(notes, [("The user's name is Jerry.", True), ("The user had a long day at work.", False),
                                  ("The user is resting after work.", False)])
-        self.assertIn("The user is never Vesper, and never Pip:", prompts[0])
+        self.assertIn("The user is never Vesper, and never Pip or Ruby:", prompts[0])
         self.assertNotIn("Mira", prompts[0], "her real name stays her secret")
         self.assertEqual(Character("mira").name, "Vesper")
         self.assertTrue({"Pip", "Vesper", "Mira"} <= __import__("engine.character", fromlist=["x"]).cast())
@@ -877,7 +877,7 @@ class CastCheckTest(unittest.TestCase):
         from progress import roster
         from desktop import check
         from unittest import mock
-        with mock.patch.object(roster, "rules", lambda: {"on_screen": 2, "unlocks": [], "lineups": []}):
+        with mock.patch.object(roster, "rules", lambda: {"on_screen": 2, "unlocks": [], "arrivals": [], "lineups": []}):
             problems = check.cast_problems(also=["mira"])
         self.assertTrue(any("names 'mira', who isn't in the cast" in p for p in problems), problems)
 
@@ -988,8 +988,11 @@ class RosterTest(unittest.TestCase):
         from progress import roster
         r = roster.rules()
         self.assertEqual([(u["by"], u["who"]) for u in r["unlocks"]], [("pip", "mira")])
+        self.assertEqual([(a["after"], a["who"], a["at_trust"], a["days"]) for a in r["arrivals"]],
+                         [("pip", "ruby", 9, 30)])
         self.assertEqual({tuple(l["members"]): l["weight"] for l in r["lineups"]},
-                         {("pip", "mira"): 60, ("pip",): 20, ("mira",): 20})
+                         {("pip", "mira"): 60, ("pip",): 20, ("mira",): 20,
+                          ("ruby", "pip"): 15, ("ruby", "mira"): 15, ("ruby",): 10})
 
     def test_mistakes_fail_loudly(self):
         from progress import roster
@@ -1891,12 +1894,12 @@ class SceneTest(unittest.TestCase):
             s = session.Session(c, say=lambda *_: None, slot=0, slots=3, company=["Vesper", "Nova"])
         finally:
             session.start_server, session.warm_up, session.ask = real
-        self.assertEqual(s._with_company(), "Her friends Vesper and Nova are on the desktop with her today too, "
+        self.assertEqual(s.friends.greeting(), "Her friends Vesper and Nova are on the desktop with her today too, "
                                             "but this greeting is her own, to the user.")
-        self.assertIn("Vesper and Nova are on the desktop beside Pip", s._company_note())
-        self.assertIn("are other people", s._company_note())
+        self.assertIn("Vesper and Nova are on the desktop beside Pip", s.friends.note())
+        self.assertIn("are other people", s.friends.note())
         s.company = ["Vesper"]
-        self.assertIn("Vesper is on the desktop beside Pip", s._company_note())
+        self.assertIn("Vesper is on the desktop beside Pip", s.friends.note())
 
     def test_pips_time_up_sends_both_home(self):
         from mind.session import Turn
@@ -2403,8 +2406,8 @@ class SummonsTest(unittest.TestCase):
         self.day3()
         self.assertEqual(story.mood_today(self.saved(), self.vesper(), ALONE), "injured")
         self.assertIsNone(story.mood_today(self.saved(), self.vesper(), BOTH), "day 3 is hers alone")
-        from desktop import app as A
-        self.assertEqual(A.story_mood(self.vesper(), ALONE), "injured")
+        from progress import launch
+        self.assertEqual(launch.story_mood(self.vesper(), ALONE), "injured")
 
     def test_she_answers_you_instead_of_saying_her_opening_again(self):
         self.day3()
@@ -2453,8 +2456,8 @@ class SummonsTest(unittest.TestCase):
             self.assertNotIn(secret, prompt(with_pip), "Pip's there: it could slip out")
         self.assertIn("She is Bloodcult", prompt(alone), "alone with you she's all of herself")
         self.assertIn("Pip nearly found out", prompt(alone))
-        self.assertIsNone(with_pip._major_due(), "she'd tell you her real name in front of Pip")
-        self.assertIn("real name", alone._major_due() or "")
+        self.assertIsNone(with_pip.friends.major_due(with_pip.save, with_pip.major), "she'd tell you her real name in front of Pip")
+        self.assertIn("real name", alone.friends.major_due(alone.save, alone.major) or "")
 
     def test_the_lineup_follows_her_story(self):
         from progress import roster, story
@@ -3558,7 +3561,7 @@ class TemplateTest(unittest.TestCase):
         game = tempfile.mkdtemp(prefix="pet-template-")
         try:
             cast = os.path.join(game, "character")
-            for folder in ("pip", "mira", "duets"):
+            for folder in ("pip", "mira", "ruby", "duets"):
                 shutil.copytree(os.path.join(repo, "character", folder), os.path.join(cast, folder))
             shutil.copytree(template, os.path.join(cast, "FOLDER"))
             shutil.copy(os.path.join(template, "duet.toml"), os.path.join(cast, "duets", "FOLDER-pip.toml"))
@@ -3592,6 +3595,88 @@ class TemplateTest(unittest.TestCase):
         self.assertFalse(character.is_character("FOLDER"))
         self.assertNotIn("NAME", character.cast())
         self.assertEqual([u["who"] for u in roster.rules()["unlocks"]], ["mira"])
+
+class ArrivalTest(unittest.TestCase):
+    """roster.py [[arrivals]]: Ruby turns up on her own, 30 days after Pip reaches trust 9."""
+
+    def setUp(self):
+        from unittest import mock
+        from engine.save import write_save
+        self.roster = use_roster(self)
+        self.pip_save = Save(temp_path("pip-arrival"), {"trust": 1})
+        write_save(self.pip_save)
+        real = self.roster.Character
+        def character(folder):
+            c = real(folder)
+            if folder == "pip":
+                c.save_path = self.pip_save.path
+            return c
+        patch = mock.patch.object(self.roster, "Character", character)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.D = datetime.date
+
+    def pip_trust(self, level):
+        from engine.save import write_save
+        self.pip_save["trust"] = level
+        write_save(self.pip_save)
+
+    def today(self, day, **kw):
+        return self.roster.today(day=day, **kw)
+
+    def test_nothing_starts_below_pips_trust_9(self):
+        self.pip_trust(8)
+        self.assertEqual(self.today(self.D(2026, 12, 1)).members, ["pip"])
+        self.assertEqual(self.roster.state()["arrived"], {})
+
+    def test_she_comes_on_her_own_30_days_later(self):
+        D = self.D
+        self.pip_trust(9)
+        self.assertEqual(self.today(D(2026, 12, 1)).members, ["pip"])
+        self.assertEqual(self.roster.state()["arrived"]["ruby"], {"started_on": "2026-12-01", "visit_day": None})
+        self.pip_trust(10)  # (the clock started once, and trust going up doesn't restart it)
+        self.assertEqual(self.today(D(2026, 12, 30)).members, ["pip"], "29 days: not yet")
+        self.assertEqual(self.today(D(2026, 12, 31)).members, ["ruby"], "30 days: her very first day, alone")
+        self.assertEqual(self.today(D(2026, 12, 31)).members, ["ruby"], "opened again the same day")
+        self.assertEqual(self.roster.state()["arrived"]["ruby"]["visit_day"], "2026-12-31")
+
+    def test_a_late_launch_still_brings_her(self):
+        self.pip_trust(9)
+        self.today(self.D(2026, 12, 1))
+        self.assertEqual(self.today(self.D(2027, 2, 14)).members, ["ruby"], "the first launch after the 30 days")
+
+    def test_after_her_first_day_she_is_in_the_lineups(self):
+        D = self.D
+        self.pip_trust(9)
+        self.today(D(2026, 12, 1))
+        self.today(D(2026, 12, 31))
+        self.assertEqual(self.today(D(2026, 12, 31)).members, ["ruby"])
+        picks = []
+        def pick(lineups, weights):
+            picks.append({tuple(l["members"]) for l in lineups})
+            return [next(l for l in lineups if l["members"] == ["ruby", "pip"])]
+        self.assertEqual(self.today(D(2027, 1, 1), pick=pick, need=lambda *_: None).members, ["ruby", "pip"])
+        self.assertEqual(picks, [{("pip",), ("ruby", "pip"), ("ruby",)}], "Vesper hasn't come yet: no lineup with her")
+
+    def test_mistakes_fail_loudly(self):
+        from progress import roster
+        arrival = 'who = "ruby"\nafter = "pip"\nat_trust = 9\ndays = 30\n'
+        for text, problem in [
+                ('[[arrivals]]\nwho = "ruby"\nafter = "pip"\n', "missing"),
+                ('[[arrivals]]\n' + arrival.replace('"ruby"', '"nobody"'), "isn't a character"),
+                ('[[arrivals]]\n' + arrival.replace('"pip"', '"mira"'), "can't come yet"),
+                ('[[arrivals]]\n' + arrival.replace('"ruby"', '"pip"'), "already in the cast"),
+                ('[[arrivals]]\n' + arrival.replace("9", "11"), "at_trust"),
+                ('[[arrivals]]\n' + arrival.replace("30", "-1"), "days")]:
+            with self.subTest(problem=problem), self.assertRaisesRegex(ValueError, problem):
+                roster.rules(self.write(text))
+
+    def write(self, text):
+        path = temp_path("rules").replace(".json", ".toml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
 
 if __name__ == "__main__":
     unittest.main()

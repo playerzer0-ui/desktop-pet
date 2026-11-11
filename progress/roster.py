@@ -7,6 +7,11 @@ Rules: character/roster.toml. What has happened: the player's saves/roster.json,
 
 At trust 10 Pip invites Vesper on her way out, the next day Vesper comes on her own, and from then on they come
 in roster.toml's lineups (or as a story needs).
+
+Someone can also arrive uninvited ([[arrivals]]): once `after` reaches a trust, a clock of `days` starts, and on the
+day it runs out she comes on her own, a surprise, and from the day after that she's in the lineups too:
+
+    {"arrived": {"ruby": {"started_on": "2026-12-01", "visit_day": "2027-01-01"}}}
 """
 import datetime, os, random, threading, tomllib
 from dataclasses import dataclass, field
@@ -24,10 +29,10 @@ _lock = threading.RLock()  # two minds on their own threads may write roster.jso
 # --- the rules (roster.toml) ---
 
 def rules(path=None):
-    """roster.toml, checked: {"on_screen", "unlocks", "lineups"}. A mistake fails loudly at launch."""
+    """roster.toml, checked: {"on_screen", "unlocks", "arrivals", "lineups"}. A mistake fails loudly at launch."""
     with open(path or RULES, "rb") as f:
         r = tomllib.load(f)
-    unlocks, lineups = r.get("unlocks", []), r.get("lineups", [])
+    unlocks, arrivals, lineups = r.get("unlocks", []), r.get("arrivals", []), r.get("lineups", [])
     on_screen = r.get("on_screen", ON_SCREEN)
     if not isinstance(on_screen, int) or on_screen < 1:
         raise ValueError("roster.toml: on_screen must be a whole number, 1 or more")
@@ -50,6 +55,24 @@ def rules(path=None):
         if not isinstance(u["at_trust"], int) or not 1 <= u["at_trust"] <= 10:
             raise ValueError(f"{where}: at_trust must be a whole number from 1 to 10")
         known.add(u["who"])
+    for i, a in enumerate(arrivals, 1):
+        where = f"roster.toml [[arrivals]] {i}"
+        missing = [key for key in ("who", "after", "at_trust", "days") if key not in a]
+        if missing:
+            raise ValueError(f"{where} is missing: {', '.join(missing)}")
+        for key in ("who", "after"):
+            if a[key] not in folders:
+                raise ValueError(f"{where}: {key} = {a[key]!r} isn't a character in character/")
+        if a["after"] not in known:
+            raise ValueError(f"{where}: {a['after']!r} can't come yet, so her trust can't start {a['who']!r}'s clock "
+                             "(an unlock or arrival above this one has to bring her)")
+        if a["who"] in known:
+            raise ValueError(f"{where}: {a['who']!r} is already in the cast (the first character, or invited above)")
+        if not isinstance(a["at_trust"], int) or not 1 <= a["at_trust"] <= 10:
+            raise ValueError(f"{where}: at_trust must be a whole number from 1 to 10")
+        if not isinstance(a["days"], int) or a["days"] < 0:
+            raise ValueError(f"{where}: days must be a whole number, 0 or more")
+        known.add(a["who"])
     for i, l in enumerate(lineups, 1):
         where = f"roster.toml [[lineups]] {i}"
         members = l.get("members")
@@ -59,14 +82,14 @@ def rules(path=None):
             raise ValueError(f"{where}: at most {on_screen} on the desktop at once (on_screen)")
         for m in members:
             if m not in known:
-                raise ValueError(f"{where}: {m!r} is neither the first character nor invited in [[unlocks]]")
+                raise ValueError(f"{where}: {m!r} is neither the first character nor in [[unlocks]] or [[arrivals]]")
         if not isinstance(l.get("weight"), int) or l["weight"] < 0:
             raise ValueError(f"{where}: weight must be a whole number, 0 or more")
         if not isinstance(l.setdefault("note", ""), str):
             raise ValueError(f"{where}: note must be text")
     if lineups and not sum(l["weight"] for l in lineups):
         raise ValueError("roster.toml: the lineups' weights are all 0")
-    return {"on_screen": on_screen, "unlocks": unlocks, "lineups": lineups}
+    return {"on_screen": on_screen, "unlocks": unlocks, "arrivals": arrivals, "lineups": lineups}
 
 def _partner(folder, r, among=None):
     """The one who invited `folder`, else the first one she invited (only from `among`, if given), or None."""
@@ -94,6 +117,7 @@ def state():
         else:
             data = load_save(PATH, default={})
         data.setdefault("unlocked", {})
+        data.setdefault("arrived", {})
         return data
 
 def _from_old_saves(r=None):
@@ -192,8 +216,22 @@ def today(lead=DEFAULT, day=None, pick=random.choices, need=None):
                 return Today([u["who"]])
         if any(e["visit_day"] is None and e["invited_on"] == iso for e in unlocked.values()):
             return Today([lead], invited_today=True)  # she went home after inviting them
+        arrived = data["arrived"]
+        for a in r["arrivals"]:  # an uninvited arrival: her clock starts when `after` reaches the trust...
+            if a["who"] not in arrived and load_save(Character(a["after"]).save_path).get("trust", 1) >= a["at_trust"]:
+                arrived[a["who"]] = {"started_on": iso, "visit_day": None}
+                write_save(data)
+            entry = arrived.get(a["who"])  # ...and on the day it runs out she comes on her own
+            due = entry and datetime.date.fromisoformat(entry["started_on"]) + datetime.timedelta(days=a["days"])
+            if entry and entry["visit_day"] is None and day >= due:
+                entry["visit_day"] = iso
+                write_save(data)
+            if entry and entry["visit_day"] == iso:
+                return Today([a["who"]])
         settled = [DEFAULT] + [u["who"] for u in r["unlocks"]
                                if unlocked.get(u["who"], {}).get("visit_day") and iso > unlocked[u["who"]]["visit_day"]]
+        settled += [a["who"] for a in r["arrivals"]
+                    if arrived.get(a["who"], {}).get("visit_day") and iso > arrived[a["who"]]["visit_day"]]
         if len(settled) == 1:
             return Today([DEFAULT])
         picked = data.get("today")
@@ -241,7 +279,7 @@ def private_due(data, character):
 def stories_need(settled, r, day=None):
     """The lineup a story step needs today, as a Need, or None. Invited ones' stories first, then the first
     character's. Failing that, a private major quest that's due brings that one alone."""
-    order = [u["who"] for u in r["unlocks"] if u["who"] in settled] + [DEFAULT]
+    order = [u["who"] for u in r["unlocks"] + r["arrivals"] if u["who"] in settled] + [DEFAULT]
     for folder in order:
         partner = _partner(folder, r, settled)
         c, data = _save_of(folder)

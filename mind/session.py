@@ -17,6 +17,7 @@ from progress import roster, story, trust, visits
 from engine.character import Character, DEFAULT, folder_of
 from mind.directions import direction
 from mind.idle import Idle
+from progress.company import Company
 from progress.quests import Quests, MajorQuests, QUIET_FIRST
 from engine.config import N_CTX
 from engine.server import start_server
@@ -63,7 +64,8 @@ class Session:
         """slot = her slot on the server, of `slots`. company = names of others on the desktop today.
         greeting_note = something for her greeting to bring up."""
         self.character = character if isinstance(character, Character) else Character(character)
-        self.say, self.slot, self.slots, self.company = say, slot, slots, list(company)
+        self.say, self.slot, self.slots = say, slot, slots
+        self.friends = Company(self.character, company)
         self.greeting_note = greeting_note
         start_server(say, slots)
         self.save = trust.start(self.character.save_path, self.character.gates)  # counts today as a day logged
@@ -94,9 +96,9 @@ class Session:
     def open(self, heard=None, on_text=None, on_mood=None):
         """Her greeting. heard = (name, words) if someone else on the desktop just greeted the user."""
         begins = self.story.begin_text(self.save, greeting=True, present=self.present)
-        major = None if begins else self._major_due()
+        major = None if begins else self.friends.major_due(self.save, self.major)
         self._raising = bool((begins and self.story.unfinished(self.save)) or major)
-        extra = " ".join(filter(None, [self._first_visit(), self._with_company(heard), self.greeting_note, self._news(), major, begins])) or None
+        extra = " ".join(filter(None, [self._first_visit(), self.friends.greeting(heard), self.greeting_note, self._news(), major, begins])) or None
         return self._turn(self.idle.opening(extra), "opening", on_text, on_mood)
 
     def goodbye(self):
@@ -110,7 +112,7 @@ class Session:
             said = invite, True
         text, self._leaving_after = said
         self.idle.pip_spoke()
-        return direction(self.character.fill("{name} says something on {their} own: ") + text + "."), "goodbye"
+        return self._says(text), "goodbye"
 
     def user_says(self, text, on_text=None, on_mood=None):
         self.idle.user_spoke()
@@ -131,7 +133,7 @@ class Session:
             invite = roster.invite(self.save, self.character)  # her invitation takes the place of her goodbye
             if invite:
                 self._leaving_after = True
-                return direction(self.character.fill("{name} says something on {their} own: ") + invite + "."), "time_up"
+                return self._says(invite), "time_up"
             return self._time_cue(self.character.time_up, left), "time_up"
         if left is not None and 0 < left <= visits.WARN_MINUTES and not self.warned:
             self.warned = True
@@ -140,11 +142,11 @@ class Session:
             return None
         if time.time() - self.idle.last >= QUIET_FIRST:
             begins = self.story.begin_text(self.save, greeting=False, present=self.present)
-            major = begins or self._major_due()
+            major = begins or self.friends.major_due(self.save, self.major)
             if major:
                 self.idle.pip_spoke()
                 self._raising = not begins or self.story.unfinished(self.save)  # (an epilogue step isn't the quest)
-                return direction(self.character.fill("{name} says something on {their} own. ") + major), "major"
+                return self._brings_up(major), "major"
         ask_about = None if self.major.active(self.save) else self.quests.due(self._public())
         if ask_about:
             self.idle.pip_spoke()
@@ -155,7 +157,7 @@ class Session:
         news = self._news()  # today's news takes the place of small talk
         if not news:
             return nudge, "idle"
-        return direction(self.character.fill("{name} says something on {their} own. ") + news), "idle"
+        return self._brings_up(news), "idle"
 
     def speak(self, direction, kind, on_text=None, on_mood=None):
         return self._turn(direction, kind, on_text, on_mood)
@@ -182,11 +184,19 @@ class Session:
                                                  f"{m['text']}" for m in memory.in_prompt(self.save)))
         return notes
 
+    def _says(self, text):
+        """A stage direction: she says `text` on her own."""
+        return direction(self.character.fill("{name} says something on {their} own: ") + text + ".")
+
+    def _brings_up(self, text):
+        """A stage direction: she speaks up on her own, about what `text` describes."""
+        return direction(self.character.fill("{name} says something on {their} own. ") + text)
+
     def _time_cue(self, lines, left):
         """Her time warning or goodbye line for her stage (time_warning / time_up in character.toml)."""
         n = max(1, round(left))
         line = self.character.at_stage(lines, self.shown_stage).replace("{minutes}", f"{n} minute{'s' if n != 1 else ''}")
-        return direction(self.character.fill("{name} says something on {their} own: " + line + "."))
+        return self._says(self.character.fill(line))
 
     @property
     def minutes_left(self):
@@ -235,12 +245,41 @@ class Session:
             f.write(f"{datetime.datetime.now():%H:%M:%S}  {text}\n")
 
     def _turn(self, text, kind, on_text, on_mood=None):
+        """One reply: gather her hidden notes, ask the model, then update trust, quests and her story."""
         self.restage()
         trust_before, points_before = self.save["trust"], self.save["points"]
         t0 = time.time()
         raising, self._raising = self._raising, False
         leaving, self._leaving_after = self._leaving_after, False
-        note = judging = None  # judging = which quest this message is judged for
+
+        note, judging = self._notes_for(text, kind)
+        reply, timings, feeling, mood, judged = self._ask_retrying(text, on_text, note, on_mood)
+        self.transcript += self.messages[-2:]
+        mood = self.story.mood(self.save, self.present) or mood  # a story step can hold her mood
+        self.save["mood"] = mood or self.mood
+        done, major_done, outcome = self._after_reply(text, kind, feeling, judging, judged)
+
+        leaving = leaving or outcome == "leave"
+        self._count_stay()
+        self.replies += 1
+        turn = Turn(reply=reply, kind=kind, feeling=feeling if kind == "user" else None, mood=self.mood,
+                    seconds=time.time() - t0, timings=timings,
+                    trust_before=trust_before, trust_after=self.save["trust"],
+                    points_before=points_before, points_after=self.save["points"],
+                    quest_done=bool(done), number=self.replies,
+                    stage_name=self.character.stage_names[trust.stage(self.save)],
+                    major_raised=raising, major_done=bool(major_done),
+                    time_up=self.minutes_left is not None and self.minutes_left <= 0,
+                    leaving=leaving, story_done=outcome == "done")
+        if turn.context_used:
+            self.context_tokens = turn.context_used
+        self._log_turn(turn, text, tagged=mood is not None)
+        return turn
+
+    def _notes_for(self, text, kind):
+        """The hidden note for this message (quest, story, old memories, friends, lore), and which quest
+        she judges it for: (note or None, judging or None)."""
+        note = judging = None
         stepping = self.story.note(self.save, self.present)
         answering = self.story.answer_note(self.save) if kind == "user" else None
         if answering:
@@ -258,25 +297,29 @@ class Session:
             self.log("brought back: " + " · ".join(m["text"] for m in recalled))
             note = "\n\n".join(filter(None, [memory.recall_note(recalled, self.character), note]))
         if kind == "user" and self.company:
-            note = "\n\n".join(filter(None, [self._company_note(), note]))
+            note = "\n\n".join(filter(None, [self.friends.note(), note]))
         # lore details for what you said (not her own reply: she names half her world in every greeting)
         told = self.lore.note(text)
         if told:
             self.log("lore details: " + " · ".join(self.lore.shown))
             note = "\n\n".join(filter(None, [told, note]))
+        return note, judging
+
+    def _ask_retrying(self, text, on_text, note, on_mood):
+        """Ask the model. If the server went away, start it again and retry once."""
         try:
-            reply, timings, feeling, mood, judged = self._ask(text, on_text, note, on_mood)
+            return self._ask(text, on_text, note, on_mood)
         except llm.ServerGone:
-            # the server went away: start it again and retry once
             if self.messages and self.messages[-1] == {"role": "user", "content": text}:
                 self.messages.pop()
             self.reconnect()
             if on_text:
                 on_text(None)  # the screen starts her reply over
-            reply, timings, feeling, mood, judged = self._ask(text, on_text, note, on_mood)
-        self.transcript += self.messages[-2:]
-        mood = self.story.mood(self.save, self.present) or mood  # a story step can hold her mood
-        self.save["mood"] = mood or self.mood
+            return self._ask(text, on_text, note, on_mood)
+
+    def _after_reply(self, text, kind, feeling, judging, judged):
+        """Trust for your message, and whether it finished a quest or moved her story on.
+        Returns (world quest done, major quest done, story outcome)."""
         done = major_done = None
         if kind == "user":  # talking on her own earns nothing
             trust.talked(self.save, text, feeling)
@@ -297,17 +340,7 @@ class Session:
         outcome = self.story.after_reply(self.save)
         if judging == "story":
             outcome = self.story.answered(self.save, text, feeling, judged) or outcome
-        leaving = leaving or outcome == "leave"
-        self._count_stay()
-        self.replies += 1
-        turn = Turn(reply, kind, feeling if kind == "user" else None, self.mood, time.time() - t0, timings,
-                    trust_before, self.save["trust"], points_before, self.save["points"], bool(done),
-                    self.replies, self.character.stage_names[trust.stage(self.save)], raising, bool(major_done),
-                    self.minutes_left is not None and self.minutes_left <= 0, leaving, outcome == "done")
-        if turn.context_used:
-            self.context_tokens = turn.context_used
-        self._log_turn(turn, text, tagged=mood is not None)
-        return turn
+        return done, major_done, outcome
 
     def _build_prompt(self):
         """Her prompt for the stage she shows, then her memories, with this sitting's chat kept after it.
@@ -378,22 +411,25 @@ class Session:
         self.log(" · ".join(stats) + f"\n    {'you' if t.kind == 'user' else 'cue'}: {text}"
                  f"\n    {self.character.folder}: {t.reply}")
 
-    def _with_company(self, heard=None):
-        """For her greeting: who else is on the desktop today, or None. heard = (name, words) of a greeting
-        just before hers. The first day, she introduces someone she invited."""
-        if not self.company:
-            return None
-        if heard:  # (told only to "greet too", she once repeated it word for word)
-            name, words = heard
-            return self.character.fill(f"{{Their}} friend {name} is on the desktop with {{them}} today, and has just "
-                f'greeted the user, saying: "{words}" Now {{name}} greets the user too, as {{name}}, in {{their}} own '
-                f"words and {{their}} own way: {{they}} never repeats or copies {name}'s greeting, and can react to it.")
-        introduce = roster.introduce(self.character, self.company)
-        if introduce:
-            return introduce + "."
-        friends = "{Their} friend " if len(self.company) == 1 else "{Their} friends "
-        return self.character.fill(friends) + " and ".join(self.company) + self.character.fill(
-            f" {self._are} on the desktop with {{them}} today too, but this greeting is {{their}} own, to the user.")
+    # --- others on the desktop (progress/company.py) ---
+
+    @property
+    def company(self):
+        """Names of the others on the desktop today."""
+        return self.friends.names
+
+    @company.setter
+    def company(self, names):
+        self.friends.names = list(names)
+
+    @property
+    def shown_stage(self):
+        """Her trust stage as she shows it (lower while her friend is there)."""
+        return self.friends.shown_stage(self.save)
+
+    def _public(self):
+        """Her save as she shows it (without secrets while her friend is there)."""
+        return self.friends.public(self.save)
 
     @property
     def present(self):
@@ -406,56 +442,6 @@ class Session:
         if outcome:
             self.log(f"story duet done: {outcome}")
         return outcome
-
-    def _company_note(self):
-        """With her friend on the desktop, a hidden note on each of your messages to keep who's who straight.
-        (Without it, "who bakes better?" made Vesper talk as if you were Pip.)"""
-        others, are = " and ".join(self.company), self._are
-        else_ = "someone else" if len(self.company) == 1 else "other people"
-        whose = f"{others}'s" if len(self.company) == 1 else f"each of {others}'s"
-        return self.character.fill(
-            f"(Not part of the user's message: {others} {are} on the desktop beside {{name}} and can hear everything, "
-            f"but this message is from the user, the human who owns the desktop, and {{name}} answers the user. "
-            f'In {{their}} reply, "you" is the user. {others} {are} {else_}: when the message is about {others}, '
-            f"{{they}} talks about {others} by name. {{They}} never mixes up what is {{their}} own, what is {whose} "
-            f"and what is the user's.)")
-
-    @property
-    def _are(self):
-        return "is" if len(self.company) == 1 else "are"
-
-    # --- her mask: with her friend on the desktop, her secrets aren't in her prompt at all ---
-    # (told "never say these in front of Pip", Vesper still let them slip: a small model leaks its prompt)
-
-    @property
-    def masked(self):
-        """Her friend is on the desktop and she has a public self to show (with_friend_stage)."""
-        return bool(self.company and self.character.with_friend_stage)
-
-    @property
-    def shown_stage(self):
-        """Her trust stage as she shows it: no higher than with_friend_stage while masked."""
-        stage = trust.stage(self.save)
-        return min(stage, self.character.with_friend_stage) if self.masked else stage
-
-    def _public(self):
-        """Her save as she shows it: while masked, without private memories and with trust capped."""
-        if not self.masked:
-            return self.save
-        private = {self.character.fill(q["memory"]) for q in self.character.major_quests.values() if q["private"]}
-        # and her answers to world questions from above the stage she shows
-        above = {self.character.fill(f"{{name}} asked about {about}.") for _, st, about in self.character.quests
-                 if st > self.shown_stage}
-        memories = [m for m in self.save.get("memories", [])
-                    if not m.get("private") and not any(m["text"].startswith(p) for p in private | above)]
-        return dict(self.save, memories=memories, trust=min(self.save["trust"], self.shown_stage * 2))
-
-    def _major_due(self):
-        """Her major quest to bring up now, but not a private one while masked."""
-        quest = self.major.active(self.save)
-        if self.masked and quest and quest["private"]:
-            return None
-        return self.major.due(self.save)
 
     def _first_visit(self):
         """What her very first greeting is about (first_visit in character.toml), only once."""

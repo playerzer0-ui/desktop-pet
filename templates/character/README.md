@@ -120,6 +120,11 @@ The template has one of each, with every option written out next to it.
 A new character only comes once someone invites her. Copy `roster_entry.toml` from this folder into
 `character/roster.toml` (an `[[unlocks]]` entry, and the lineups she can come in), and fill it in.
 
+For a surprise arrival instead (nobody invites her, like Ruby), use an `[[arrivals]]` entry (`who`, `after`,
+`at_trust`, `days`) in place of `[[unlocks]]`: once `after` reaches `at_trust`, a clock of `days` starts, and on the
+day it runs out she comes on her own (her `first_visit` explains how she got here). The lineups are the same, and she
+needs no `invite` or `introduce`.
+
 ## 5. Optional: chats with another character (`character/duets/`)
 
 For days she's on the desktop with someone, copy `duet.toml` from this folder to

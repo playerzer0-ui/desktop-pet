@@ -1,0 +1,83 @@
+# Vesper and Ruby chatting with each other on the desktop (duets.py, desktop/scene.py), on days they come together.
+# After a few quiet minutes one of them starts a little chat with the other, they take turns for a few lines,
+# and the last line wraps it up. Neither one earns trust from it, and the user can't talk to them until it's over.
+
+every = [4, 10]  # minutes of quiet (nobody talking, nobody typing) before they chat: random in this range
+lines = [3, 4]   # how many lines a chat has: random in this range
+
+# Topics, by the trust stage they open at: the LOWER of the two characters' stages. Vesper is on her mask in front
+# of Ruby (character/mira/character.toml with_friend_stage): loud, teasing, and very careful. She is a Bloodcult
+# spy, and Ruby is Heaven's sword saint, so Vesper is nervous around her and hides it with jokes. Ruby has no idea,
+# and tells Vesper everything about Heaven cheerfully. Never put Vesper's real secrets in here.
+#   starts   who starts the chat: "mira" or "ruby" (folder names)
+#   about    what about (it finishes "starts a little chat with her about ...")
+
+[[topics]]  # stage 1: teasing, sniffing the bread
+stage = 1
+starts = "mira"
+about = "offering Ruby a honey bun, and teasing that Ruby can smell it from across the screen"
+
+[[topics]]
+stage = 1
+starts = "ruby"
+about = "asking whether Vesper's bread is pure, and then giggling at herself because she doesn't know what she means"
+
+[[topics]]
+stage = 1
+starts = "mira"
+about = "a bet on how many stones Ruby can count between the desk and the screen's edge"
+
+[[topics]]
+stage = 1
+starts = "ruby"
+about = "how Vesper's voice sounds like something crackling in an oven, and Vesper laughing it off"
+
+[[topics]]  # stage 2: Heaven told innocently, Vesper changing the subject
+stage = 2
+starts = "ruby"
+about = "Heaven's closed days, told cheerfully and in detail (Vesper jokes and changes the subject, a little too quickly)"
+
+[[topics]]
+stage = 2
+starts = "mira"
+about = "asking Ruby what a sword sounds like when it hums, in a much too casual tone"
+
+[[topics]]
+stage = 2
+starts = "ruby"
+about = "asking Vesper whether the Republic really is made of coins and jingles"
+
+[[topics]]
+stage = 2
+starts = "mira"
+about = "the bank clerks who sneak into the bakery every morning, explained to someone who has never seen a bank"
+
+[[topics]]  # stage 3: the quiet walk, nervously
+stage = 3
+starts = "ruby"
+about = "the quiet walk, and how Vesper's laugh went strange when Ruby said its name (Vesper changes the subject)"
+
+[[topics]]
+stage = 3
+starts = "mira"
+about = "teasing that Ruby, of all people, would be the last to know how rude the rest of the world can be"
+
+[[topics]]  # stage 4: Vesper's fear, kept behind a joke
+stage = 4
+starts = "ruby"
+about = "the silent hour, and asking Vesper whether anywhere has a hush like it (Vesper jokes, but goes pale)"
+
+[[topics]]
+stage = 4
+starts = "mira"
+about = "being careful while Heaven's officials walk around the district, asked as if it were gossip"
+
+[[topics]]  # stage 5: closeness
+stage = 5
+starts = "mira"
+about = "promising to bake Ruby a honey bun for every question she's brave enough to ask"
+
+[[topics]]
+stage = 5
+starts = "ruby"
+about = "telling Vesper that she sounds braver than she lets on"

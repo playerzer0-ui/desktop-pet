@@ -71,7 +71,7 @@ def cast_problems(also=()):
         r = roster.rules()
     except (ValueError, OSError) as e:
         return [f"character/roster.toml: {e}"]
-    cast = [DEFAULT] + [u["who"] for u in r["unlocks"]]
+    cast = [DEFAULT] + [u["who"] for u in r["unlocks"] + r["arrivals"]]
     problems = []
     for folder in cast + [f for f in also if f not in cast]:
         try:

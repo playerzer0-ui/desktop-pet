@@ -43,7 +43,10 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 | March 3 (yearly) | Day of plenty | Cassandra makes food, water and warmth free across the Republic for one day |
 | June 21 (yearly) | Lantern night | Freeport floats lanterns for ships that never came back |
 | August 14 (yearly) | The day the gods left | 10 years ago |
+| February 12 (yearly) | Day of Lineages | Heaven only, closed to outsiders: the pure bloodlines are recited aloud in the White Cloister |
+| April 28 (yearly) | Blessing of the blade | Heaven only, closed to outsiders: Libera herself blesses the sword saint's blade (see 8) |
 | October 15 (yearly) | Sally's death anniversary | Heaven celebrates its victory publicly. The other factions keep quiet |
+| November 9 (yearly) | The silent hour | Heaven only, closed to outsiders: the White Cloister goes silent for one hour at dawn "for those who left to be purified". Nobody outside knows what it is really for |
 | October 31 (yearly) | Long night | A night-long Bloodcult brawl; Lind resurrects everyone who falls |
 | December 21 (yearly) | First snow | Usually around this date in the Republic |
 | November 20, 2026 (once) | The ancient library is torn down | |
@@ -166,6 +169,7 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 - No time limit, but the body left behind gets worse the longer you are away, because it doesn't eat or drink
 - Seen as something only gods or faction bosses can do
 - **Banned by every faction.** Illegal dreamwalking is punished by public execution
+- **Secret**: Heaven's inner circle keeps it for itself. Libera has taught a few of her chosen under another name, "the quiet walk", a prayer of the soul. They are not punished, because Heaven is the one that decides what is punished
 
 ### 7.3 Blessings
 - Obtained by serving as a priest/priestess devoted to one chosen god for at least 5 years
@@ -207,6 +211,18 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 - Lighting a lamp from it costs no mana, because the warmth is Everlily's
 - **Secret**: only Pip knows what it is
 
+### The White Cloister (Heaven)
+- Heaven's inner sanctuary: white halls, still gardens and cold bells, where the chosen live apart from the rest of the world
+- Closed to outsiders. Heaven's few events that outsiders never see happen here (see 4)
+- Everyone inside is cared for and watched. The ones who live there rarely learn what goes on beyond its walls
+
+### The sword saint (Heaven)
+- A Heaven title for the one pure chosen blade-bearer, kept in the White Cloister. There is only one at a time
+- Only Heaven's inner circle knows the title exists. To everyone else it is at most a rumour
+- Her blade is blessed by Libera once a year (Blessing of the blade, April 28), and holds a small space-time blessing, which is why a sword saint never misses
+- Nobody outside has seen one fight. Keep it that way: no fights on screen
+- Heaven values blindness in a sword saint: "unclouded by the world", so she cannot be tempted by what she cannot see
+
 ---
 
 ## 9. Common knowledge vs secrets
@@ -228,6 +244,9 @@ Use this to decide what a new character could plausibly know.
 - Who is Bloodcult
 - The last warm lamp
 - Who is secretly dreamwalking
+- That Heaven's inner circle dreamwalks without punishment ("the quiet walk")
+- That a sword saint exists, and who she is
+- What the silent hour is really for
 
 ---
 
@@ -237,6 +256,7 @@ Use this to decide what a new character could plausibly know.
 |---|---|---|---|---|
 | Pip | she/her | Republic | Priestess of Everlily, runs Everlily Chapel and its currency exchange. Dreamwalks to the desktop | `character/pip/` |
 | Vesper (real name Mira) | she/her | Republic, secretly Bloodcult | Baker a few doors down from Everlily Chapel, and Pip's best friend. **Secret**: a Bloodcult spy sent by Lind to watch the chapel's lamp; "Vesper" is the name Lind gave her, and nobody (not even Pip) knows her real name. Pip, at her highest trust, invites her to the desktop and believes she's teaching her to dreamwalk; **secretly** she learned it years ago | `character/mira/` |
+| Ruby | she/her | Heaven | The sword saint, blind from birth and raised in the White Cloister. Sheltered, sweet and airheaded: knows Heaven's events (even the closed ones) and almost nothing else. Reaches the desktop by "the quiet walk" without knowing it is dreamwalking, or that it is banned. Arrives on her own, uninvited, one month after Pip's stage 4 ends | `character/ruby/` |
 
 Named NPCs (exist in the world, not playable):
 - Cassandra, Lind, Libera, Soren (faction bosses, see 6)

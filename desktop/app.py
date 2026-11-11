@@ -3,8 +3,7 @@ While her mind loads, only a portal shows. The screen never reads her save: the 
 """
 import sys, time
 from engine import data
-from progress import roster, story, visits
-from engine.save import load_save
+from progress import launch
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
 from engine.character import Character, DEFAULT
@@ -28,15 +27,6 @@ def duration(minutes):
         parts.append(f"{mins} minute{'s' if mins != 1 else ''}")
     return " ".join(parts)
 
-def story_mood(character, present):
-    """The mood her story has her in today, or None. present = folders of everyone on the desktop."""
-    save = load_save(character.save_path)
-    save.gates = character.gates
-    for key, empty in (("points", 0), ("quests_done", [])):  # a save that's never been opened has neither
-        save.setdefault(key, empty)
-    story.catch_up(save, character)
-    return story.mood_today(save, character, present)
-
 class App:
     def __init__(self, character, resting=False, away=False, scene=None, slot=0, greeting_note=None):
         """resting = today's time is used up; away = her story sent her home. Either way only the portal shows.
@@ -45,7 +35,7 @@ class App:
         self.scene = scene
         company = [c.name for c in scene.characters if c is not character] if scene else []
         self.body, self.bubble = Body(character.sprites, character.portal), Bubble()
-        mood = story_mood(character, [c.folder for c in scene.characters] if scene else [character.folder])
+        mood = launch.story_mood(character, [c.folder for c in scene.characters] if scene else [character.folder])
         if mood:  # shows from the portal on
             self.body.set_mood(mood)
         self.input = InputBox(character.name)
@@ -403,18 +393,10 @@ def main(folder=DEFAULT):
     running = one_at_a_time(character)  # kept until exit: it holds the lock (taken before the model download)
     if not download.ensure_model(character):
         return
-    plan = roster.today(folder)
-    cast = [Character(f) for f in plan.members]
-    lead = cast[0]  # her story and daily time decide for everyone
-    save = load_save(lead.save_path)
-    # her story sent her home, or she invited someone today: nobody comes out, no model is started
-    away = story.away(save) or plan.invited_today
-    resting = not away and visits.resting(lead) and not story.ignores_time_limit(save, lead)
-    if len(cast) > 1 and not (away or resting):
+    day = launch.today(folder)
+    if day.together:
         from desktop.scene import Scene
-        for c in cast[1:]:
-            c.daily_minutes = None  # they leave together, when her time is up
-        pet = Scene(cast)
-    else:
-        pet = App(lead, resting=resting, away=away, greeting_note=plan.note)  # kept so it isn't garbage-collected
+        pet = Scene(day.cast)
+    else:  # (kept in a variable so it isn't garbage-collected)
+        pet = App(day.cast[0], resting=day.resting, away=day.away, greeting_note=day.note)
     sys.exit(app.exec())
