@@ -9,13 +9,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # no windows pop up
 os.environ["PET_DATA_DIR"] = tempfile.mkdtemp(prefix="pet-tests-data-")  # (never the player's real saves/logs)
 
-import memory, pet, quests, trust
-from character import Character, for_stage
-from save import Save, stage_of
+from mind import memory, pet
+from progress import quests, trust
+from engine.character import Character, for_stage
+from engine.save import Save, stage_of
 
 TMP = tempfile.mkdtemp(prefix="pet-tests-")
 
-import roster
+from progress import roster
 roster.PATH = os.path.join(TMP, "roster.json")  # (each test that needs one makes its own: use_roster)
 
 def tearDownModule():
@@ -26,14 +27,14 @@ def temp_path(name="save"):
 
 def use_roster(test, unlocked=None, today=None):
     """A fresh saves/roster.json for this test (roster.py), with these unlocks and today's lineup. Returns roster."""
-    import roster
+    from progress import roster
     real = roster.PATH
     roster.PATH = temp_path("roster")
     test.addCleanup(lambda: setattr(roster, "PATH", real))
     data = Save(roster.PATH, {"unlocked": unlocked or {}})
     if today:
         data["today"] = today
-    from save import write_save
+    from engine.save import write_save
     write_save(data)
     return roster
 
@@ -42,11 +43,11 @@ def mira_unlock(invited_on="2026-11-01", visit_day=None, introduced=None):
     return {"mira": {"by": "pip", "invited_on": invited_on, "visit_day": visit_day, "introduced": introduced}}
 
 def unlock_rule(who="mira"):
-    import roster
+    from progress import roster
     return next(u for u in roster.rules()["unlocks"] if u["who"] == who)
 
 def lineup(*members):
-    import roster
+    from progress import roster
     return next(l for l in roster.rules()["lineups"] if l["members"] == list(members))
 
 PIP_MIRA = frozenset(("pip", "mira"))  # (the pair with a duet file: Scene.pairs)
@@ -180,7 +181,7 @@ class DiaryTest(unittest.TestCase):
 
     def diary(self, user_lines, reply):
         """write_diary over a sitting of these user lines, with the model's answer stood in for."""
-        import llm
+        from engine import llm
         messages = []
         for line in user_lines:
             messages += [{"role": "user", "content": line}, {"role": "assistant", "content": "Oh! [nice] [mood: happy]"}]
@@ -206,7 +207,7 @@ class DiaryTest(unittest.TestCase):
         self.assertEqual(notes, ["The user adopted a cat named Mochi.", "The user has an exam on Friday 2026-10-23."])
 
     def test_short_replies_keep_only_her_question(self):
-        import llm
+        from engine import llm
         messages = [{"role": "user", "content": "hi there, I just got home from work"},
                     {"role": "assistant", "content": "*hums* I love the cozy chaos of a storm! Do you have a cat? [nice] [mood: happy]"},
                     {"role": "user", "content": "yes"},
@@ -229,7 +230,7 @@ class DiaryTest(unittest.TestCase):
 
     def test_notes_about_characters_are_dropped(self):
         # Vesper's first visit: her diary took the user for Pip, and wrote Pip up as someone in the user's life
-        import llm
+        from engine import llm
         said = ["hi Vesper! nice to meet you", "Pip told me you bake bread, is it good?", "my name is Jerry",
                 "I had a long day at work, I'm just resting now"]
         messages = []
@@ -252,10 +253,10 @@ class DiaryTest(unittest.TestCase):
             llm.chat = real
         self.assertEqual(notes, [("The user's name is Jerry.", True), ("The user had a long day at work.", False),
                                  ("The user is resting after work.", False)])
-        self.assertIn("The user is never Vesper, and never Pip:", prompts[0])
+        self.assertIn("The user is never Vesper, and never Pip or Ruby:", prompts[0])
         self.assertNotIn("Mira", prompts[0], "her real name stays her secret")
         self.assertEqual(Character("mira").name, "Vesper")
-        self.assertTrue({"Pip", "Vesper", "Mira"} <= __import__("character").cast())
+        self.assertTrue({"Pip", "Vesper", "Mira"} <= __import__("engine.character", fromlist=["x"]).cast())
         self.assertFalse(memory.names_a_character("The user found a pip in their apple.", {"Pip"}))
         world, user = memory.world_names(vesper), "User: what faction are you on?\nUser: I live in Osaka"
         self.assertTrue(memory.from_her_world("The user lives in the Republic district.", user, world))
@@ -360,7 +361,7 @@ class MajorQuestTest(unittest.TestCase):
                                           4: "major-can-i-rest"})
 
     def test_bad_toml_fails_loudly(self):
-        from character import _major_quests
+        from engine.character import _major_quests
         quest = {"id": "x", "starts": "", "done_when": "", "memory": "", "points": 1}
         moods = {"happy", "neutral"}
         with self.assertRaises(ValueError):
@@ -436,7 +437,7 @@ class SessionMajorQuestTest(unittest.TestCase):
     """A whole sitting at the first gate, with the model stood in for."""
 
     def setUp(self):
-        import session
+        from mind import session
         self.session = session
         self.real = session.start_server, session.warm_up, session.ask
         self.notes, self.judged = [], []
@@ -514,7 +515,7 @@ class VisitsTest(unittest.TestCase):
         c = pip()
         self.assertEqual((sorted(c.time_warning), sorted(c.time_up)), ([1, 3], [1, 3]))
         self.assertEqual([c.at_stage({1: "a", 3: "b"}, st) for st in range(1, 6)], ["a", "a", "b", "b", "b"])
-        from character import _by_stage
+        from engine.character import _by_stage
         with self.assertRaises(ValueError):
             _by_stage({"time_up": {"3": "x"}}, "time_up", required=True)  # nothing for stages 1-2
         with self.assertRaises(ValueError):
@@ -527,7 +528,7 @@ class VisitsTest(unittest.TestCase):
                                        "after testing")
 
     def test_minutes_used_and_left(self):
-        import visits
+        from progress import visits
         today = trust.start(save_with_minutes(100))
         self.assertEqual(visits.minutes_used(today, 5), 105)
         self.assertEqual(visits.minutes_left(today, pip(), 5), 135)
@@ -538,7 +539,7 @@ class VisitsTest(unittest.TestCase):
         self.assertIsNone(visits.minutes_left(today, no_limit))
 
     def test_resting_once_todays_time_is_used(self):
-        import visits
+        from progress import visits
         for minutes, day, expected in [(240, None, True), (300, None, True), (239, None, False),
                                        (300, "2000-01-01", False)]:  # used up yesterday: she's back today
             c = pip()
@@ -550,7 +551,7 @@ class SessionTimeLimitTest(unittest.TestCase):
     """A sitting that runs into her daily limit, with the model stood in for."""
 
     def setUp(self):
-        import session
+        from mind import session
         self.session = session
         self.real = session.start_server, session.warm_up, session.ask
 
@@ -633,7 +634,8 @@ class StoryQuestTest(unittest.TestCase):
     DAY0 = datetime.date(2026, 11, 2)
 
     def setUp(self):
-        import session, story
+        from mind import session
+        from progress import story
         self.session, self.story = session, story
         self.real = session.start_server, session.warm_up, session.ask
         self.notes = []
@@ -665,7 +667,7 @@ class StoryQuestTest(unittest.TestCase):
         c.save_path = self.path
         s = self.session.Session(c, say=lambda *_: None)
         s.quests.next = time.time() + 3600
-        import idle  # (and no clock moment, like 18:00's "how was your day", if the tests run at that time)
+        from mind import idle  # (and no clock moment, like 18:00's "how was your day", if the tests run at that time)
         s.idle.fired = {(datetime.date.today().isoformat(), h, m) for h, m, _ in idle.CLOCK}
         return s
 
@@ -763,7 +765,7 @@ class FriendTest(unittest.TestCase):
     """roster.py: at trust 10 Pip invites her friend Vesper on her way out, and the next day Vesper comes instead."""
 
     def setUp(self):
-        import session
+        from mind import session
         self.session = session
         self.real = session.start_server, session.warm_up, session.ask
         self.roster = use_roster(self)
@@ -861,7 +863,7 @@ class CastCheckTest(unittest.TestCase):
         self.assertEqual(check.cast_problems(), [])
 
     def test_a_step_needing_more_than_fit_on_screen(self):
-        import roster
+        from progress import roster
         from desktop import check
         from unittest import mock
         r = roster.rules()
@@ -872,10 +874,10 @@ class CastCheckTest(unittest.TestCase):
 
     def test_a_step_naming_someone_not_in_the_cast(self):
         """Vesper opened by name, with nobody invited in roster.toml: her steps name her, who isn't in the cast."""
-        import roster
+        from progress import roster
         from desktop import check
         from unittest import mock
-        with mock.patch.object(roster, "rules", lambda: {"on_screen": 2, "unlocks": [], "lineups": []}):
+        with mock.patch.object(roster, "rules", lambda: {"on_screen": 2, "unlocks": [], "arrivals": [], "lineups": []}):
             problems = check.cast_problems(also=["mira"])
         self.assertTrue(any("names 'mira', who isn't in the cast" in p for p in problems), problems)
 
@@ -885,7 +887,7 @@ class CastCheckTest(unittest.TestCase):
         self.assertTrue(any(p.startswith("character/nobody:") for p in problems), problems)
 
     def test_duet_files(self):
-        import duets
+        from progress import duets
         from desktop import check
         from unittest import mock
         folder = tempfile.mkdtemp(dir=TMP)
@@ -912,7 +914,7 @@ class CastCheckTest(unittest.TestCase):
 class TodayTest(unittest.TestCase):
     def test_dated_lore_lines(self):
         """[until day] / [from day] lines in a character's files (character.on_date): the library's last day."""
-        from character import on_date
+        from engine.character import on_date
         text = "## Library\n- always\n- [until 2026-11-20] still open\n- [from 2026-11-20] torn down"
         before, on_the_day = on_date(text, datetime.date(2026, 11, 19)), on_date(text, datetime.date(2026, 11, 20))
         self.assertEqual(before, "## Library\n- always\n- still open")
@@ -960,7 +962,7 @@ class TodayTest(unittest.TestCase):
         self.assertIn("Jerry", content)
 
     def test_her_prompt_has_it(self):
-        import session
+        from mind import session
         real = session.start_server, session.warm_up
         session.start_server = lambda say, slots=1: None
         session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
@@ -983,14 +985,17 @@ class RosterTest(unittest.TestCase):
         return path
 
     def test_the_real_roster_loads(self):
-        import roster
+        from progress import roster
         r = roster.rules()
         self.assertEqual([(u["by"], u["who"]) for u in r["unlocks"]], [("pip", "mira")])
+        self.assertEqual([(a["after"], a["who"], a["at_trust"], a["days"]) for a in r["arrivals"]],
+                         [("pip", "ruby", 9, 30)])
         self.assertEqual({tuple(l["members"]): l["weight"] for l in r["lineups"]},
-                         {("pip", "mira"): 60, ("pip",): 20, ("mira",): 20})
+                         {("pip", "mira"): 60, ("pip",): 20, ("mira",): 20,
+                          ("ruby", "pip"): 15, ("ruby", "mira"): 15, ("ruby",): 10})
 
     def test_mistakes_fail_loudly(self):
-        import roster
+        from progress import roster
         unlock = 'who = "mira"\nby = "pip"\nat_trust = 10\ninvite = "x"\nmemory = "x"\n'
         for text, problem in [
                 ('[[unlocks]]\nwho = "mira"\nby = "pip"\n', "missing"),
@@ -1012,7 +1017,7 @@ class RosterTest(unittest.TestCase):
         roster = use_roster(self)
         os.remove(roster.PATH)
         from unittest import mock
-        from save import write_save
+        from engine.save import write_save
         old = Save(temp_path("pip"), {"trust": 10, "friend": {
             "folder": "mira", "invited_on": "2026-10-20", "visit_day": "2026-10-21", "introduced": "2026-10-22",
             "today": {"day": "2026-11-02", "who": "only_friend", "story": True}}})
@@ -1039,7 +1044,7 @@ class ClockNudgeTest(unittest.TestCase):
     def clock(when):
         """While this is on (a with block), idle.py thinks it's `when` (a datetime)."""
         from unittest import mock
-        import idle
+        from mind import idle
         class Clock(datetime.datetime):
             @classmethod
             def now(cls, tz=None):
@@ -1053,7 +1058,7 @@ class ClockNudgeTest(unittest.TestCase):
             return idle_.due()
 
     def test_greeting_covers_the_moment_she_opens_in(self):
-        import idle
+        from mind import idle
         for hour, minute, about in idle.CLOCK:
             with self.subTest(f"{hour:02}:{minute:02}"):
                 i = idle.Idle(pip())
@@ -1066,7 +1071,7 @@ class ClockNudgeTest(unittest.TestCase):
                 self.assertTrue(self.at(i, opened + datetime.timedelta(days=1)), "tomorrow it comes again")
 
     def test_greeting_outside_a_moment_knows_the_time_of_day(self):
-        import idle
+        from mind import idle
         i = idle.Idle(pip())
         with self.clock(datetime.datetime(2026, 10, 21, 15, 0)):
             greeting = i.opening("Some news.")
@@ -1076,21 +1081,21 @@ class ClockNudgeTest(unittest.TestCase):
         self.assertTrue(self.at(i, datetime.datetime(2026, 10, 21, 18, 5)), "later moments still come")
 
     def test_greeting_inside_a_moment_says_the_time_once(self):
-        import idle
+        from mind import idle
         with self.clock(datetime.datetime(2026, 10, 21, 12, 10)):
             greeting = idle.Idle(pip()).opening()
         self.assertIn("lunchtime", greeting)
         self.assertNotIn("afternoon for the user", greeting)
 
     def test_part_of_day(self):
-        import idle
+        from mind import idle
         at = lambda h, m=0: idle.part_of_day(datetime.datetime(2026, 10, 21, h, m))
         self.assertEqual([at(0), at(4, 59), at(5), at(11, 59), at(12), at(16, 59), at(17), at(20, 59), at(21), at(23, 59)],
                          ["night", "night", "morning", "morning", "afternoon", "afternoon", "evening", "evening",
                           "night", "night"])
 
     def test_each_fires_once_in_its_window(self):
-        import idle
+        from mind import idle
         for hour, minute, about in idle.CLOCK:
             with self.subTest(f"{hour:02}:{minute:02}"):
                 i = idle.Idle(pip())
@@ -1105,7 +1110,7 @@ class ClockNudgeTest(unittest.TestCase):
                 self.assertTrue(self.at(i, minutes(24 * 60 + 5)), "the next day, again")
 
     def test_window_is_30_minutes(self):
-        import idle
+        from mind import idle
         for hour, minute, _ in idle.CLOCK:
             with self.subTest(f"{hour:02}:{minute:02}"):
                 start = datetime.datetime(2026, 10, 21, hour, minute)
@@ -1113,7 +1118,7 @@ class ClockNudgeTest(unittest.TestCase):
                 self.assertIsNone(self.at(idle.Idle(pip()), start + datetime.timedelta(minutes=30)))
 
     def test_quiet_afternoon_has_none(self):
-        import idle
+        from mind import idle
         i = idle.Idle(pip())
         for h in range(13, 18):
             self.assertIsNone(self.at(i, datetime.datetime(2026, 10, 21, h, 10)))
@@ -1211,7 +1216,7 @@ class AskTest(unittest.TestCase):
 
 class SentencesTest(unittest.TestCase):
     def split(self, text):
-        from sentences import ends
+        from mind.sentences import ends
         cuts = [0] + ends(text)
         return [text[a:b].strip() for a, b in zip(cuts, cuts[1:] + [len(text)]) if text[a:b].strip()]
 
@@ -1227,7 +1232,7 @@ class SentencesTest(unittest.TestCase):
                           "*waves* Bye~ ok"])
 
     def test_streaming_waits_for_the_next_word(self):
-        from sentences import first_end
+        from mind.sentences import first_end
         self.assertIsNone(first_end("Hello there. ", final=False))  # "Mr." or "St." might come next
         self.assertEqual(first_end("Hello there. Mr. ", final=False), len("Hello there. "))
         self.assertIsNone(first_end("I went to St. ", final=False))
@@ -1459,7 +1464,7 @@ class DesktopTest(unittest.TestCase):
         self.assertEqual((a.body.state, gone), ("gone", [True]))
 
     def test_status_shows_the_card(self):
-        import trust
+        from progress import trust
         data = {"trust": 3, "points": 51, "today": {"talk": 5, "minutes": 139}, "quests_done": [],
                 "days_logged": 1, "messages": 0}
         s = trust.summary(data, {i: "x" for i in range(1, 6)})
@@ -1495,7 +1500,7 @@ class DesktopTest(unittest.TestCase):
 
     def test_the_screen_uses_his_own_pronouns(self):
         """Nothing on screen says "her" for a character who isn't a she (pronouns in character.toml)."""
-        from session import Turn
+        from mind.session import Turn
         from desktop import download
         him = pip()
         him.pronouns = {"they": "he", "them": "him", "their": "his"}
@@ -1562,7 +1567,7 @@ class DesktopTest(unittest.TestCase):
 
     def test_no_talking_once_her_goodbye_starts(self):
         """You could keep her from leaving by talking to her during her goodbye: not any more."""
-        from session import Turn
+        from mind.session import Turn
         a = self.app()
         a.talk()
         self.assertTrue(a.input.isVisible())
@@ -1577,7 +1582,7 @@ class DesktopTest(unittest.TestCase):
         self.assertNotIn("say", a.brain.calls, "your message still reached her")
 
     def test_no_talking_when_time_runs_out_mid_chat(self):
-        from session import Turn
+        from mind.session import Turn
         a = self.app()
         a.bubble.start()
         a.on_spoke(Turn("Oh, that's lovely!", "user", "nice", "happy", 1.0, {}, 3, 3, 50, 51, time_up=True))
@@ -1585,7 +1590,7 @@ class DesktopTest(unittest.TestCase):
         self.assertFalse(a.input.isVisible())
 
     def test_time_up_she_goes_home(self):
-        from session import Turn
+        from mind.session import Turn
         a = self.app()
         self.assertIn("start", a.brain.calls)
         a.bubble.start()
@@ -1600,7 +1605,7 @@ class DesktopTest(unittest.TestCase):
 
     def test_time_up_she_fades_away_and_the_app_closes(self):
         """The whole way out, on real timers: her goodbye, the diary, the wave, the fade, and the app quitting."""
-        from session import Turn
+        from mind.session import Turn
         from desktop import app as A, body as B
         quits = []
         class FakeQApplication:  # (stands in for the real quit, which the app hooks up when it's made)
@@ -1629,7 +1634,7 @@ class DesktopTest(unittest.TestCase):
         self.assertFalse(a.bubble.isVisible(), "no note on an away day")
 
     def test_say_goodbye_while_she_begs(self):
-        from session import Turn
+        from mind.session import Turn
         a = self.app()
         a.snap = {"summary": {"talks_on_goodbye": True}, "memories": []}
         a.leave()
@@ -1645,7 +1650,7 @@ class DesktopTest(unittest.TestCase):
         self.assertNotIn("See you", a.bubble.label.text(), "she said her own goodbye: no 'see you tomorrow'")
 
     def test_locked_mood_doesnt_settle(self):
-        from session import Turn
+        from mind.session import Turn
         a = self.app()
         a.snap = {"summary": {"mood_locked": "happy"}, "memories": []}
         a.bubble.start()
@@ -1662,7 +1667,7 @@ class DesktopTest(unittest.TestCase):
         self.assertEqual(status.clock_text(dict(s, minutes_today=139.4)), "139 min")
 
     def test_major_quest_notes_under_her_reply(self):
-        from session import Turn
+        from mind.session import Turn
         a = self.app()
         a.bubble.start()
         a.on_spoke(Turn("Bless your day!", "opening", None, "happy", 1.0, {}, 2, 2, 39, 39, major_raised=True))
@@ -1766,7 +1771,7 @@ class SceneTest(unittest.TestCase):
             self.assertIn("start", p.brain.calls)
 
     def test_pip_greets_first_then_vesper_answers_her(self):
-        from session import Turn
+        from mind.session import Turn
         scene, _ = self.scene()
         pip_, ves = scene.pets
         opened = []
@@ -1827,7 +1832,7 @@ class SceneTest(unittest.TestCase):
         self.assertTrue(all(b - a > 100 for a, b in zip(xs, xs[1:])), f"they came out on top of each other: {xs}")
 
     def test_three_greet_in_order(self):
-        from session import Turn
+        from mind.session import Turn
         scene, _ = self.scene([pip(), Character("mira"), nova()])
         pip_, ves, nov = scene.pets
         opened = {"ves": [], "nov": []}
@@ -1878,7 +1883,7 @@ class SceneTest(unittest.TestCase):
                          (pip_, nov, S.STORY_LINES))
 
     def test_with_two_friends_the_wording_is_plural(self):
-        import session
+        from mind import session
         use_roster(self)
         real = session.start_server, session.warm_up, session.ask
         session.start_server = lambda say, slots=1: None
@@ -1889,15 +1894,15 @@ class SceneTest(unittest.TestCase):
             s = session.Session(c, say=lambda *_: None, slot=0, slots=3, company=["Vesper", "Nova"])
         finally:
             session.start_server, session.warm_up, session.ask = real
-        self.assertEqual(s._with_company(), "Her friends Vesper and Nova are on the desktop with her today too, "
+        self.assertEqual(s.friends.greeting(), "Her friends Vesper and Nova are on the desktop with her today too, "
                                             "but this greeting is her own, to the user.")
-        self.assertIn("Vesper and Nova are on the desktop beside Pip", s._company_note())
-        self.assertIn("are other people", s._company_note())
+        self.assertIn("Vesper and Nova are on the desktop beside Pip", s.friends.note())
+        self.assertIn("are other people", s.friends.note())
         s.company = ["Vesper"]
-        self.assertIn("Vesper is on the desktop beside Pip", s._company_note())
+        self.assertIn("Vesper is on the desktop beside Pip", s.friends.note())
 
     def test_pips_time_up_sends_both_home(self):
-        from session import Turn
+        from mind.session import Turn
         scene, _ = self.scene()
         pip_, ves = scene.pets
         for p in scene.pets:
@@ -1921,7 +1926,7 @@ class SceneTest(unittest.TestCase):
                          "the first day together is always together: Pip introduces her")
         data = roster.state()
         data["unlocked"]["mira"]["introduced"] = "2026-11-03"
-        from save import write_save
+        from engine.save import write_save
         write_save(data)
         self.assertEqual(today(D(2026, 11, 3)).members, ["pip", "mira"], "kept for the day")
         self.assertEqual(today(D(2026, 11, 4)).members, ["mira"], "a new day: picked")
@@ -1934,7 +1939,7 @@ class SceneTest(unittest.TestCase):
         mira.log_path = os.path.join(TMP, "mira.log")
         note = mira.fill(lineup("mira")["note"]) + "."
         self.assertIn("busy looking after the chapel, so she came on her own", note)
-        import session
+        from mind import session
         real = session.start_server, session.warm_up, session.ask
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
@@ -1975,7 +1980,7 @@ class SceneTest(unittest.TestCase):
         for p in scene.pets:
             scene.arrived(p)
         self.assertIn("how Vesper learned dreamwalking", pip_.lines[-1], "Pip should start it")
-        from session import Turn
+        from mind.session import Turn
         for said in ("How did you learn so fast?", "Ha ha! Magic! Look, a bird!", "A bird? Inside?"):
             speaker = scene.duet["speaker"]
             speaker.on_speaking("duet")
@@ -1990,7 +1995,7 @@ class SceneTest(unittest.TestCase):
 
 
     def test_their_topics_load(self):
-        import duets
+        from progress import duets
         pair = duets.load(["pip", "mira"])
         self.assertIsNotNone(pair)
         self.assertEqual(duets.load(["mira", "pip"]).topics, pair.topics, "either order")
@@ -1999,7 +2004,8 @@ class SceneTest(unittest.TestCase):
         self.assertIsNone(duets.load(["pip", "nobody"]))
 
     def test_topics_follow_the_lower_stage_and_dont_repeat(self):
-        import duets, random as R
+        import random as R
+        from progress import duets
         pair, rng = duets.load(["pip", "mira"]), R.Random(1)
         stage1 = [t for t in pair.topics if t["stage"] == 1]
         picked = [pair.pick(1, rng)["about"] for _ in range(len(stage1) // 2)]
@@ -2020,7 +2026,7 @@ class SceneTest(unittest.TestCase):
     def test_duet_lines_speak_to_each_other_in_new_words(self):
         """In testing, Pip talked about Vesper instead of to her, Vesper said Pip's line again, and touched Pip's herb
         back home as if they were there."""
-        import duets
+        from progress import duets
         ves = Character("mira")
         first = duets.opener(ves, pip(), {"about": "bread", "starts": "mira", "stage": 1})
         answer = duets.reply(pip(), ves, "Your bread is flat!")
@@ -2031,8 +2037,8 @@ class SceneTest(unittest.TestCase):
         self.assertIn("never repeating what Vesper just said", answer)
 
     def test_lines_are_stage_directions_with_the_other_ones_words(self):
-        import duets
-        from directions import is_direction
+        from progress import duets
+        from mind.directions import is_direction
         ves, topic = Character("mira"), {"about": "bread", "starts": "mira", "stage": 1}
         first = duets.opener(ves, pip(), topic)
         self.assertTrue(is_direction(first))
@@ -2107,8 +2113,8 @@ class SceneTest(unittest.TestCase):
         scene.pets[0].input.hide()
 
     def test_a_whole_chat(self):
-        from session import Turn
-        from directions import is_direction
+        from mind.session import Turn
+        from mind.directions import is_direction
         scene = self.chatty_scene()
         scene.tick()
         self.assertIsNotNone(scene.duet, "no chat after the quiet")
@@ -2143,7 +2149,7 @@ class SceneTest(unittest.TestCase):
         self.assertIsNone(scene.duet, "they chatted right after someone spoke")
 
     def test_a_duet_line_earns_nothing_but_counts_as_speaking(self):
-        import session
+        from mind import session
         real = session.start_server, session.warm_up, session.ask
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
@@ -2174,7 +2180,7 @@ class SceneTest(unittest.TestCase):
 
     def greeting(self, character, path, company, heard=None):
         """Her greeting's stage direction, from a real Session with the model stood in for."""
-        import session
+        from mind import session
         real = session.start_server, session.warm_up, session.ask
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
@@ -2202,7 +2208,7 @@ class SceneTest(unittest.TestCase):
 
     def test_on_together_days_your_messages_say_whos_who(self):
         """'who bakes better bread?' had Vesper talking as if the user were Pip: each message now says who's who."""
-        import session
+        from mind import session
         notes = []
         real = session.start_server, session.warm_up, session.ask
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
@@ -2243,7 +2249,7 @@ class SummonsTest(unittest.TestCase):
     day 1 together, Pip nearly finds her out in a chat; day 2 only Pip, worried; day 3 only Vesper, hurt."""
 
     def setUp(self):
-        import session
+        from mind import session
         self.session = session
         self.real = session.start_server, session.warm_up, session.ask
         self.judged = None  # what her stood-in replies tag ([done] = True)
@@ -2269,12 +2275,12 @@ class SummonsTest(unittest.TestCase):
     def sitting(self, company=()):
         s = self.session.Session(self.vesper(), say=lambda *_: None, slot=1, slots=2, company=list(company))
         s.quests.next = time.time() + 3600
-        import idle
+        from mind import idle
         s.idle.fired = {(datetime.date.today().isoformat(), h, m) for h, m, _ in idle.CLOCK}
         return s
 
     def saved(self):
-        from save import load_save
+        from engine.save import load_save
         data = load_save(self.path)
         data.gates = self.vesper().gates
         return data
@@ -2297,7 +2303,7 @@ class SummonsTest(unittest.TestCase):
     def test_a_kind_question_never_settles_her_confession(self):
         """Live, "that sounds really scary, are you okay?" got her [done] and ended her story before you'd answered:
         a real answer has to say what she should do (answer_words, as for a major quest)."""
-        import story
+        from progress import story
         self.assertTrue(self.vesper().major_quests[3]["steps"][2]["answer_words"])
         for message in ["that sounds really scary, are you okay?", "oh no, I'm so sorry you got hurt",
                         "I think you should keep reporting, it's your job"]:
@@ -2313,13 +2319,13 @@ class SummonsTest(unittest.TestCase):
                              message)
 
     def test_a_bad_answer_words_pattern_fails_at_load(self):
-        from character import _check_step
+        from engine.character import _check_step
         step = {"opens": "x", "ends": "answer", "done_when": "y", "answer_words": "(unclosed"}
         with self.assertRaisesRegex(ValueError, "answer_words isn't a valid pattern"):
             _check_step("[major_quests.3] step 3", step, {"neutral"})
 
     def test_the_whole_story(self):
-        import story
+        from progress import story
         # day 1: alone, her story waits (it needs Pip); together, it begins, and wants its chat with Pip
         self.assertEqual(story.needed(self.saved(), self.vesper()), (["pip", "mira"], None))
         s = self.sitting()
@@ -2390,18 +2396,18 @@ class SummonsTest(unittest.TestCase):
 
     def day3(self):
         """Her story at day 3 (only Vesper, hurt), not begun yet."""
-        from save import load_save, write_save
+        from engine.save import load_save, write_save
         data = load_save(self.path)
         data["story"] = {"quest": "the-summons", "step": 2, "begun": False, "back_on": None, "goodbyes": 0}
         write_save(data)
 
     def test_hurt_from_the_portal_on(self):
-        import story
+        from progress import story
         self.day3()
         self.assertEqual(story.mood_today(self.saved(), self.vesper(), ALONE), "injured")
         self.assertIsNone(story.mood_today(self.saved(), self.vesper(), BOTH), "day 3 is hers alone")
-        from desktop import app as A
-        self.assertEqual(A.story_mood(self.vesper(), ALONE), "injured")
+        from progress import launch
+        self.assertEqual(launch.story_mood(self.vesper(), ALONE), "injured")
 
     def test_she_answers_you_instead_of_saying_her_opening_again(self):
         self.day3()
@@ -2415,7 +2421,7 @@ class SummonsTest(unittest.TestCase):
         self.assertIn("doesn't greet them again", note)
 
     def test_her_injury_lingers_after_the_quest(self):
-        import story
+        from progress import story
         from unittest import mock
         self.day3()
         s = self.sitting()
@@ -2433,7 +2439,7 @@ class SummonsTest(unittest.TestCase):
     def test_with_pip_there_she_wears_her_mask(self):
         """'so how was yesterday?' had Vesper tell the user, with Pip right there, that someone pays her to watch
         Pip's chapel; told not to, she still let it slip. With Pip there, her secrets aren't in her prompt at all."""
-        from save import load_save, write_save
+        from engine.save import load_save, write_save
         data = load_save(self.path)
         data.update(trust=8, points=trust.TRUST_POINTS[8] - 1, quests_done=[
             "major-keep-it-secret", "major-gift-for-pip", "major-the-summons"])  # (at gate 4: her real name)
@@ -2450,11 +2456,11 @@ class SummonsTest(unittest.TestCase):
             self.assertNotIn(secret, prompt(with_pip), "Pip's there: it could slip out")
         self.assertIn("She is Bloodcult", prompt(alone), "alone with you she's all of herself")
         self.assertIn("Pip nearly found out", prompt(alone))
-        self.assertIsNone(with_pip._major_due(), "she'd tell you her real name in front of Pip")
-        self.assertIn("real name", alone._major_due() or "")
+        self.assertIsNone(with_pip.friends.major_due(with_pip.save, with_pip.major), "she'd tell you her real name in front of Pip")
+        self.assertIn("real name", alone.friends.major_due(alone.save, alone.major) or "")
 
     def test_the_lineup_follows_her_story(self):
-        import roster, story
+        from progress import roster, story
         from unittest import mock
         pip_save = Save(temp_path("pip"), {"trust": 10, "points": 465, "quests_done": []})
         pip_save.gates = pip().gates
@@ -2475,12 +2481,12 @@ class SummonsTest(unittest.TestCase):
     def test_on_her_away_day_pip_tells_it(self):
         """Day 2 of her story: only Pip comes, and her greeting tells why Vesper is gone (roster.today's note).
         Opened again that day, it's told already: Pip's usual 'Vesper is busy' line instead."""
-        import roster, story
+        from progress import roster, story
         from unittest import mock
         use_roster(self, mira_unlock("2026-10-01", visit_day="2026-10-02", introduced="2026-10-03"))
         data = self.saved()
         story.Story(self.vesper())._progress(data).update(step=1)
-        from save import write_save
+        from engine.save import write_save
         write_save(data)
         pip_save = Save(temp_path("pip"), {"trust": 10, "points": 465, "quests_done": []})
         pip_save.gates = pip().gates
@@ -2493,7 +2499,7 @@ class SummonsTest(unittest.TestCase):
         self.assertEqual(again.note, pip().fill(lineup("pip")["note"]) + ".")
 
     def test_bad_steps_are_caught(self):
-        import character as C
+        from engine import character as C
         duet = {"starts": "pip", "about": "x"}
         for step, problem in [({"opens": "x", "ends": "duet", "day": "together"}, "needs: duet"),
                               ({"opens": "x", "ends": "duet", "duet": duet}, "two there"),
@@ -2517,7 +2523,7 @@ class SummonsTest(unittest.TestCase):
 
     def test_the_older_day_words_still_work(self):
         """day = "together" / "alone" / "away": said about her partner (the one who invited her)."""
-        import story
+        from progress import story
         self.assertEqual(story.who_comes({"day": "together"}, "mira", "pip"), (["mira", "pip"], None))
         self.assertEqual(story.who_comes({"day": "alone"}, "mira", "pip"), (["mira"], None))
         self.assertEqual(story.who_comes({"day": "away"}, "mira", "pip"), (["pip"], "pip"))
@@ -2530,7 +2536,7 @@ class SummonsTest(unittest.TestCase):
         self.assertTrue(story.fits({"needs": ["pip", "mira"]}, "mira", ["mira", "pip"]))
         self.assertFalse(story.fits({"needs": ["pip", "mira"]}, "mira", ["mira"]))
         self.assertFalse(story.fits({"needs": ["mira"]}, "mira", None), "not known: only a step needing nobody")
-        import roster
+        from progress import roster
         from unittest import mock
         legacy = lambda data, c, day=None: {"day": "together"} if c.folder == "mira" else None
         with mock.patch.object(story, "next_step", legacy), \
@@ -2539,7 +2545,7 @@ class SummonsTest(unittest.TestCase):
         self.assertEqual((need.members, need.owner), (["pip", "mira"], "mira"), "Pip invited her: Pip leads")
 
     def test_a_step_needing_someone_not_here_yet_waits(self):
-        import roster, story
+        from progress import roster, story
         from unittest import mock
         later = lambda data, c, day=None: {"needs": ["mira", "nova"]} if c.folder == "mira" else None
         with mock.patch.object(story, "next_step", later), \
@@ -2554,7 +2560,7 @@ class RealNameTest(unittest.TestCase):
     and once you've accepted her, the rest of that sitting is already her stage 5 self (Session.restage)."""
 
     def setUp(self):
-        import session
+        from mind import session
         self.session = session
         self.real = session.start_server, session.warm_up, session.ask
         self.reads = 0
@@ -2582,7 +2588,7 @@ class RealNameTest(unittest.TestCase):
         return s
 
     def saved(self):
-        from save import load_save
+        from engine.save import load_save
         data = load_save(self.path)
         data.gates = self.vesper().gates
         return data
@@ -2618,7 +2624,7 @@ class RealNameTest(unittest.TestCase):
         self.assertIn("never calls the user Mira", note)
         self.assertIn("[done] only if", note, "the judging part still follows")
         self.assertEqual(Character("pip").major_quests[1]["note"], "", "left out = no note")
-        from character import _major_quests
+        from engine.character import _major_quests
         with self.assertRaises(ValueError):
             _major_quests({"1": {"id": "x", "starts": "", "done_when": "", "memory": "", "points": 1, "note": 3}}, {"happy"})
 
@@ -2654,14 +2660,15 @@ class RealNameTest(unittest.TestCase):
 
 class DirectionsTest(unittest.TestCase):
     def test_a_cue_is_told_apart_from_the_user(self):
-        from directions import direction, is_direction
+        from mind.directions import direction, is_direction
         self.assertTrue(is_direction(direction("Pip says something on her own.")))
         self.assertFalse(is_direction("(she smiles) hi"))
 
 class ServerGoneTest(unittest.TestCase):
     """No llama-server at all (a port nothing listens on): every call says so the same way."""
     def setUp(self):
-        import llm, socket
+        import socket
+        from engine import llm
         with socket.socket() as s:
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]  # (closed again: nothing listens there)
@@ -2683,7 +2690,8 @@ class ServerGoneTest(unittest.TestCase):
 class ReconnectTest(unittest.TestCase):
     """The server goes away once: her reply and the goodbye diary both start it again and retry."""
     def setUp(self):
-        import llm, session
+        from engine import llm
+        from mind import session
         self.llm, self.session = llm, session
         self.real = session.start_server, session.warm_up, session.ask, llm.chat
         self.calls = {"start": 0, "read": 0, "ask": 0, "diary": 0}
@@ -2791,7 +2799,7 @@ class MemoryTiersTest(unittest.TestCase):
         self.assertLess(time.time() - t0, 0.5)
 
     def test_diary_marks_lasting_facts_and_moves_known_ones_up(self):
-        import llm
+        from engine import llm
         s = self.save()
         user_lines = ["my cat Mochi is still the boss of the house", "I have an exam this friday",
                       "my name is Jerry by the way"]
@@ -2817,11 +2825,11 @@ class MemoryTiersTest(unittest.TestCase):
         self.assertIn(mochi, memory.in_prompt(s))
 
     def test_session_sends_recalled_notes_with_the_message_only(self):
-        import session
+        from mind import session
         s = self.save()
         c = pip()
         c.save_path = s.path
-        from save import write_save
+        from engine.save import write_save
         write_save(s)
         real = session.start_server, session.warm_up, session.ask
         notes = []
@@ -2846,7 +2854,7 @@ class MemoryTiersTest(unittest.TestCase):
 class EarlyMoodTest(unittest.TestCase):
     """Her mood reaches the screen before her words (session on_mood), and a story's locked mood still wins."""
     def test_story_lock_wins(self):
-        import session
+        from mind import session
         real = session.start_server, session.warm_up, session.ask
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, on_mood=None):
             on_mood("sad")
@@ -2911,7 +2919,8 @@ class ForgetOldestTest(unittest.TestCase):
         self.assertEqual(len(messages), 5)
 
     def test_diary_gets_the_whole_sitting(self):
-        import llm, session
+        from engine import llm
+        from mind import session
         real = session.start_server, session.warm_up, session.ask, llm.chat
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "Oh! [nice] [mood: happy]"}]
@@ -2942,7 +2951,7 @@ class SaveFileTest(unittest.TestCase):
     """save.py: a save cut short (the pet killed, or the power cut, while writing) never stops her starting."""
 
     def setUp(self):
-        from save import load_save, write_save
+        from engine.save import load_save, write_save
         self.load, self.write = load_save, write_save
         self.path = temp_path("savefile")
 
@@ -3104,14 +3113,14 @@ class PublishRoundTest(unittest.TestCase):
                 if "steps" not in q:
                     self.assertTrue(q["answer_words"], (folder, q["id"]))
                     self.assertFalse(re.search(q["answer_words"], off_topic, re.I), (folder, q["id"]))
-        from character import _major_quests
+        from engine.character import _major_quests
         quest = {"id": "x", "starts": "", "done_when": "", "memory": "", "points": 1}
         with self.assertRaises(ValueError):
             _major_quests({"1": dict(quest, answer_words="(unclosed")}, {"happy"})
         self.assertEqual(_major_quests({"1": dict(quest)}, {"happy"})[1]["answer_words"], "", "left out = no check")
 
     def test_events_name_themselves_from_stage_3(self):
-        import events
+        from mind import events
         p = Character("pip")
         day = datetime.date(2026, 12, 2)  # Heaven's inspection
         quiet = events.due(day, {"trust": 4}, p)["text"]
@@ -3122,7 +3131,7 @@ class PublishRoundTest(unittest.TestCase):
         self.assertIn("What happened", told)
 
     def test_masked_vesper_asks_only_her_shown_stage(self):
-        import session
+        from mind import session
         real = session.start_server, session.warm_up
         session.start_server, session.warm_up = (lambda *a, **k: None), (lambda *a, **k: ("loaded", 2000))
         v = Character("mira")
@@ -3151,7 +3160,8 @@ class DataFolderTest(unittest.TestCase):
     """The player's own files (config.DATA) live apart from the game, and old ones are moved there once (data.py)."""
 
     def test_where_it_lives(self):
-        import config, importlib
+        import importlib
+        from engine import config
         from unittest import mock
         self.assertEqual(config.DATA, os.environ["PET_DATA_DIR"], "the tests have their own")
         self.assertTrue(Character("pip").save_path.startswith(config.SAVES_DIR))
@@ -3165,7 +3175,7 @@ class DataFolderTest(unittest.TestCase):
                     self.assertEqual(config._data_dir(), os.path.join("/home/x/.local/share", "desktop-pet"))
 
     def test_the_model_is_found_in_either_place(self):
-        import config
+        from engine import config
         from unittest import mock
         root = tempfile.mkdtemp(dir=TMP)
         game, data = os.path.join(root, "game"), os.path.join(root, "data")
@@ -3179,7 +3189,7 @@ class DataFolderTest(unittest.TestCase):
             self.assertEqual(config._model(), os.path.join(data, "models", config.MODEL_FILE), "DATA's comes first")
 
     def test_old_files_move_over_once(self):
-        import config, data
+        from engine import config, data
         from unittest import mock
         root = tempfile.mkdtemp(dir=TMP)
         old, new = os.path.join(root, "game"), os.path.join(root, "data")
@@ -3305,7 +3315,7 @@ class DownloadTest(unittest.TestCase):
         self.assertIn("Not enough free space", str(e.exception))
 
     def test_already_there_needs_no_window(self):
-        import config
+        from engine import config
         from unittest import mock
         from desktop import download
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
@@ -3320,7 +3330,7 @@ class StartupFailureTest(unittest.TestCase):
         from PySide6.QtWidgets import QApplication
         QApplication.instance() or QApplication([])
         from desktop.brain import Brain
-        import session
+        from mind import session
         real = session.Session
         def broken(*a, **k):
             raise SystemExit("Can't find llama-server.exe. Install it with: winget install ggml.llamacpp")
@@ -3344,7 +3354,7 @@ class ContextShownTest(unittest.TestCase):
     the server's own count (prompt + chat + reply)."""
 
     def setUp(self):
-        import session
+        from mind import session
         self.session = session
         self.real = session.start_server, session.warm_up, session.ask
         self.used = 0
@@ -3363,7 +3373,7 @@ class ContextShownTest(unittest.TestCase):
         c = pip()
         c.save_path = os.path.join(tempfile.mkdtemp(), "pip.json")
         s = self.session.Session(c, say=lambda *_: None)
-        from config import N_CTX
+        from engine.config import N_CTX
         self.assertEqual(s.snapshot()["summary"]["context"], (3072, N_CTX), "known before her first reply")
         self.used = 4000
         s.user_says("hello")
@@ -3384,7 +3394,7 @@ class ContextShownTest(unittest.TestCase):
 
     def test_llm_read_returns_the_servers_count(self):
         from unittest import mock
-        import llm
+        from engine import llm
         answer = mock.Mock(ok=True, json=lambda: {"tokens_evaluated": 2009})
         with mock.patch.object(llm, "_post", lambda *a, **k: answer):
             self.assertEqual(llm.read("x"), 2009)
@@ -3413,12 +3423,12 @@ class LoreTest(unittest.TestCase):
             "## Odd\nin short: no words, so this is a plain line\n- kept too")
 
     def lore(self, text=None):
-        from lore import Lore
+        from mind.lore import Lore
         stub = mock_character(text or self.TEXT)
         return Lore(stub, 5)
 
     def test_the_prompt_keeps_the_short_lines(self):
-        from lore import split
+        from mind.lore import split
         prompt, sections = split(self.TEXT)
         self.assertEqual(prompt, "## Overview\n- always all here\n## Bloodcult\n- the faction of chaos; boss Lind\n"
                                  "## Freeport\n- the free port\n## Odd\n- no words, so this is a plain line\n- kept too")
@@ -3426,7 +3436,7 @@ class LoreTest(unittest.TestCase):
         self.assertEqual(sections["Bloodcult"]["details"], "- Lind is immortal\n### Feras\n- god of life and death")
 
     def test_a_mention_brings_the_details_for_a_few_replies(self):
-        import lore
+        from mind import lore
         l = self.lore()
         self.assertIsNone(l.note("hello!"))
         self.assertIn("Lind is immortal", l.note("who is Lind's right hand?"))  # (Lind's: the 's counts)
@@ -3441,7 +3451,7 @@ class LoreTest(unittest.TestCase):
         self.assertEqual(l.shown, ["Bloodcult", "Freeport"], "the first text that names something; later ones don't count")
 
     def test_at_most_a_few_sections_newest_first(self):
-        import lore
+        from mind import lore
         text = "\n".join(f"## S{i}\nwords: w{i}\nin short: s{i}\n- detail {i}" for i in range(6))
         l = self.lore(text)
         l.note("w0")
@@ -3451,7 +3461,7 @@ class LoreTest(unittest.TestCase):
         self.assertEqual(len(l.shown), lore.MOST)
 
     def test_lines_that_retire_at_a_later_stage(self):
-        from character import before_stage
+        from engine.character import before_stage
         text = "- [until stage 4] she won't say who\n- always"
         self.assertEqual(before_stage(text, 3), "- she won't say who\n- always")
         self.assertEqual(before_stage(text, 4), "- always")
@@ -3461,7 +3471,7 @@ class LoreTest(unittest.TestCase):
 
     def test_her_prompt_is_much_smaller_but_keeps_the_key_facts(self):
         """Pip's top-stage prompt: the details are out, the facts she must never get wrong are in."""
-        from lore import Lore
+        from mind.lore import Lore
         prompt = pet.new_conversation(pip(), 5)[0]["content"]
         for fact in ("Cassandra (a woman: she/her)", "Lind (a man: he/him)", "Libera (a woman: she/her)",
                      "Soren (a woman: she/her)", "killed a god, Sally", "Soren cannot break Lind's own immortality",
@@ -3475,7 +3485,7 @@ class LoreTest(unittest.TestCase):
 
     def test_the_session_sends_it_with_one_request_only(self):
         """The note goes with the request; her chat (and so her diary) keeps your message as you wrote it."""
-        import session
+        from mind import session
         sent = []
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, **kw):
             sent.append(note)
@@ -3499,7 +3509,7 @@ class LoreTest(unittest.TestCase):
         """Only your message brings lore in, not her own last reply: that is kept with its tags ("[neutral] [mood: ...]"),
         and searched too, "neutral" brought in Freeport ("neutral ground") on every message that named no topic, and
         Pip kept talking about Freeport."""
-        import session
+        from mind import session
         sent = []
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, **kw):
             sent.append(note)
@@ -3513,7 +3523,7 @@ class LoreTest(unittest.TestCase):
             c.save_path = os.path.join(tempfile.mkdtemp(), "pip.json")
             s = session.Session(c, say=lambda *_: None)
             s.quests.next = 1e12
-            from lore import Lore  # (a section brought in by a word her tags use, whatever the real word lists say)
+            from mind.lore import Lore  # (a section brought in by a word her tags use, whatever the real word lists say)
             s.lore = Lore(mock_character("## Calm\nwords: neutral, mood\nin short: calm\n- calm details"), 1)
             s.user_says("hello there, how are you?")
             s.user_says("what's your home like back in your world?")
@@ -3543,14 +3553,15 @@ class TemplateTest(unittest.TestCase):
 
     def test_the_template_character_passes_the_cast_check(self):
         from unittest import mock
-        import character, duets
+        from engine import character
+        from progress import duets
         from desktop import check
         repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         template = os.path.join(repo, "templates", "character")
         game = tempfile.mkdtemp(prefix="pet-template-")
         try:
             cast = os.path.join(game, "character")
-            for folder in ("pip", "mira", "duets"):
+            for folder in ("pip", "mira", "ruby", "duets"):
                 shutil.copytree(os.path.join(repo, "character", folder), os.path.join(cast, folder))
             shutil.copytree(template, os.path.join(cast, "FOLDER"))
             shutil.copy(os.path.join(template, "duet.toml"), os.path.join(cast, "duets", "FOLDER-pip.toml"))
@@ -3580,10 +3591,92 @@ class TemplateTest(unittest.TestCase):
 
     def test_the_game_never_loads_the_template(self):
         """It's outside character/, so it isn't a character, and the build (which packs character/) leaves it out."""
-        import character
+        from engine import character
         self.assertFalse(character.is_character("FOLDER"))
         self.assertNotIn("NAME", character.cast())
         self.assertEqual([u["who"] for u in roster.rules()["unlocks"]], ["mira"])
+
+class ArrivalTest(unittest.TestCase):
+    """roster.py [[arrivals]]: Ruby turns up on her own, 30 days after Pip reaches trust 9."""
+
+    def setUp(self):
+        from unittest import mock
+        from engine.save import write_save
+        self.roster = use_roster(self)
+        self.pip_save = Save(temp_path("pip-arrival"), {"trust": 1})
+        write_save(self.pip_save)
+        real = self.roster.Character
+        def character(folder):
+            c = real(folder)
+            if folder == "pip":
+                c.save_path = self.pip_save.path
+            return c
+        patch = mock.patch.object(self.roster, "Character", character)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.D = datetime.date
+
+    def pip_trust(self, level):
+        from engine.save import write_save
+        self.pip_save["trust"] = level
+        write_save(self.pip_save)
+
+    def today(self, day, **kw):
+        return self.roster.today(day=day, **kw)
+
+    def test_nothing_starts_below_pips_trust_9(self):
+        self.pip_trust(8)
+        self.assertEqual(self.today(self.D(2026, 12, 1)).members, ["pip"])
+        self.assertEqual(self.roster.state()["arrived"], {})
+
+    def test_she_comes_on_her_own_30_days_later(self):
+        D = self.D
+        self.pip_trust(9)
+        self.assertEqual(self.today(D(2026, 12, 1)).members, ["pip"])
+        self.assertEqual(self.roster.state()["arrived"]["ruby"], {"started_on": "2026-12-01", "visit_day": None})
+        self.pip_trust(10)  # (the clock started once, and trust going up doesn't restart it)
+        self.assertEqual(self.today(D(2026, 12, 30)).members, ["pip"], "29 days: not yet")
+        self.assertEqual(self.today(D(2026, 12, 31)).members, ["ruby"], "30 days: her very first day, alone")
+        self.assertEqual(self.today(D(2026, 12, 31)).members, ["ruby"], "opened again the same day")
+        self.assertEqual(self.roster.state()["arrived"]["ruby"]["visit_day"], "2026-12-31")
+
+    def test_a_late_launch_still_brings_her(self):
+        self.pip_trust(9)
+        self.today(self.D(2026, 12, 1))
+        self.assertEqual(self.today(self.D(2027, 2, 14)).members, ["ruby"], "the first launch after the 30 days")
+
+    def test_after_her_first_day_she_is_in_the_lineups(self):
+        D = self.D
+        self.pip_trust(9)
+        self.today(D(2026, 12, 1))
+        self.today(D(2026, 12, 31))
+        self.assertEqual(self.today(D(2026, 12, 31)).members, ["ruby"])
+        picks = []
+        def pick(lineups, weights):
+            picks.append({tuple(l["members"]) for l in lineups})
+            return [next(l for l in lineups if l["members"] == ["ruby", "pip"])]
+        self.assertEqual(self.today(D(2027, 1, 1), pick=pick, need=lambda *_: None).members, ["ruby", "pip"])
+        self.assertEqual(picks, [{("pip",), ("ruby", "pip"), ("ruby",)}], "Vesper hasn't come yet: no lineup with her")
+
+    def test_mistakes_fail_loudly(self):
+        from progress import roster
+        arrival = 'who = "ruby"\nafter = "pip"\nat_trust = 9\ndays = 30\n'
+        for text, problem in [
+                ('[[arrivals]]\nwho = "ruby"\nafter = "pip"\n', "missing"),
+                ('[[arrivals]]\n' + arrival.replace('"ruby"', '"nobody"'), "isn't a character"),
+                ('[[arrivals]]\n' + arrival.replace('"pip"', '"mira"'), "can't come yet"),
+                ('[[arrivals]]\n' + arrival.replace('"ruby"', '"pip"'), "already in the cast"),
+                ('[[arrivals]]\n' + arrival.replace("9", "11"), "at_trust"),
+                ('[[arrivals]]\n' + arrival.replace("30", "-1"), "days")]:
+            with self.subTest(problem=problem), self.assertRaisesRegex(ValueError, problem):
+                roster.rules(self.write(text))
+
+    def write(self, text):
+        path = temp_path("rules").replace(".json", ".toml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
 
 if __name__ == "__main__":
     unittest.main()

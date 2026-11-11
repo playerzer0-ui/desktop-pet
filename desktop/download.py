@@ -1,34 +1,28 @@
-"""First launch: the model (config.MODEL_URL, ~3 GB) isn't there yet, so a small window downloads it into the
-player's data folder (config.DATA/models), once. It resumes where it left off if the game was closed or the
-connection dropped, checks there's room first, and checks the SHA-256 before the model is used.
-
-    desktop.download.ensure_model()   True once the model is there (downloading it first if needed), False if the
-                                      player closed the window
-    fetch(url, path, sha256, size)    the download itself, no window (setup scripts and tests can use it)
+"""First launch: a small window downloads the model (~3 GB) into the data folder. It resumes after an
+interruption, checks there's room first, and checks the SHA-256 before the model is used.
 """
 import hashlib, os, shutil, threading, time
 import requests
 from PySide6.QtCore import QEventLoop, QObject, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
-import config
+from engine import config
 
 CHUNK = 1 << 20  # 1 MB
-ROOM = 200 * 1024 ** 2  # free space to leave over, on top of the model
+ROOM = 200 * 1024 ** 2  # free space to leave over
 
 class Stopped(Exception):
     pass
 
 def fetch(url, path, sha256, size, progress=lambda stage, done, total: None, stop=None):
-    """Download url to path (via path + ".part", so a half download is never taken for the model), resuming a
-    .part left by an earlier try. progress(stage, done, total) with stage "checking" (hashing what's already
-    there) or "downloading". stop = a threading.Event: set it to stop (raises Stopped; the .part is kept)."""
+    """Download url to path via path + ".part", resuming an earlier .part. progress(stage, done, total), stage
+    "checking" or "downloading". Setting the stop event raises Stopped (the .part is kept)."""
     stop = stop or threading.Event()
     part = path + ".part"
     os.makedirs(os.path.dirname(path), exist_ok=True)
     done = os.path.getsize(part) if os.path.exists(part) else 0
     digest = hashlib.sha256()
-    if done:  # resuming: the checksum has to include what's already there
+    if done:  # resuming: the checksum includes what's already there
         with open(part, "rb") as f:
             read = 0
             for block in iter(lambda: f.read(CHUNK * 8), b""):
@@ -43,11 +37,11 @@ def fetch(url, path, sha256, size, progress=lambda stage, done, total: None, sto
                       f"{(size - done + ROOM) / 1024 ** 3:.1f} GB, and {free / 1024 ** 3:.1f} GB is free.")
     headers = {"Range": f"bytes={done}-"} if done else {}
     with requests.get(url, headers=headers, stream=True, timeout=30) as r:
-        if done and r.status_code == 416:  # (it was all there already)
+        if done and r.status_code == 416:  # it was all there already
             pass
         else:
             r.raise_for_status()
-            if done and r.status_code != 206:  # the server sent the whole file instead of the rest: start over
+            if done and r.status_code != 206:  # sent the whole file instead of the rest: start over
                 done, digest = 0, hashlib.sha256()
             total = done + int(r.headers.get("Content-Length") or (size - done))
             with open(part, "ab" if done else "wb") as f:
@@ -68,9 +62,9 @@ def fetch(url, path, sha256, size, progress=lambda stage, done, total: None, sto
 def _size(n):
     return f"{n / 1024 ** 3:.1f} GB" if n >= 1024 ** 3 else f"{n / 1024 ** 2:.0f} MB"
 
-class _Bridge(QObject):  # (the download runs on its own thread; Qt widgets only change on the main one)
+class _Bridge(QObject):  # the download runs on its own thread; widgets only change on the main one
     progress = Signal(str, float, float)
-    finished = Signal(str)  # "" when done, else what went wrong ("stopped" if the player closed it)
+    finished = Signal(str)  # "" when done, else what went wrong ("stopped": the window was closed)
 
 class DownloadWindow(QWidget):
     def __init__(self, who=None):
@@ -102,7 +96,7 @@ class DownloadWindow(QWidget):
         self.stop = threading.Event()
         self.result = None  # True = done, False = closed
         self.done = QEventLoop()
-        self._speed = []  # (time, bytes) samples, for the speed and time left
+        self._speed = []  # (time, bytes) samples
 
     def start(self):
         self.retry.hide()
@@ -153,8 +147,7 @@ class DownloadWindow(QWidget):
         super().closeEvent(e)
 
 def ensure_model(who=None):
-    """True once the model is there: right away if it already is, else after the download window is done.
-    False if the player closed the window (the game should quit then). Needs a QApplication."""
+    """True once the model is there (downloading it first if needed), False if the window was closed."""
     if os.path.exists(config.MODEL):
         return True
     window = DownloadWindow(who)

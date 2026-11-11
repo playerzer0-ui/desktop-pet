@@ -1,64 +1,48 @@
-"""Several characters on the desktop at once: whoever roster.today() picked (character/roster.toml), like Pip and
-the friend she brought over. Each one is a whole App (desktop/app.py) with her own body, bubble, menu, mind and save,
-on her own slot of the model server (llm.py). The scene only makes them get along:
+"""Several characters on the desktop at once, each a whole App with her own mind and server slot.
+The scene makes them get along: one talks at a time, they arrive side by side and greet in order,
+they leave together, and after a few quiet minutes two of them sometimes chat with each other (duets.py).
 
-    taking turns   one talks at a time: nobody speaks up (greeting, idle talk, quest, news) while anyone else is
-                   talking or you're typing to her, and you can't open a chat with one while another is talking
-    arriving       side by side, each out of her own portal. The first one greets first (the first day, she
-                   introduces whoever she invited: roster.introduce), then the others in order, each once everyone
-                   before her is done, hearing what the first one said
-    leaving        together: Say goodbye to any one, or the first one's time running out, and all go home
-                   (the others have no daily limit of their own here: they stay as long as she does)
-    chatting       after a few quiet minutes two of them sometimes chat with each other (a duet, duets.py): any two
-                   here whose pair has a file in character/duets/. They walk up to each other and turn face to face,
-                   then a topic from their pair's file, a few lines back and forth, each one waiting for the other's
-                   words to be read. Then they wander off again. You can't talk to anyone until it's over (a few
-                   lines); someone leaving ends it early
-    closing        the app quits once everyone has faded away
-
-    scene = Scene([pip, vesper])    # the first one leads: she decides whether they come today, and her time counts
+    scene = Scene([pip, vesper])    # the first one leads: her time counts for everyone
 """
 import itertools, random, time
-import duets
+from progress import duets
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 from desktop.app import App
 from desktop.body import SIZE
 
-TICK_MS = 2000   # how often someone may speak up on her own (each tick gives one of them the chance, in turn)
-SPACING = SIZE * 1.4  # how far apart they come out of their portals
-CHAT_GAP = SIZE * 1.1  # how far apart they stand to chat (between their feet)
-MEET_SECONDS = 20      # if one hasn't reached the other by then (being dragged around...), they talk anyway
-STORY_QUIET = 45       # seconds of quiet before a chat one of their stories wants (story.py: a step ending in a duet)
-STORY_LINES = 3        # lines in a story's chat between two who have no duet file of their own
+TICK_MS = 2000   # each tick, one of them in turn may speak up
+SPACING = SIZE * 1.4   # how far apart their portals are
+CHAT_GAP = SIZE * 1.1  # how far apart they stand to chat
+MEET_SECONDS = 20      # if one hasn't reached the other by then (being dragged), they talk anyway
+STORY_QUIET = 45       # seconds of quiet before a chat a story wants
+STORY_LINES = 3        # lines in a story chat for two with no duet file
 
 class Scene:
     def __init__(self, characters, rng=random):
         self.characters = list(characters)
         self.pets = [App(c, scene=self, slot=i) for i, c in enumerate(self.characters)]
-        self.gone = set()   # pets that have faded away
+        self.gone = set()
         self._spread()
         for pet in self.pets:
             pet.body.met.connect(lambda pet=pet: self.arrived(pet))
             pet.body.keep_clear = lambda pet=pet: self._taken(pet)
-        self.greetings = {}  # what each one said in her greeting (id(pet) -> words), for the ones after her
-        self.pairs = {}      # frozenset of two folders -> their duets.Pair, for every two here who have a duet file
+        self.greetings = {}  # id(pet) -> her greeting, for the ones after her
+        self.pairs = {}      # frozenset of two folders -> duets.Pair
         for a, b in itertools.combinations(self.characters, 2):
             pair = duets.load([a.folder, b.folder])
             if pair:
                 self.pairs[frozenset((a.folder, b.folder))] = pair
-        self.duet = None     # while two chat: {"speaker": pet, "listener": pet, "left": lines to go, "heard": the
-                             #   last line, "walking": pets still on their way, "opener": the first line's cue, ...}
-        self.quiet_since = time.time()  # the last time anyone spoke (or you sent something)
-        self.story_duets_had = set()    # story chats had this sitting (their topics), so none is had twice
+        self.duet = None     # while two chat: speaker, listener, lines left, the last line heard...
+        self.quiet_since = time.time()
+        self.story_duets_had = set()    # story chat topics had this sitting
         self._next_chat(rng)
-        self.turn = 0  # whose chance it is first on the next tick
+        self.turn = 0  # who goes first on the next tick
         self.ticker = QTimer(timeout=self.tick)
         self.ticker.start(TICK_MS)
 
     def _spread(self):
-        """Side by side, not out of the same portal: the others at SPACING steps from the first one, left first,
-        then right, skipping spots off the screen (on a screen too narrow for everyone, squeezed onto its edges)."""
+        """Place the others at SPACING steps from the first one, left then right, staying on screen."""
         lead = self.pets[0].body
         screen = lead._screen()
         left, right = screen.left() + SIZE / 2, screen.right() - SIZE / 2
@@ -71,7 +55,7 @@ class Scene:
             pet.follow()
 
     def _taken(self, pet):
-        """Where everyone else stands and is headed: `pet` doesn't wander onto those spots (Body._wander_target)."""
+        """Where everyone else stands and is headed, so `pet` doesn't wander onto them."""
         return [x for p in self.pets if p is not pet for x in (p.body.foot_x, p.body.target)]
 
     def _pet(self, folder):
@@ -82,13 +66,12 @@ class Scene:
         return any(p.talking or p.input.isVisible() for p in self.pets if p is not pet)
 
     def may_greet(self, pet):
-        """In order: the first one greets first, each other one once everyone before her has (or their greeting
-        failed, or they're leaving)."""
+        """Greetings go in order: each once everyone before her has greeted."""
         before = self.pets[:self.pets.index(pet)]
         return all(p.leaving or (p.ready and not p.wants_open and not p.talking) for p in before)
 
     def heard_for(self, pet):
-        """(name, words) of the first one's greeting, for the others' greetings to answer, or None."""
+        """(name, words) of the first one's greeting, for the others to answer, or None."""
         lead = self.pets[0]
         words = self.greetings.get(id(lead))
         return (lead.character.name, words) if pet is not lead and words else None
@@ -97,10 +80,9 @@ class Scene:
         self.greetings[id(pet)] = words
 
     def tick(self):
-        """Give each one, in turn, the chance to speak up; once one does (or greets you), the rest wait.
-        After a few quiet minutes, two of them may chat with each other instead."""
+        """Give each one in turn the chance to speak up, or start a chat between two of them."""
         if self.duet:
-            return  # (their lines follow each other: line_done)
+            return  # their lines follow each other (line_done)
         wanted = self.story_duet()
         if wanted and self.free() and time.time() - self.quiet_since >= STORY_QUIET:
             self.start_duet(topic=wanted[1], owner=wanted[0])
@@ -118,26 +100,24 @@ class Scene:
     # --- chatting with each other (duets.py) ---
 
     def activity(self):
-        """Someone spoke, or you sent something: the quiet starts over."""
+        """Someone spoke: the quiet starts over."""
         self.quiet_since = time.time()
 
     def free(self):
-        """Everyone is here and has greeted you, and nobody's talking, typing or leaving."""
+        """Everyone has greeted you, and nobody's talking, typing or leaving."""
         return all(p.ready and p.body.here and not p.wants_open and not p.leaving and not p.saying_goodbye
                    and not p.talking and not p.input.isVisible() for p in self.pets)
 
     def _next_chat(self, rng=random):
-        """Which two chat next (any pair here with a duet file), and after how much quiet (their file's `every`)."""
+        """Pick which two chat next, and after how much quiet."""
         self.next_pair = rng.choice(list(self.pairs.values())) if self.pairs else None
         self.duet_gap = self.next_pair.gap(rng) if self.next_pair else None
 
     def duet_due(self):
-        """Time for a chat: two of them have topics, everyone's free, and it has been quiet long enough."""
         return bool(self.next_pair and self.free() and time.time() - self.quiet_since >= self.duet_gap)
 
     def story_duet(self):
-        """(pet, {starts, about}) if one of them is in a story step that wants a chat (her snapshot's story_duet)
-        that they haven't had yet this sitting, and the one who starts it is here, else None."""
+        """(pet, {starts, about}) if one's story step wants a chat not had yet this sitting, else None."""
         for pet in self.pets:
             wanted = pet.snap and pet.snap["summary"].get("story_duet")
             if wanted and wanted["about"] not in self.story_duets_had and self._pet(wanted["starts"]):
@@ -145,8 +125,7 @@ class Scene:
         return None
 
     def start_duet(self, rng=random, topic=None, owner=None):
-        """Two of them walk up to each other and chat. topic = a set one (a story's: owner = whose story, told once
-        it's over, see story_duet_done), else the next pair's (_next_chat), for the lower of their trust stages."""
+        """Two of them walk up to each other and chat, on a story's topic (owner = whose story) or their pair's."""
         pair = None
         if topic is None:
             pair = self.next_pair
@@ -159,7 +138,7 @@ class Scene:
                 return
         speaker = self._pet(topic["starts"])
         listener = self._pet(topic["with"]) if topic.get("with") else None
-        if listener is None:  # (a story's chat: with whoever's story it is, or else the next one here)
+        if listener is None:  # a story's chat: with whoever's story it is, else the next one here
             listener = owner if owner is not None and owner is not speaker else next(p for p in self.pets
                                                                                        if p is not speaker)
         if pair is None:
@@ -168,7 +147,7 @@ class Scene:
         self.duet = duet = {"speaker": speaker, "listener": listener, "heard": None,
                             "left": pair.length(rng) if pair else STORY_LINES,
                             "walking": {speaker, listener}, "opener": opener, "topic": topic, "owner": owner}
-        left, right = sorted((speaker, listener), key=lambda p: p.body.foot_x)  # they meet halfway, face to face
+        left, right = sorted((speaker, listener), key=lambda p: p.body.foot_x)  # meet halfway, face to face
         middle = (left.body.foot_x + right.body.foot_x) / 2
         screen = left.body._screen()
         middle = max(screen.left() + CHAT_GAP, min(screen.right() - CHAT_GAP, middle))
@@ -177,17 +156,16 @@ class Scene:
         QTimer.singleShot(MEET_SECONDS * 1000, lambda: self.begin_duet(duet))
 
     def arrived(self, pet):
-        """pet has walked up to the one she chats with: once both are there, the chat begins."""
+        """Once both have walked up to each other, the chat begins."""
         if self.duet and pet in self.duet["walking"]:
             self.duet["walking"].discard(pet)
             if not self.duet["walking"]:
                 self.begin_duet(self.duet)
 
     def begin_duet(self, duet):
-        """The first line, once they've met (or MEET_SECONDS have passed). Called off if you started typing to anyone
-        on the way, or someone is leaving."""
+        """The first line, once they've met. Called off if you started typing or someone is leaving."""
         if self.duet is not duet or duet["opener"] is None:
-            return  # (already begun, or over)
+            return  # already begun, or over
         if any(p.leaving or p.saying_goodbye or p.input.isVisible() for p in self.pets):
             self.end_duet()
             return
@@ -200,8 +178,7 @@ class Scene:
             self.duet["heard"] = words
 
     def line_done(self, pet):
-        """pet's line has been read: the other answers, or the chat is over (its last line, or you started
-        typing, or someone is leaving)."""
+        """pet's line has been read: the other answers, or the chat is over."""
         if not self.duet or pet is not self.duet["speaker"]:
             return
         self.duet["left"] -= 1
@@ -214,8 +191,7 @@ class Scene:
         listener.brain.duet(duets.reply(listener.character, pet.character, heard, last=self.duet["left"] == 1))
 
     def end_duet(self, finished=False):
-        """The chat is over. finished = all its lines were said: a story's chat then moves her story on (cut
-        short, it's had again later)."""
+        """The chat is over. finished = all lines said: a story's chat then moves her story on."""
         if self.duet:
             duet, self.duet = self.duet, None
             if finished and duet["owner"]:
@@ -227,7 +203,7 @@ class Scene:
                 pet.body.part()
 
     def leave_with(self, pet, going_home):
-        """`pet` is going home: so is everyone else (her goodbye, or her time running out)."""
+        """`pet` is going home: so is everyone else."""
         self.ticker.stop()
         for other in self.pets:
             if other is not pet:

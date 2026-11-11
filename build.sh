@@ -27,7 +27,7 @@ step "1/6  PyInstaller"
 "$PYTHON" -m pip install --disable-pip-version-check --quiet pyinstaller || fail "Couldn't install PyInstaller."
 
 step "2/6  llama-server"
-found=$("$PYTHON" -c "import server; print(server.find_llama_server())" 2>/dev/null) ||
+found=$("$PYTHON" -c "from engine import server; print(server.find_llama_server())" 2>/dev/null) ||
     fail "Can't find llama-server: run ./setup.sh first."
 found=$(readlink -f "$found")
 from=$(dirname "$found")

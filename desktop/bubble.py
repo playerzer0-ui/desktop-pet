@@ -1,26 +1,23 @@
-"""Pip's speech bubble and the little box you type into.
+"""Her speech bubble and the box you type into.
 
-The bubble talks like a game's dialogue box: one sentence (a "page") at a time, typed out letter by letter,
-with a ▼ when there's more to come. Each page stays up long enough to read, then the next one comes.
-Click the bubble to skip ahead (finish the typing, or go to the next page).
-Her reply streams in from the model faster than you can read, so pages are queued and shown at reading pace.
-The first page doesn't wait for its sentence to end: it opens with her first words and grows as they arrive
-(a "live" page), so you don't sit through the "…" while she writes it.
-Her *actions* aren't shown: each one is reported (the acted signal) as its page comes up, and she acts it out.
+The bubble works like a game's dialogue box: one sentence (a page) at a time, typed out letter by letter,
+with a ▼ when there's more. Her reply streams in faster than you read, so pages queue at reading pace;
+the first page opens with her first words and grows as they arrive. Click to skip ahead.
+Her *actions* aren't shown: each is reported (acted) as its page comes up, and she acts it out.
 """
 import html, re
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QLabel, QLineEdit, QVBoxLayout, QWidget
-from sentences import first_end
+from mind.sentences import first_end
 
 CREAM, INK, GOLD, ROSE, GRAY = "#FFF8EC", "#3B3049", "#C8902E", "#B76E79", "#8A8296"
 WIDTH = 230
 TAIL = 10                # height of the bubble's little tail
-TAIL_INSET = 18          # the tail never gets closer than this to the bubble's side (its rounded corner)
+TAIL_INSET = 18          # closest the tail gets to the bubble's side
 EDGE = 4                 # gap kept between the bubble (or input box) and the screen edge
 LETTERS_PER_SECOND = 32
-PAGE_MAX = 95            # a sentence longer than this is split into more pages (at a comma, or a space)
+PAGE_MAX = 95            # longer sentences are split into more pages
 ACTION = re.compile(r"\*([^*]+)\*?")  # *an action*, or one still being written at the very end
 
 def on_screen(anchor, x, y, width):
@@ -35,7 +32,7 @@ def read_time(page):
     return 0.9 + len(page) / 22
 
 def words_html(text):
-    """Pip's words with *actions* in soft rose italics (an action still being typed counts too)."""
+    """Her words with *actions* in soft rose italics."""
     parts = re.split(r"(\*[^*]+\*?)", text)
     return "".join(f'<i style="color:{ROSE}">{html.escape(p.strip("*"))}</i>' if i % 2 else html.escape(p)
                    for i, p in enumerate(parts))
@@ -53,10 +50,8 @@ def _so_far(text):
     return text[:text.rindex("*")] if text.count("*") % 2 else text
 
 def cut_long(text, comma=True):
-    """Split a too-long sentence so the readable part is at most PAGE_MAX letters: after a comma if there's
-    one far enough in, else at the last space that fits. Never cuts inside an *action*.
-    comma=False: always at the last space that fits (the live page: its words are on screen already, and cutting
-    back to an earlier comma would take them away again)."""
+    """Split a too-long sentence at a comma if one is far enough in, else at the last space that fits
+    (comma=False: always the space, so words already on screen stay). Never inside an *action*."""
     space = comma = None
     for gap in re.finditer(r"[,;]?\s", text):
         at = gap.start() + (1 if gap.group()[0] in ",;" else 0)
@@ -72,9 +67,9 @@ def cut_long(text, comma=True):
     return (text[:at].strip(), text[at:].lstrip()) if at else (text[:PAGE_MAX], text[PAGE_MAX:])
 
 class Bubble(QWidget):
-    typed = Signal()     # a few more letters appeared (she's "talking": the app squishes her)
-    acted = Signal(str)  # she does an *action* now (the text between the asterisks): the app animates it
-    done = Signal()      # her whole reply has been shown and had time to be read
+    typed = Signal()     # a few more letters appeared (the app squishes her)
+    acted = Signal(str)  # she does an *action* now
+    done = Signal()      # her whole reply has been shown and read
 
     def __init__(self):
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
@@ -90,13 +85,13 @@ class Bubble(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8 + TAIL)
         layout.setSpacing(2)
-        self.picture = QLabel()  # a picture instead of words (the Status card): its own label, as a picture in the
-        self.picture.hide()      # word-wrapping one gets no height at all (wrapping only measures text)
+        self.picture = QLabel()  # the Status card: its own label, since a wrapping one gives pictures no height
+        self.picture.hide()
         layout.addWidget(self.label)
         layout.addWidget(self.picture)
         layout.addWidget(self.note)
         self.anchor = QPoint()
-        self.tail_x = WIDTH // 2  # where the tail sits along the bottom (moves when the bubble meets a screen edge)
+        self.tail_x = WIDTH // 2  # moves when the bubble meets a screen edge
 
         self.active = False     # a dialogue is playing (from start() until done)
         self.streaming = False   # her reply is still arriving from the model
@@ -105,9 +100,9 @@ class Bubble(QWidget):
         self.page = ""           # the page on screen
         self.shown = 0           # how many of its letters are typed out
         self.final_note = ""     # small print under the last page (quest, trust...)
-        self.cancelled = False   # say() cut the dialogue short: the rest of her reply is dropped until start()
-        self.live = False        # the page on screen is still growing as her words arrive (the first one of a reply)
-        self.live_acted = 0      # how many of the live page's *actions* have been acted out already
+        self.cancelled = False   # say() cut the dialogue short: drop the rest until start()
+        self.live = False        # the page on screen still grows as her words arrive
+        self.live_acted = 0      # the live page's *actions* acted out so far
         self.typer = QTimer(self, interval=int(1000 / LETTERS_PER_SECOND), timeout=self._type)
         self.reader = QTimer(self, singleShot=True, timeout=self._next)  # waits while you read a page
         self.hider = QTimer(self, singleShot=True, timeout=self._close)
@@ -119,7 +114,7 @@ class Bubble(QWidget):
         self.incoming, self.pages, self.page, self.shown, self.final_note = "", [], "", 0, ""
         for timer in (self.typer, self.reader, self.hider):
             timer.stop()
-        self.hide()  # (nothing to read yet: she shows a "…" thought icon instead)
+        self.hide()  # nothing to read yet: she shows a "…" instead
 
     def add(self, piece):
         if self.cancelled:
@@ -146,8 +141,7 @@ class Bubble(QWidget):
     # --- a plain message (status, menus...): shown at once ---
 
     def say(self, text, note="", stay=None):
-        """Show a whole message at once. stay = seconds before it hides (None = until replaced).
-        If her reply is still playing, it's cut short: what's left of it won't type over this message."""
+        """Show a whole message at once (cutting her reply short). stay = seconds, or None: until replaced."""
         if self.active:
             self.cancelled = True
             self.streaming, self.incoming, self.pages, self.page, self.live = False, "", [], "", False
@@ -161,15 +155,14 @@ class Bubble(QWidget):
             self.hider.start(int(stay * 1000))
 
     def show_picture(self, picture, stay=None):
-        """Show a picture (like the Status card, see status.py) instead of words, the way say() shows a message."""
+        """Show a picture (the Status card) the way say() shows a message."""
         self.say("", stay=stay)
-        self.picture.setPixmap(picture)  # (the next say() or page hides it and shows words again)
+        self.picture.setPixmap(picture)
         self.picture.show()
         self._fit()
 
     def follow(self, anchor):
-        """Keep the tail pointing at this screen point (just above her head). Near a screen edge the bubble
-        slides back onto the screen and its tail moves along it, so it still points at her."""
+        """Keep the tail pointing just above her head, sliding the bubble back on screen near an edge."""
         self.anchor = anchor
         x, y = on_screen(anchor, anchor.x() - self.width() // 2, anchor.y() - self.height(), self.width())
         self.tail_x = max(TAIL_INSET, min(self.width() - TAIL_INSET, anchor.x() - x))
@@ -180,7 +173,7 @@ class Bubble(QWidget):
 
     def _cut_pages(self, final):
         while True:
-            end = first_end(self.incoming, final)  # (not after "Mr." or "St.", see sentences.py)
+            end = first_end(self.incoming, final)
             if end and readable(self.incoming[:end]) <= PAGE_MAX + 20:
                 page, self.incoming = self.incoming[:end].strip(), self.incoming[end:]
             elif readable(self.incoming) > PAGE_MAX + 20 or (final and readable(self.incoming) > PAGE_MAX):
@@ -193,19 +186,16 @@ class Bubble(QWidget):
                 self.pages.append(page)
 
     def _grow(self, final):
-        """The live page: what she's written of her first sentence so far (an *action* still being written isn't
-        shown yet; finished ones are acted out as they come). Once the sentence ends (or gets too long for one
-        page), the page is fixed, and the rest of her reply is paged as usual."""
+        """The live page: her first sentence so far. Once it ends (or is too long), the rest is paged as usual."""
         end = first_end(self.incoming, final)
         if end and readable(self.incoming[:end]) <= PAGE_MAX + 20:
             text, rest = self.incoming[:end], self.incoming[end:]
         elif readable(self.incoming) > PAGE_MAX + 20 or (final and readable(self.incoming) > PAGE_MAX):
-            text, rest = cut_long(self.incoming, comma=False)  # (where the words on screen already reach)
+            text, rest = cut_long(self.incoming, comma=False)
         elif final:
             text, rest = self.incoming, ""
         else:
-            # (None: the sentence isn't finished yet.) Only whole words, and past PAGE_MAX only what a cut would
-            # keep, so nothing on screen is ever taken back (words used to flash up, then vanish to the next page)
+            # only whole words, and nothing a later cut would take back (words used to flash up, then vanish)
             text, rest = _so_far(self.incoming), None
             text = text[:len(text) - len(re.search(r"\S*$", text).group())]
             if readable(text) > PAGE_MAX:
@@ -219,7 +209,7 @@ class Bubble(QWidget):
         if rest is not None:  # the sentence is done: an ordinary page from here on
             self.live, self.incoming = False, rest
             self._cut_pages(final)
-            if not self.page:  # (it was only an action: give the animation a moment, as _open_page does)
+            if not self.page:  # only an action: give the animation a moment
                 self.page, self.shown = " ", 1
                 self.reader.start(900)
                 return
@@ -227,13 +217,13 @@ class Bubble(QWidget):
             if not self.typer.isActive():
                 self.typer.start()
         elif not self.live and not self.typer.isActive() and not self.reader.isActive():
-            self.reader.start(int(read_time(self.page) * 1000))  # (it was all typed already: time to read it)
+            self.reader.start(int(read_time(self.page) * 1000))  # all typed already: time to read it
         self._draw_page()
 
     def _continue(self):
         """Start typing the next page if the bubble is free (nothing typing, nothing waiting to be read)."""
         if self.live:
-            return  # (the live page types itself as it grows: _grow)
+            return  # the live page types itself as it grows
         if self.typer.isActive() or self.reader.isActive():
             return
         if self.page and self.shown < len(self.page):
@@ -265,7 +255,7 @@ class Bubble(QWidget):
         if self.shown >= len(self.page):
             self.shown = len(self.page)
             self.typer.stop()
-            if not self.live:  # (a live page waits for her next words instead)
+            if not self.live:  # a live page waits for her next words
                 self.reader.start(int(read_time(self.page) * 1000))
         self._draw_page()
 
@@ -292,7 +282,7 @@ class Bubble(QWidget):
         if not self.page.strip():
             return  # an action-only page: nothing to read
         typing_done = self.shown >= len(self.page)
-        more = typing_done and not self.live and (self.pages or self.streaming)  # (▼ once the sentence is done)
+        more = typing_done and not self.live and (self.pages or self.streaming)  # the ▼
         words = words_html(self.page[:self.shown])
         if more:
             words += f' <span style="color:{GOLD}">▼</span>'
@@ -326,13 +316,11 @@ class Bubble(QWidget):
         self.update()
 
     def _fit(self):
-        """Take exactly the height the wrapped text needs at this width, then sit above her head.
-        (Not adjustSize(): it ignores how wrapping makes text taller, so the window grew later, downward,
-        over her head.)"""
+        """Take the height the wrapped text needs, then sit above her head. (adjustSize() ignores wrapping.)"""
         layout = self.layout()
         layout.activate()
-        height = layout.totalHeightForWidth(self.width())  # (-1 when nothing showing wraps, like the Status card...)
-        self.setFixedHeight(height if height > 0 else layout.totalSizeHint().height())  # (...then its own size)
+        height = layout.totalHeightForWidth(self.width())  # -1 when nothing wraps (the Status card)
+        self.setFixedHeight(height if height > 0 else layout.totalSizeHint().height())
         self.follow(self.anchor)
 
     def paintEvent(self, _):
@@ -357,7 +345,7 @@ class InputBox(QWidget):
     submitted = Signal(str)
     closed = Signal()
 
-    def __init__(self, name):  # name = who you're talking to, for the placeholder text
+    def __init__(self, name):  # for the placeholder text
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedWidth(260)
@@ -379,14 +367,14 @@ class InputBox(QWidget):
         self.line.setFocus()
 
     def follow(self, anchor):
-        """Sit just above her head (the bubble then goes above this box), kept on the screen."""
+        """Sit just above her head, on screen."""
         self.move(*on_screen(anchor, anchor.x() - self.width() // 2, anchor.y() - self.height(), self.width()))
 
     def _send(self):
         text = self.line.text().strip()
         self.line.clear()
         if text:
-            self.hide()  # sent: the box goes away (click her again to say more)
+            self.hide()  # sent: click her again to say more
             self.submitted.emit(text)
 
     def keyPressEvent(self, e):

@@ -1,26 +1,15 @@
-"""World events: dated days when something happens in a character's world (their events.md, e.g. character/pip/).
+"""World events: dated days in a character's world (her events.md). On the day, if she's ready (trust, mood, a
+reaction at her stage), she tells it once, in her greeting or next idle nudge. If not, she only shows its hint.
 
-Each '## Name' block there has WHEN (the date), READY (min trust, moods that hold her back) and
-CONTENT (the fact, a reaction for each trust stage, a tone note); see template.md.
-On an event's day, if she's ready, Pip tells you about it once: in her greeting, or else in her next
-idle nudge. A stage with no reaction line means she keeps it to herself at that stage.
-On a day she isn't ready to tell (trust too low, the wrong mood, no reaction at her stage), she only
-shows the event's "Hint while waiting" (also once a day) and doesn't say why.
-
-    news = events.due(date, save, character)   # what to tell (or hint at) today: {"id", "text", "mood_after", "hint"}
-    events.stage_direction(date, save, character)  # the same, as a full stage direction (or None)
-    events.told(date, save, news)   # she told it: don't repeat it today (kept in the save)
-(The examples say Pip and "she"; the prompts are written with {name}/{they} and filled in per character.)
+    news = events.due(date, save, character)   # {"id", "text", "mood_after", "hint"} or None
+    events.told(date, save, news)              # don't repeat it today
 """
 import datetime, re
-from save import stage_of
-from directions import direction
-
-# Her mood (save["mood"], set by session.py) can hold an event back. It starts neutral every sitting and eases
-# back to neutral a little while after she speaks, exactly when her sprite does.
+from engine.save import stage_of
+from mind.directions import direction
 
 def parse(text):
-    """Every dated '## Name' block in events.md -> a dict. Blocks without a Date (like the arc table) are skipped."""
+    """Every dated '## Name' block in events.md -> a dict (blocks without a Date are skipped)."""
     found = []
     for block in re.split(r"^## ", text, flags=re.M)[1:]:
         name, _, body = block.partition("\n")
@@ -54,13 +43,10 @@ def parse(text):
     return found
 
 def on(events, date):
-    """The events (a character's parsed events.md) that fall on this date."""
     return [e for e in events if (e["month"], e["day"]) == (date.month, date.day) and e["year"] in (None, date.year)]
 
 def due(date, save, character):
-    """The event the character (character.py) should tell today, as text for a stage direction, or None.
-    An event she isn't ready for (trust, mood, no reaction at her stage) gives its hint instead (hint=True).
-    Anything already told (or hinted at) today is skipped."""
+    """The event to tell today, or its hint if she isn't ready, or None. Skips what was told today."""
     stage = stage_of(save["trust"])
     mood = save.get("mood")
     today = date.isoformat()
@@ -73,16 +59,15 @@ def due(date, save, character):
                 waiting.append(e)
             continue
         acts, _, says = e["reactions"][stage].partition(" / ")
-        # (its name only from stage 3, with the fact: below that the reaction is all she says, and given the name
-        #  she said it anyway: "a cold inspection from Heaven" when the reaction was only "the exchange is busy")
+        # the name only from stage 3: given it earlier, she said it anyway
         named = f" ({e['name']})" if stage >= 3 else ""
         text = character.fill(f"Something happened in {{name}}'s world today{named}. "
                               "{They} ") + f"{acts.strip()}, and {says.strip()}."
-        if stage >= 3:  # from stage 3 she's honest about her world, so she may know and say what happened
+        if stage >= 3:
             text += f" What happened: {e['fact']}"
         text += character.fill(" Only share as much as that. Afterwards {they} feels ") +             f"{e['mood_after']}. Tone: {e['tone']}."
         return {"id": e["id"], "text": text, "mood_after": e["mood_after"], "hint": False}
-    for e in waiting:  # nothing she's ready to tell: let it show a little instead
+    for e in waiting:
         text = (character.fill("Today {name} is ") + e["hint"] + character.fill(
             ". Let that show in how {they} acts, but {they} doesn't say why and doesn't mention anything "
             "happening in {their} world."))
@@ -90,18 +75,17 @@ def due(date, save, character):
     return None
 
 def stage_direction(date, save, character):
-    """The stage direction that makes the character tell today's event on their own, or None. Doesn't mark it told."""
+    """Today's event as a stage direction, or None (doesn't mark it told)."""
     news = due(date, save, character)
     return news and direction(character.fill("{name} says something on {their} own. ") + news["text"])
 
 def told(date, save, news):
-    """The character told (or hinted at) this event: remember the day, so she doesn't repeat it today.
-    Hints are kept apart, so she can still tell it later that day if trust goes up."""
+    """Remember she told (or hinted at) it today. Hints are kept apart: she can still tell it if trust goes up."""
     save.setdefault("events_hinted" if news["hint"] else "events_told", {})[news["id"]] = date.isoformat()
 
 
-if __name__ == "__main__":  # quick self-check, with Pip's events: python events.py
-    from character import Character
+if __name__ == "__main__":  # self-check with Pip's events: python -m mind.events
+    from engine.character import Character
     pip = Character("pip")
     EVENTS = pip.events
     D = datetime.date

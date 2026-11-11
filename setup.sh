@@ -55,7 +55,7 @@ ok "packages installed"
 
 # --- 3. llama-server ---
 step "3/5  llama-server (runs the model)"
-if found=$("$VENV_PYTHON" -c "import server; print(server.find_llama_server())" 2>/dev/null); then
+if found=$("$VENV_PYTHON" -c "from engine import server; print(server.find_llama_server())" 2>/dev/null); then
     ok "found: $found"
 else
     note "llama-server (from llama.cpp) isn't installed. Any one of these works:"
@@ -68,7 +68,7 @@ fi
 
 # --- 4. the model ---
 step "4/5  The model"
-read -r MODEL_PATH MODEL_URL MODEL_SHA < <("$VENV_PYTHON" -c "import config; print(config.MODEL, config.MODEL_URL, config.MODEL_SHA256)") ||
+read -r MODEL_PATH MODEL_URL MODEL_SHA < <("$VENV_PYTHON" -c "from engine import config; print(config.MODEL, config.MODEL_URL, config.MODEL_SHA256)") ||
     fail "Couldn't read MODEL, MODEL_URL and MODEL_SHA256 from config.py."
 NAME=$(basename "$MODEL_PATH")
 intact() {

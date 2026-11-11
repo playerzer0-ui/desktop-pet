@@ -1,11 +1,5 @@
-"""Pip's animations, all made from her 9 sprites by squashing, stretching, tilting and moving them.
-
-    PRESETS     one-off moves (hop, bow, shiver...): how long they take, and her shape at each moment
-    idle_shape  how she breathes/fidgets while standing, depending on her mood
-    for_action  which move and emote fit an *action* she wrote, like *hides behind her sleeves*
-    MOOD_MOVES  the move and emote to use when her reply had no action that matched
-
-A shape is (stretch sideways, stretch upward, tilt in degrees, shift right, shift down), in pixels at 3x size.
+"""Her animations, made by squashing, stretching, tilting and moving her sprite.
+A shape is (stretch sideways, stretch upward, tilt in degrees, shift right, shift down).
 Tweak freely: every number here is just "how it looks".
 """
 import math, random, re
@@ -15,7 +9,7 @@ def smooth(p):
     return p * p * (3 - 2 * p)
 
 def held(p, ramp=0.25):
-    """0 -> 1, stays at 1, -> 0: for moves that lean into a pose, hold it, and come back."""
+    """0 -> 1, holds, -> 0: lean into a pose, hold it, come back."""
     return smooth(p / ramp) * smooth((1 - p) / ramp)
 
 def hop(p):        # a big squashy jump: crouch, fly, land
@@ -96,7 +90,7 @@ PRESETS = {  # name: (seconds, shape at progress 0..1)
 
 KEYWORDS = [  # (words in her *action*, move, emote): the first that matches wins, so the order matters
     (r"\b(bump|bonk|smack|hit|thud)", "bonk", "dizzy"),
-    (r"\breach.*\b(screen|glass)", "bonk", "dizzy"),  # reaching out for you always ends at the glass
+    (r"\breach.*\b(screen|glass)", "bonk", "dizzy"),  # reaching for you ends at the glass
     (r"\b(gasp|startl|surpris|widen|flinch)", "pop", "exclaim"),
     (r"\byawn", "stretch", "zzz"),
     (r"\bstretch", "stretch", None),
@@ -105,7 +99,7 @@ KEYWORDS = [  # (words in her *action*, move, emote): the first that matches win
     (r"\b(shiver|trembl|shudder|shak(e|es|ing) (with|from)|cower)", "shiver", "sweat"),
     (r"\b(stomp|huff|pout|cross(es)? her arms|glare|scowl)", "stomp", "anger"),
     (r"\bshak(e|es|ing) her head", "headshake", None),
-    (r"\bnod(?!(s|ding)? off)", "nod", None),  # (nodding off is falling asleep: the sleep line below)
+    (r"\bnod(?!(s|ding)? off)", "nod", None),  # not "nodding off": that's sleep, below
     (r"\b(giggl|laugh|chuckl|snicker|wave)", "giggle", "note"),
     (r"\b(jump|bounc|hop|twirl|spin|clap|cheer|beam)", "hop", "sparkle"),
     (r"\b(tilt|puzzl|ponder|frown|blink|confus|wide eyes|stare|wonder)", "tilt", "question"),
@@ -118,11 +112,11 @@ MOOD_MOVES = {  # mood: (move, emote) when her reply had no action that matched
     "happy": ("hop", "note"), "sad": ("sigh", None), "worried": ("tilt", "sweat"), "scared": ("shiver", "exclaim"),
     "angry": ("stomp", "anger"), "regretful": ("sigh", "sweat"), "nostalgic": ("sway", "sparkle"),
     "bored": ("sigh", "zzz"), "neutral": (None, None),
-    "injured": ("shiver", "sweat"),  # (a story mood: Vesper's day 3)
+    "injured": ("shiver", "sweat"),  # a story mood
 }
 
 def for_action(action):
-    """(move, emote) for an action like 'tilts her head curiously', or (None, None) if nothing fits."""
+    """(move, emote) for an action like 'tilts her head', or (None, None)."""
     action = action.lower()
     for words, move, emote in KEYWORDS:
         if re.search(words, action):

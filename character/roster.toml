@@ -25,6 +25,21 @@ invite = "before she goes, she shyly tells the user her plan: her best friend Ve
 memory = "Pip told the user she would send her best friend Vesper, a baker, to rest on the desktop."
 introduce = "today she has brought her best friend Vesper along, who is standing right beside her on the desktop. She greets the user, reminds them she promised to bring her friend, and introduces Vesper properly: a loud, cheerful baker from a few doors down the street, who works far too hard and deserves some rest. She asks the user to be nice to her"
 
+# --- arrivals: a character who comes on her own, uninvited ---
+# Once `after` reaches at_trust, a clock of `days` starts. On the day it runs out `who` comes by herself (her first
+# visit: first_visit in her character.toml), and from the day after that she can come in the lineups below.
+# `after` must be someone who can already come.
+#   who        the arriving character's folder in character/
+#   after      the folder of the one whose trust starts the clock
+#   at_trust   the trust (1-10) of `after` that starts it
+#   days       whole days to wait after that
+
+[[arrivals]]
+who = "ruby"
+after = "pip"
+at_trust = 9  # the end of Pip's stage 4 (trust 7-8): Pip's last major quest is done and stage 5 begins
+days = 30
+
 # --- lineups: who comes on a given day ---
 # Once someone has been unlocked and had her own first day, who comes is picked once a day (on the day's first launch)
 # from the lineups whose members have all had their first day, by weight (any whole numbers). A story step that needs
@@ -46,3 +61,16 @@ note = "her best friend Vesper couldn't come today, as she's busy at her bakery,
 members = ["mira"]
 weight = 20
 note = "her best friend Pip couldn't come today, as she's busy looking after the chapel, so {they} came on {their} own"
+
+[[lineups]]
+members = ["ruby", "pip"]
+weight = 15
+
+[[lineups]]
+members = ["ruby", "mira"]
+weight = 15
+
+[[lineups]]
+members = ["ruby"]
+weight = 10
+note = "the others couldn't come today, so she is on her own, and keeps tilting her head to listen for them"

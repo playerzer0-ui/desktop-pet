@@ -37,3 +37,14 @@ bash start.sh
 ```
 
 on wayland, start.sh runs her in X11 mode (through XWayland), since wayland doesn't let apps place their own windows and she couldn't walk along the bottom of the screen
+
+## code layout
+
+```
+main.py      starts the game
+desktop/     the face: her sprite, speech bubble, menu (Qt)
+mind/        the core: prompt, memory, lore, idle talk, events, one sitting (session.py)
+progress/    on top of the core: trust, quests, stories, daily visits, the second character
+engine/      plumbing: llama-server, paths, saves, loading a character folder
+character/   who the characters are (text files, no code)
+```

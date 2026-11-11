@@ -1,0 +1,87 @@
+# Pip and Ruby chatting with each other on the desktop (duets.py, desktop/scene.py), on days they come together.
+# After a few quiet minutes one of them starts a little chat with the other, they take turns for a few lines,
+# and the last line wraps it up. Neither one earns trust from it, and the user can't talk to them until it's over.
+
+every = [4, 10]  # minutes of quiet (nobody talking, nobody typing) before they chat: random in this range
+lines = [3, 4]   # how many lines a chat has: random in this range
+
+# Topics, by the trust stage they open at: the LOWER of the two characters' stages, so Ruby's (Pip is at the
+# top by the time Ruby comes). Each one only leans on lore both of them have at that stage. Ruby tells everything
+# cheerfully; Pip, who knows what Heaven is, stays gentle and careful, and never says anything cruel about Heaven.
+#   starts   who starts the chat: "pip" or "ruby" (folder names)
+#   about    what about (it finishes "starts a little chat with her about ...")
+
+[[topics]]  # stage 1: curious, gentle, small things
+stage = 1
+starts = "ruby"
+about = "asking Pip what colour her voice is, since Ruby is sure every voice has one"
+
+[[topics]]
+stage = 1
+starts = "pip"
+about = "gently asking Ruby whether she has eaten properly today, and fussing over how thin she is"
+
+[[topics]]
+stage = 1
+starts = "ruby"
+about = "how the chapel's bell must sound, and asking Pip what note it rings"
+
+[[topics]]
+stage = 1
+starts = "pip"
+about = "the potted herb Pip forgot to water again, and what Ruby thinks it smells like"
+
+[[topics]]  # stage 2: Ruby's cloister, told innocently
+stage = 2
+starts = "ruby"
+about = "Heaven's honey-cake feast day, which Ruby loves, told with no idea that Pip goes quiet (Pip gently changes the subject)"
+
+[[topics]]
+stage = 2
+starts = "pip"
+about = "asking Ruby what a day in the cloister is like, from the first bell to the last"
+
+[[topics]]
+stage = 2
+starts = "ruby"
+about = "Pip's hums while she's thinking, and asking her to teach Ruby the tune"
+
+[[topics]]
+stage = 2
+starts = "pip"
+about = "teaching Ruby a small blessing that is only kind words, not a spell"
+
+[[topics]]  # stage 3: the quiet walk, and the gods
+stage = 3
+starts = "ruby"
+about = "the quiet walk, and how Pip's face went strange when Ruby said its name (Pip carefully asks her never to mention it in front of anyone back home)"
+
+[[topics]]
+stage = 3
+starts = "pip"
+about = "whether the gods can still hear prayers, and Ruby cheerfully insisting they can because the cloister bells are so loud"
+
+[[topics]]
+stage = 3
+starts = "ruby"
+about = "whether Pip knows any priestess who ever met Lady Libera, and what she thinks of her"
+
+[[topics]]  # stage 4: doubts, softly
+stage = 4
+starts = "ruby"
+about = "the silent hour, and whether Pip's chapel ever goes silent for the ones who are gone"
+
+[[topics]]
+stage = 4
+starts = "pip"
+about = "a candle Pip lit for Sally this year, and Ruby shyly admitting she lit one too"
+
+[[topics]]  # stage 5: closeness
+stage = 5
+starts = "ruby"
+about = "asking Pip to describe the warmth of a lamp, since Ruby has never felt one that doesn't burn"
+
+[[topics]]
+stage = 5
+starts = "pip"
+about = "a small blessing Pip wants to give Ruby for her first brave question"
