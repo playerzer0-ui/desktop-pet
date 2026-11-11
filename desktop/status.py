@@ -14,7 +14,7 @@ The icons are talk.png and clock.png (16 px) in character/, next to portal.png.
 import os
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen, QPixmap
-from config import HERE, FORGET_AT
+from engine.config import HERE, FORGET_AT
 from desktop.bubble import CREAM, GRAY, GOLD, INK, ROSE
 
 ART = os.path.join(HERE, "character")

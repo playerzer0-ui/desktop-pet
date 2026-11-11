@@ -12,7 +12,7 @@ Two places:
 """
 import os, sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))  # the desktop-pet folder (in the built game: its _internal folder)
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the desktop-pet folder, one up from engine/ (in the built game: its _internal folder)
 
 def _data_dir():
     if os.environ.get("PET_DATA_DIR"):

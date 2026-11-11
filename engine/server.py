@@ -9,8 +9,8 @@ Talking to it is llm.py's job; this file only owns the process.
               and stops the server when it isn't
 """
 import atexit, ctypes, glob, os, shutil, subprocess, sys, threading, time
-import llm
-from config import HERE, LOG_DIR, PORT, N_CTX, MODEL, CACHE_DIR
+from engine import llm
+from engine.config import HERE, LOG_DIR, PORT, N_CTX, MODEL, CACHE_DIR
 
 WINDOWS = os.name == "nt"
 

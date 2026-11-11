@@ -19,7 +19,7 @@ on her own slot of the model server (llm.py). The scene only makes them get alon
     scene = Scene([pip, vesper])    # the first one leads: she decides whether they come today, and her time counts
 """
 import itertools, random, time
-import duets
+from progress import duets
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 from desktop.app import App

@@ -11,7 +11,7 @@ import requests
 from PySide6.QtCore import QEventLoop, QObject, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
-import config
+from engine import config
 
 CHUNK = 1 << 20  # 1 MB
 ROOM = 200 * 1024 ** 2  # free space to leave over, on top of the model

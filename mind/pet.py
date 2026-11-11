@@ -1,10 +1,10 @@
 import glob, hashlib, os, re
-import llm
-from config import N_CTX, MODEL, CACHE_DIR, FORGET_AT
-from save import load_save, stage_of
-from character import Character
-from lore import split as split_lore
-from sentences import ends
+from engine import llm
+from engine.config import N_CTX, MODEL, CACHE_DIR, FORGET_AT
+from engine.save import load_save, stage_of
+from engine.character import Character
+from mind.lore import split as split_lore
+from mind.sentences import ends
 
 def trim_to_sentence(text):
     # cut a reply that hit max_tokens back to its last full sentence (not one ending in "Mr." or "St.")

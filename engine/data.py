@@ -7,7 +7,7 @@ behind so it's clear where they went.
     data.prepare()        at launch: make DATA's folders, and move old files over (desktop/app.py main)
 """
 import os, shutil
-from config import CACHE_DIR, DATA, HERE, LOG_DIR, SAVES_DIR
+from engine.config import CACHE_DIR, DATA, HERE, LOG_DIR, SAVES_DIR
 
 def prepare(old_root=HERE):
     """old_root = where the old files would be (the game folder; the tests give their own)."""

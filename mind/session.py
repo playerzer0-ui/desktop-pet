@@ -16,16 +16,18 @@ what was said, how it felt to her, her mood, how long it took, how full the cont
 """
 import datetime, os, time
 from dataclasses import dataclass
-import events, llm, memory, roster, story, trust, visits
-from character import Character, DEFAULT, folder_of
-from directions import direction
-from idle import Idle
-from quests import Quests, MajorQuests, QUIET_FIRST
-from config import N_CTX
-from server import start_server
-from pet import new_conversation, ask, context_used, warm_up
-from lore import Lore
-from save import write_save
+from engine import llm
+from mind import events, memory
+from progress import roster, story, trust, visits
+from engine.character import Character, DEFAULT, folder_of
+from mind.directions import direction
+from mind.idle import Idle
+from progress.quests import Quests, MajorQuests, QUIET_FIRST
+from engine.config import N_CTX
+from engine.server import start_server
+from mind.pet import new_conversation, ask, context_used, warm_up
+from mind.lore import Lore
+from engine.save import write_save
 
 @dataclass
 class Turn:

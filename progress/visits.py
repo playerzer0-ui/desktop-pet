@@ -10,7 +10,7 @@ The minutes themselves are kept in the save by trust.stayed (today.minutes), the
 Session warns WARN_MINUTES before the end, and says goodbye when it's up (see Session.wants_to_speak).
 """
 import datetime
-from save import load_save
+from engine.save import load_save
 
 WARN_MINUTES = 10  # she says her time is nearly up this long before the end
 

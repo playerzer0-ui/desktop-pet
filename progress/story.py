@@ -35,8 +35,9 @@ she confesses). Each step can say who comes (folders; see character._check_who):
 And any step with a mood can keep it after it ends: lingers = days (today counts as one), with lingers_note.
 """
 import datetime, re
-import memory, quests, trust
-from save import write_save
+from mind import memory
+from progress import quests, trust
+from engine.save import write_save
 
 def away(save, today=None):
     """True if she's away today: a story step sent her home, and the day she's due back hasn't come yet."""

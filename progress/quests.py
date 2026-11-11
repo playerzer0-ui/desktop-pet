@@ -8,8 +8,8 @@ On top of that, the code itself turns down "I don't know"-style dodges and keybo
 Each question is only asked until it's answered. Deeper questions unlock at higher trust stages.
 """
 import random, re, time
-import trust
-from directions import direction
+from progress import trust
+from mind.directions import direction
 
 # (the questions are the character's own: [quests] in their character.toml)
 POINTS = 5

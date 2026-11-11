@@ -17,8 +17,9 @@ so a mistake shows up the day you add her, not weeks later), the folders their s
     python -m desktop.check [character]    run it on its own (the whole cast, and this character if she isn't in it)
 """
 import os, re, sys
-import duets, lore, roster
-from character import Character, DEFAULT, is_character
+from mind import lore
+from progress import duets, roster
+from engine.character import Character, DEFAULT, is_character
 from desktop import moves
 
 def persona_moods(text):

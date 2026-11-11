@@ -18,8 +18,8 @@ aren't the user's words). desktop/scene.py decides when one starts and plays the
     duets.reply(speaker, listener, heard, last=False)   # stage direction for each line after it
 """
 import os, random, tomllib
-from config import HERE
-from directions import direction
+from engine.config import HERE
+from mind.directions import direction
 
 DUET_DIR = os.path.join(HERE, "character", "duets")
 

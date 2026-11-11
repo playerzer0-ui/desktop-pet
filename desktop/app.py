@@ -10,11 +10,12 @@ Her mind is session.py, run by brain.py on its own thread. The screen never read
 after every job the brain sends a snapshot (trust summary, memories), and Status / memories show that.
 """
 import sys, time
-import data, roster, story, visits
-from save import load_save
+from engine import data
+from progress import roster, story, visits
+from engine.save import load_save
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
-from character import Character, DEFAULT
+from engine.character import Character, DEFAULT
 from desktop import check, download, moves
 from desktop.status import card as status_card
 from desktop.body import Body

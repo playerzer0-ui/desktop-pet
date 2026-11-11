@@ -18,9 +18,9 @@ At launch, the ones in her prompt are shown to her as one note placed AFTER the 
 (see pet.warm_up), so new memories never force the slow full re-read.
 """
 import datetime, re
-import llm
-from character import cast
-from directions import is_direction
+from engine import llm
+from engine.character import cast
+from mind.directions import is_direction
 
 MAX_NOTES = 5000      # plain diary notes kept (past that, the oldest is forgotten)
 LASTING = 15          # lasting facts in her prompt

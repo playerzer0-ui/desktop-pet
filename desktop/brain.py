@@ -85,7 +85,7 @@ class Brain(QObject):
 
     def _do(self, what, *args):
         if what == "start":
-            from session import Session  # imported here: it starts nothing until asked
+            from mind.session import Session  # imported here: it starts nothing until asked
             self.session = Session(self.character, say=lambda *_: None, slot=self.slot, slots=self.slots,
                                    company=self.company, greeting_note=self.greeting_note)
             self.ready.emit(self.session.prompt_was)

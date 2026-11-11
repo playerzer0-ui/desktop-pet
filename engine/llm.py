@@ -16,7 +16,7 @@ ServerGone, so the caller can start it again and retry (see Session). Every call
 hangs is an error instead of a pet frozen forever.
 """
 import json, requests
-from config import SERVER
+from engine.config import SERVER
 
 CONNECT_SECONDS = 5    # to reach the server at all
 REPLY_SECONDS = 600    # for an answer (or between two streamed pieces): reading a long prompt on CPU is slow

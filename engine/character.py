@@ -16,8 +16,8 @@ The rest comes from character.toml: name, pronouns, moods, stage_names, examples
 written with singular verbs, "{They} greets", which suits she/he.)
 """
 import datetime, os, re, tomllib
-import events
-from config import HERE, LOG_DIR, SAVES_DIR
+from mind import events
+from engine.config import HERE, LOG_DIR, SAVES_DIR
 
 DEFAULT = "pip"  # who main.py opens when no character is named
 PORTAL = os.path.join(HERE, "character", "portal.png")  # every character arrives through the same portal (for now)

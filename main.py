@@ -28,7 +28,7 @@ if __name__ == "__main__":
     if sys.platform.startswith("linux") and os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("QT_QPA_PLATFORM"):
         os.environ["QT_QPA_PLATFORM"] = "xcb"
     try:
-        from character import DEFAULT
+        from engine.character import DEFAULT
         from desktop.app import main
         main(sys.argv[1] if len(sys.argv) > 1 else DEFAULT)
     except SystemExit as e:
@@ -37,7 +37,7 @@ if __name__ == "__main__":
             sys.exit(1)
         raise
     except Exception:
-        import config
+        from engine import config
         details = traceback.format_exc()
         try:
             os.makedirs(config.LOG_DIR, exist_ok=True)

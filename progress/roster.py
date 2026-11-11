@@ -22,10 +22,11 @@ Like a story step, a first visit waits for your next visit: skip a few days and 
 """
 import datetime, os, random, threading, tomllib
 from dataclasses import dataclass, field
-import memory, story, trust
-from character import Character, DEFAULT
-from config import HERE, SAVES_DIR
-from save import Save, load_save, write_save
+from mind import memory
+from progress import story, trust
+from engine.character import Character, DEFAULT
+from engine.config import HERE, SAVES_DIR
+from engine.save import Save, load_save, write_save
 
 RULES = os.path.join(HERE, "character", "roster.toml")
 PATH = os.path.join(SAVES_DIR, "roster.json")  # (the tests point it elsewhere)

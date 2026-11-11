@@ -74,7 +74,7 @@ Ok "packages installed"
 
 # --- 3. llama-server ---
 Step "3/5  llama-server (runs the model)"
-$findServer = "import server; print(server.find_llama_server())"  # the same search the pet uses
+$findServer = "from engine import server; print(server.find_llama_server())"  # the same search the pet uses
 $found = & $venvPython -c $findServer 2>$null
 if ($LASTEXITCODE -ne 0) {
     Install-WithWinget "ggml.llamacpp" "llama-server (llama.cpp)"
@@ -85,7 +85,7 @@ Ok "found: $found"
 
 # --- 4. the model ---
 Step "4/5  The model"
-$model = & $venvPython -c "import config, json; print(json.dumps({'path': config.MODEL, 'url': config.MODEL_URL, 'sha256': config.MODEL_SHA256}))" | ConvertFrom-Json
+$model = & $venvPython -c "from engine import config; import json; print(json.dumps({'path': config.MODEL, 'url': config.MODEL_URL, 'sha256': config.MODEL_SHA256}))" | ConvertFrom-Json
 if (-not $model) { Fail "Couldn't read MODEL, MODEL_URL and MODEL_SHA256 from config.py." }
 $name = Split-Path $model.path -Leaf
 

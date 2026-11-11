@@ -7,7 +7,7 @@
 Each one becomes a hidden "stage direction" message that the character answers in character.
 """
 import datetime, random, time
-from directions import direction
+from mind.directions import direction
 
 QUIET_MINUTES = [5, 10, 10, 15]  # silence before each nudge; after the last, every 15 minutes
 CLOCK = [  # (hour, minute, what she speaks up about) - checked for 30 minutes after the time

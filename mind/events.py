@@ -13,8 +13,8 @@ shows the event's "Hint while waiting" (also once a day) and doesn't say why.
 (The examples say Pip and "she"; the prompts are written with {name}/{they} and filled in per character.)
 """
 import datetime, re
-from save import stage_of
-from directions import direction
+from engine.save import stage_of
+from mind.directions import direction
 
 # Her mood (save["mood"], set by session.py) can hold an event back. It starts neutral every sitting and eases
 # back to neutral a little while after she speaks, exactly when her sprite does.
@@ -101,7 +101,7 @@ def told(date, save, news):
 
 
 if __name__ == "__main__":  # quick self-check, with Pip's events: python events.py
-    from character import Character
+    from engine.character import Character
     pip = Character("pip")
     EVENTS = pip.events
     D = datetime.date

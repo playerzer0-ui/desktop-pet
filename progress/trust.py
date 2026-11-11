@@ -10,7 +10,7 @@ The gates are the character's own ([major_quests] in their character.toml, Chara
 Minor quests just give points.
 """
 import datetime, re
-from save import Save, load_save, write_save, stage_of
+from engine.save import Save, load_save, write_save, stage_of
 
 TRUST_POINTS = [0, 15, 40, 70, 110, 160, 220, 290, 370, 460]  # points needed for trust 1, 2, ... 10
 

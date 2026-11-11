@@ -19,7 +19,7 @@ Write-Host "1/6  PyInstaller" -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) { throw "Couldn't install PyInstaller." }
 
 Write-Host "2/6  llama-server" -ForegroundColor Cyan
-$found = & $python -c "import server; print(server.find_llama_server())"
+$found = & $python -c "from engine import server; print(server.find_llama_server())"
 if ($LASTEXITCODE -ne 0) { throw "Can't find llama-server: run setup.bat first." }
 $from = Split-Path $found
 $to = Join-Path $PSScriptRoot "build\llama-server"
