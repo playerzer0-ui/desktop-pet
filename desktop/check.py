@@ -1,20 +1,8 @@
-"""Startup checks of the character files: mistakes that would otherwise fail quietly, found before anything starts.
+"""Startup checks of the character files, for mistakes that would otherwise fail quietly:
+each character's moods agreeing across character.toml, persona.md, events.md, her sprites and moves.MOOD_MOVES,
+plus roster.toml, story steps and duet files. main() won't start until they're all good.
 
-Each character's moods (mood_problems) agree. For Pip they live in five places:
-
-    character/pip/character.toml   moods = [...]: the ones pet.ask() accepts from her tag (anything else is dropped)
-    character/pip/persona.md       the list the model is told to choose from
-    character/pip/events.md        the "## Moods" line, and each event's "Not ready if mood is" / "Mood after"
-    character/pip/sprites/         one <mood>.png each
-    moves.MOOD_MOVES               the move and emote for each mood (shared by every character)
-
-A mood missing from one of them fails quietly (a dropped tag, an event that never waits, a sprite that never
-shows), so main() refuses to start until they match.
-
-And the cast as a whole (cast_problems): character/roster.toml, every character in it (even one not invited yet,
-so a mistake shows up the day you add her, not weeks later), the folders their story steps name, and the duet files.
-
-    python -m desktop.check [character]    run it on its own (the whole cast, and this character if she isn't in it)
+    python -m desktop.check [character]
 """
 import os, re, sys
 from mind import lore
@@ -23,7 +11,7 @@ from engine.character import Character, DEFAULT, is_character
 from desktop import moves
 
 def persona_moods(text):
-    """The '- mood: meaning' lines between '[mood: X]' and 'The user never sees these tags' in persona.md."""
+    """The '- mood: meaning' lines in persona.md's mood list."""
     start, end = text.find("[mood: X]"), text.find("The user never sees these tags")
     return set(re.findall(r"^- ([a-z]+):", text[start:end], re.M)) if start >= 0 and end > start else set()
 
@@ -33,7 +21,7 @@ def events_moods(text):
     return {m.strip().lower() for m in found.group(1).split(",") if m.strip()} if found else set()
 
 def mood_problems(character):
-    """Every way the character's mood lists disagree, as readable lines (an empty list = all good)."""
+    """Every way her mood lists disagree (empty = all good)."""
     moods = character.moods
     folder = f"character/{character.folder}/"
     lists = {
@@ -41,7 +29,7 @@ def mood_problems(character):
         f"the '## Moods' line in {folder}events.md": events_moods(character.text("events.md")),
     }
     sprites = {name[:-4] for name in os.listdir(character.sprites) if name.endswith(".png")}
-    every = moods | character.story_moods  # (story_moods: a sprite and a move each, but not on the lists above)
+    every = moods | character.story_moods  # story moods need a sprite and a move, but aren't on the lists
     toml = folder + "character.toml"
     problems = []
     for where, found in lists.items():
@@ -57,7 +45,7 @@ def mood_problems(character):
     if sprites - every:
         problems.append(f"{folder}sprites/ has {', '.join(sorted(sprites - every))}, which {toml} doesn't "
                         "(add it to moods, or to story_moods if only a story step uses it)")
-    if every - set(moves.MOOD_MOVES):  # (the moves are shared: a mood only another character has is fine)
+    if every - set(moves.MOOD_MOVES):  # shared: a mood only another character has is fine
         problems.append(f"moves.MOOD_MOVES is missing: {', '.join(sorted(every - set(moves.MOOD_MOVES)))}")
     for e in character.events:
         for mood in sorted(e["not_ready_moods"] - moods):
@@ -67,8 +55,7 @@ def mood_problems(character):
     return problems
 
 def lore_problems(character):
-    """lore.md sections with "words:" (lore.py) that leave her prompt nothing at some stage: with no "in short:"
-    line, the model wouldn't even know the topic exists until a word happens to bring the details in."""
+    """lore.md sections with "words:" but no "in short:" at some stage: her prompt wouldn't know the topic exists."""
     problems = []
     for stage in range(1, 6):
         prompt, sections = lore.split(character.staged("lore.md", stage))
@@ -79,8 +66,7 @@ def lore_problems(character):
     return sorted(set(problems))
 
 def cast_problems(also=()):
-    """Every mistake in the cast's files, as readable lines (an empty list = all good): roster.toml, each character
-    in it (and `also`: folders opened by name that aren't in it), their story steps' folders, and the duet files."""
+    """Every mistake in the cast's files (empty = all good). also = folders opened by name, not in the roster."""
     try:
         r = roster.rules()
     except (ValueError, OSError) as e:
@@ -90,7 +76,7 @@ def cast_problems(also=()):
     for folder in cast + [f for f in also if f not in cast]:
         try:
             c = Character(folder)
-        except (ValueError, KeyError, OSError) as e:  # (a missing field, a bad value, a file that isn't there)
+        except (ValueError, KeyError, OSError) as e:
             problems.append(f"character/{folder}: {type(e).__name__}: {e}")
             continue
         problems += [f"{c.name}: {p}" for p in mood_problems(c)]
@@ -100,8 +86,7 @@ def cast_problems(also=()):
     return problems
 
 def step_problems(character, cast, on_screen):
-    """Story steps (story.py) that name someone who isn't in the cast (the step would wait forever), or need more
-    on the desktop than on_screen allows."""
+    """Story steps naming someone not in the cast, or needing more on screen than on_screen allows."""
     problems = []
     for stage, quest in sorted(character.major_quests.items()):
         for i, step in enumerate(quest.get("steps", []), 1):
@@ -118,8 +103,7 @@ def step_problems(character, cast, on_screen):
     return problems
 
 def duet_problems():
-    """Duet files (character/duets/<one>-<other>.toml) named for folders that aren't characters, the same pair
-    twice, or with a mistake inside."""
+    """Duet files with a bad name, the same pair twice, or a mistake inside."""
     problems, seen = [], {}
     for name in sorted(os.listdir(duets.DUET_DIR)) if os.path.isdir(duets.DUET_DIR) else []:
         if not name.endswith(".toml"):

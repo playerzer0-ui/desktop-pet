@@ -1,15 +1,6 @@
-"""Pip on the desktop: her sprite, and how she moves.
-
-Everything moves with squash and stretch, like the units in King God Castle:
-    walking   little hops: squashed flat as she lands, stretched tall in the air
-    talking   a squish for every few letters she says (call squish())
-    standing  breathing and fidgeting that changes with her mood (moves.idle_shape)
-    acting    one-off moves for her *actions*: hop, bow, shiver, bonk... (call play(); see moves.py)
-    dropped   if you drag her somewhere, she falls back to the floor and lands with a squash
-    arriving  while her mind loads, only a swirling portal is on the floor; arrive() pops her out of it
-    leaving   vanish(): her astral body comes apart into glowing motes that drift up, feet first (dreamwalking)
-Little emote icons pop up beside her head (call emote()): ♥ ! ? ♪ sweat, anger, zzz, ✦, and … while she thinks.
-She wanders along the bottom of the screen on her own, and stops while she's talking or you're typing.
+"""Her sprite on the desktop and how she moves: everything squashes and stretches (walking hops, a squish
+while she talks, mood-based breathing, one-off moves for her *actions*). She arrives out of a portal, leaves
+as glowing motes, and wanders along the bottom of the screen when nobody's talking.
 """
 import math, os, random, time
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
@@ -34,11 +25,10 @@ PORTAL_SPIN = 50             # degrees per second
 ARRIVE_SECONDS = 1.1         # arrive(): the portal flares, she pops out and lands, the portal closes
 EMERGE = (0.2, 0.65)         # ...she comes out over this part of it (seconds)
 
-MOTE = 1                     # vanish(): she breaks into squares this many sprite pixels wide (1 = she looks
-                             # exactly like her sprite until each pixel floats off)
+MOTE = 1                     # vanish(): squares this many sprite pixels wide
 VANISH_SWEEP = 1.0           # seconds for the dissolving to climb from her feet to her head
 MOTE_LIFE = 0.9              # seconds each mote drifts and fades
-DREAM = QColor("#A8F0FF")    # what the motes glow toward as they fade (the portal's light)
+DREAM = QColor("#A8F0FF")    # what the motes glow toward as they fade
 
 EMOTE_SECONDS = 1.8
 INK = "#3B3049"
@@ -98,8 +88,7 @@ class Body(QWidget):
     met = Signal()                   # meet() has finished: she's at the spot, facing the way she was asked
 
     def __init__(self, sprites, portal=None):
-        """sprites = the folder with the character's <mood>.png files (Character.sprites).
-        portal = an image to show instead of her until arrive() (Character.portal); None = she's here at once."""
+        """sprites = her <mood>.png folder. portal = shown instead of her until arrive() (None: here at once)."""
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(W, H)
@@ -110,13 +99,13 @@ class Body(QWidget):
 
         floor = self._screen().bottom()
         self.foot_x = float(self._screen().left() + self._screen().width() * random.uniform(0.6, 0.85))
-        self.foot_y = float(floor)   # where her feet are, in screen coordinates (not x/y: QWidget has those)
+        self.foot_y = float(floor)   # her feet, in screen coordinates (QWidget already has x/y)
         self.vy = 0.0
         self.mode = "idle"           # idle, walk, drag or fall
         self.facing = 1              # 1 = walking right, -1 = left
-        self.face = None             # while standing: 1 = facing right, -1 = left (None = as her sprite is drawn)
+        self.face = None             # while standing: 1 = right, -1 = left, None = as drawn
         self.staying = False         # meet(): she stays put (no wandering) until part()
-        self.meet_face = None        # meet(): the way she'll face once she's there (None = not on her way)
+        self.meet_face = None        # meet(): the way she'll face once there
         self.target = self.foot_x
         self.phase = 0.0             # walk cycle: each whole number is one hop
         self.idle_until = time.time() + random.uniform(*IDLE_SECONDS)
@@ -128,10 +117,10 @@ class Body(QWidget):
         self.thinking = False                       # shows a "…" thought icon while the model writes
         self.portal = self._load(portal) if portal and os.path.exists(portal) else None
         self.state = "portal" if self.portal else "here"  # portal -> arriving (arrive()) -> here
-        self.portal_at = time.time()                # when the portal opened (or, once arriving, when she started)
+        self.portal_at = time.time()                # when the portal opened, or she started arriving
         self.landed = self.portal is None           # she's dropped out of the portal onto the floor
         self.motes, self.vanish_at = [], 0.0        # vanish(): the pieces of her, and when she started going
-        self.keep_clear = lambda: []                # spots she doesn't wander onto (the others: desktop/scene.py)
+        self.keep_clear = lambda: []                # spots she doesn't wander onto (the others')
 
         self.last = time.time()
         self.timer = QTimer(self)
@@ -206,13 +195,12 @@ class Body(QWidget):
             self.target = self.foot_x  # finish this hop, then stand still (unless she's on her way to meet someone)
 
     def meet(self, x, face):
-        """Walk to x and stand there facing `face` (1 = right, -1 = left), to chat with someone (desktop/scene.py).
-        She stays put until part(); `met` fires once she's there."""
+        """Walk to x and face `face` (1 = right, -1 = left) to chat. She stays until part(); `met` fires on arrival."""
         left, right = self._screen().left() + SIZE / 2, self._screen().right() - SIZE / 2
         self.target, self.meet_face, self.staying = max(left, min(right, x)), face, True
         if self.mode in ("idle", "walk"):
             self.facing = 1 if self.target >= self.foot_x else -1
-            self.mode, self.phase = "walk", 0.0  # (even if she's there already: one hop and she's met)
+            self.mode, self.phase = "walk", 0.0  # even if she's there already: one hop and she's met
 
     def part(self):
         """The chat is over: she faces as usual again and wanders off when she likes."""
@@ -237,7 +225,7 @@ class Body(QWidget):
             self.state = "gone"
             self.vanished.emit()
         if self.state != "here":
-            pass  # (no wandering until she's out of the portal, nor once she's leaving)
+            pass  # no wandering in the portal, nor once she's leaving
         elif self.mode == "idle" and self.meet_face is not None:  # on her way to meet someone (after a drag, too)
             self.facing = 1 if self.target >= self.foot_x else -1
             self.mode, self.phase = "walk", 0.0
@@ -272,8 +260,7 @@ class Body(QWidget):
         self.update()
 
     def _wander_target(self, tries=10):
-        """Somewhere along the floor to wander to, not on top of anyone else (keep_clear: where the others stand or
-        are headed, desktop/scene.py). If nowhere is free, she stays where she is."""
+        """Somewhere along the floor to wander to, not on top of anyone else (else where she is)."""
         left, right = self._screen().left() + SIZE / 2, self._screen().right() - SIZE / 2
         taken = self.keep_clear()
         for _ in range(tries):
@@ -340,7 +327,7 @@ class Body(QWidget):
         painter.save()
         painter.translate(W / 2 + dx, FEET + dy)                      # her feet are the anchor point
         painter.rotate(rot)
-        flip = self.facing < 0 if self.mode == "walk" else (self.face or 1) < 0  # (standing: as drawn, unless meeting)
+        flip = self.facing < 0 if self.mode == "walk" else (self.face or 1) < 0
         painter.scale(sx * (-1 if flip else 1), sy)
         sprite = self.sprites.get(self.mood) or self.sprites["neutral"]
         painter.drawPixmap(QPointF(-SIZE / 2, -SIZE), sprite)
@@ -351,9 +338,7 @@ class Body(QWidget):
     # --- the portal she arrives through ---
 
     def _arrival(self, now):
-        """How she's drawn while coming out of the portal: (stretch sideways, stretch upward, shift down),
-        or None while she's not out yet. She grows out of the portal's middle, stretched tall, overshoots a
-        little, and drops to the floor (landing with a squash once she's here)."""
+        """(stretch sideways, stretch upward, shift down) while she comes out of the portal, or None before."""
         if self.state == "here":
             return 1.0, 1.0, 0.0
         if self.state == "portal":
@@ -380,7 +365,7 @@ class Body(QWidget):
         if size <= 0.01:
             return
         painter.save()
-        painter.setRenderHint(QPainter.SmoothPixmapTransform)    # (it spins: smoothing reads better than jaggies)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)    # it spins: smoothing reads better
         painter.translate(W / 2, FEET - SIZE / 2)
         painter.rotate(now * PORTAL_SPIN % 360)
         painter.scale(size, size)
@@ -473,7 +458,7 @@ class Body(QWidget):
     # --- helpers ---
 
     def _load(self, name):
-        pixmap = QPixmap(os.path.join(self.sprite_dir, name))  # (an absolute path, like the portal's, is kept)
+        pixmap = QPixmap(os.path.join(self.sprite_dir, name))  # an absolute path (the portal's) is kept
         return pixmap.scaled(pixmap.width() * SCALE, pixmap.height() * SCALE,
                              Qt.IgnoreAspectRatio, Qt.FastTransformation)  # nearest neighbour: crisp pixels
 

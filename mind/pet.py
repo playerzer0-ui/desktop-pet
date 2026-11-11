@@ -1,3 +1,4 @@
+"""How a character talks: her prompt (new_conversation), caching it (warm_up), and asking the model (ask)."""
 import glob, hashlib, os, re
 from engine import llm
 from engine.config import N_CTX, MODEL, CACHE_DIR, FORGET_AT
@@ -7,21 +8,17 @@ from mind.lore import split as split_lore
 from mind.sentences import ends
 
 def trim_to_sentence(text):
-    # cut a reply that hit max_tokens back to its last full sentence (not one ending in "Mr." or "St.")
+    # a reply cut off at max_tokens, back to its last full sentence
     found = ends(text)
     return text[:found[-1]].rstrip() if found else text
 
-# How a character talks: their prompt, and asking the model. Who they are comes from their folder (character.py),
-# so the desktop pet (main.py) and test_pip.py use the exact same character.
-
 def new_conversation(character=None, stage=None):
-    """The fixed start of a character's chat: system prompt + example exchanges (Pip if no character is given).
-    stage 1-5 = how much they trust the user (from their save if not given).
-    Lore and feelings they aren't ready to share are left out of the prompt entirely."""
+    """System prompt + example exchanges, for her trust stage (1-5; from her save if not given).
+    What she isn't ready to share is left out entirely."""
     character = character or Character()
     if stage is None:
         stage = stage_of(load_save(character.save_path)["trust"])
-    lore, details = split_lore(character.staged("lore.md", stage))  # (the short version: lore.py)
+    lore, details = split_lore(character.staged("lore.md", stage))
     system_prompt = character.staged("persona.md", stage) + "\n\n# Background lore\n"
     if details:
         system_prompt += character.fill("(Many topics here are in short. When one comes up, more of what {name} "
@@ -31,7 +28,7 @@ def new_conversation(character=None, stage=None):
         system_prompt += character.fill("\n\n# Trust\n{name} happily talks about everything written above. {They} "
             "also knows more that isn't written here, but {they} isn't ready to share it yet. If asked about it, "
             "{they} gently changes the subject instead of making things up.")
-    # (at every stage, the top one too: without it she named cities that don't exist, "Goldcrest", "Aethelgard")
+    # at every stage: without it she invented cities ("Goldcrest", "Aethelgard")
     system_prompt += character.fill("\n\n# Never make things up\n{name} never invents names of people, places, gods, "
         "cities, family members or events that aren't written above, and never invents who taught {them} something. "
         "If asked something {they} doesn't know, {they} says so in {their} own words, or that {they} would rather "
@@ -43,67 +40,48 @@ def new_conversation(character=None, stage=None):
         "only examples of {name}'s style and length. They never really happened, so never say the user already "
         "said those things.")
     messages = [{"role": "system", "content": system_prompt}]
-    for user, reply in character.examples:  # (why examples, and how they're written: see character.toml)
+    for user, reply in character.examples:
         messages += [{"role": "user", "content": user}, {"role": "assistant", "content": reply}]
     return messages
 
 def warm_up(messages, fixed, slot=0):
-    """Get the server to read the system prompt + examples (+ anything after them, like memories)
-    before the first question. fixed = how many messages that fixed start is (len(new_conversation(...))).
-    The system prompt + examples (the first `fixed` messages) are read once (~20 s on CPU) and saved to cache/.
-    After that, they're just loaded from the file (~1 s). Editing persona or lore changes them,
-    so they're read fresh once and saved under a new name. Anything after them (the character's memories,
-    which change often) is read on top each time: only a few lines, so it's quick.
-    slot = the server slot this character uses (llm.py).
-    Returns ("loaded" or "read", tokens): whether the cached part was loaded or had to be read, and how many tokens
-    the whole prompt is (what it takes of her context before the chat starts: Status shows it)."""
-    cached = prefix_of(messages[:fixed])  # the part that rarely changes
+    """Have the server read her prompt before the first question. The first `fixed` messages (system prompt +
+    examples) are read once (~20 s) and saved to cache/, then just loaded (~1 s). Anything after them (memories)
+    is read on top each time. Returns ("loaded" or "read", prompt tokens)."""
+    cached = prefix_of(messages[:fixed])
     everything = prefix_of(messages)
 
     name = hashlib.sha256(f"{os.path.basename(MODEL)} {N_CTX}\n{cached}".encode()).hexdigest()[:16] + ".bin"
     how = "read"
     if os.path.exists(os.path.join(CACHE_DIR, name)) and llm.restore_slot(name, slot):
         how = "loaded"
-    else:  # (also when a llama-server update made an old cache file unreadable: then just read it again)
+    else:  # (also when a llama-server update made an old cache file unreadable)
         llm.read(cached, slot)
         llm.save_slot(name, slot)
-        # keep only the newest few files (one per trust stage is all that's ever useful)
+        # keep only the newest few (one per trust stage is all that's useful)
         for old in sorted(glob.glob(os.path.join(CACHE_DIR, "*.bin")), key=os.path.getmtime)[:-5]:
             os.remove(old)
 
-    # read the memories on top of the cached part. Read even when there are none: the server then just finds it all
-    # cached (~0.3 s), and says how big the prompt is
     return how, llm.read(everything, slot)
 
 def prefix_of(messages):
-    """The exact text a request starts with when it holds these messages: everything before the next question."""
+    """The exact text a request with these messages starts with, before the next question."""
     marker = "PIP_NEXT_QUESTION"
     full = llm.template(messages + [{"role": "user", "content": marker}])
-    return full[:full.rindex("<|im_start|>", 0, full.index(marker))]  # cut where the question's turn begins
+    return full[:full.rindex("<|im_start|>", 0, full.index(marker))]
 
-FEELING_TAG = re.compile(r"\s*\[(?:feeling:\s*)?(nice|neutral|rude)\]", re.I)  # (the model sometimes adds "feeling:")
+FEELING_TAG = re.compile(r"\s*\[(?:feeling:\s*)?(nice|neutral|rude)\]", re.I)  # (it sometimes adds "feeling:")
 MOOD_TAG = re.compile(r"\s*\[mood:\s*([a-z]+)\]", re.I)
 ANSWER_TAG = re.compile(r"\s*\[(?:\w+:\s*)?(not[ _]answered|unanswered|answered|not[ _]yet|done)\]", re.I)
-    # (only asked for with a note: [answered] / [not answered] for a world quest, [done] / [not yet] for a major one,
-    #  see quests.py; slips like [answered: not answered] too)
+    # (only asked for with a quest note: [answered] / [not answered], or [done] / [not yet] for a major quest)
 YES_TAGS = {"answered", "done"}
-LEFTOVER_TAGS = re.compile(r"(\s*\[\w+(?::\s*[\w ]+)?\])+\s*$")  # any other tag-like slip at the very end, like [happy]
-# her tags at the very start of a reply ([nice] [mood: happy], see persona.md): one word, or "word: words"
-LEADING_TAGS = re.compile(r"^\s*(?:\[(?:\w+(?::\s*[\w ]+)?|not answered|not yet)\]\s*)*", re.I)
+LEFTOVER_TAGS = re.compile(r"(\s*\[\w+(?::\s*[\w ]+)?\])+\s*$")  # any other tag-like slip at the end, like [happy]
+LEADING_TAGS = re.compile(r"^\s*(?:\[(?:\w+(?::\s*[\w ]+)?|not answered|not yet)\]\s*)*", re.I)  # [nice] [mood: happy]
 def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, on_mood=None):
-    """Send a question, return (reply, timings, feeling, mood, answered). Adds both to messages = memory.
-    feeling = how the question felt to the character: "nice", "neutral" or "rude" (their hidden tag, see persona.md).
-    mood = how they feel after replying (their second hidden tag): one of `moods` (Character.moods; any word if
-    None), or None if they left it out or used a mood that isn't on the list.
-    note = a hidden note added after the question for this one request (it isn't kept in messages), like the
-    quest note asking them to judge whether this answers their question (quests.answer_note).
-    answered = their judgment tag, [answered] / [not answered] (or [done] / [not yet] for a major quest):
-    True, False, or None if they wrote neither.
-    on_text(text) is called with each new piece of the reply as it streams in (without the tags).
-    on_mood(mood) is called as soon as their mood tag has streamed in, before their words (it comes first: see
-    persona.md), so the screen can show it right away. Only a mood from `moods`.
-    keep = how many messages at the start are never forgotten (system prompt + examples, + memories if any).
-    slot = the server slot this character uses (llm.py)."""
+    """Send a question, return (reply, timings, feeling, mood, answered). Adds both to messages.
+    Her hidden tags: feeling (nice/neutral/rude), mood (one of `moods`, else None), answered (True/False/None).
+    note = a hidden note for this request only. on_text streams her words, on_mood gets her mood first.
+    keep = messages at the start that are never forgotten."""
     messages.append({"role": "user", "content": question})
     request = messages[:-1] + [{"role": "user", "content": f"{question}\n\n{note}"}] if note else messages
 
@@ -111,19 +89,19 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0,
                              temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5)  # Qwen's recommended chat settings
 
     reply = ""
-    shown = 0  # how much of the reply (after her tags at the start) on_text has been given
+    shown = 0  # how much of her words on_text has been given
     mood_told = False
     timings = {}
     finish_reason = None
     for chunk in chunks:
-        timings = chunk.get("timings", timings)  # the last chunk carries the server's timing stats
+        timings = chunk.get("timings", timings)  # the last chunk has the server's stats
         if not chunk.get("choices"):
             continue
         finish_reason = chunk["choices"][0].get("finish_reason") or finish_reason
         text = chunk["choices"][0]["delta"].get("content") or ""
         if text:
             reply += text
-            lead = LEADING_TAGS.match(reply).end()  # her tags so far at the start
+            lead = LEADING_TAGS.match(reply).end()
             if on_mood and not mood_told:
                 told = MOOD_TAG.search(reply[:lead])
                 if told and (moods is None or told.group(1).lower() in moods):
@@ -132,12 +110,11 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0,
             body = reply[lead:]
             if body.startswith("[") and "]" not in body:
                 continue  # another tag still being written
-            visible = body.split("[")[0]  # hold back anything from "[" on: it's probably a tag at the end
+            visible = body.split("[")[0]  # hold back a possible tag at the end
             if on_text and len(visible) > shown:
                 on_text(visible[shown:])
                 shown = len(visible)
 
-    # hit max_tokens mid-sentence: keep only the finished sentences in memory
     if finish_reason == "length":
         reply = trim_to_sentence(reply)
 
@@ -150,31 +127,29 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0,
     answer_tag = ANSWER_TAG.search(reply)
     answered = (answer_tag.group(1).lower() in YES_TAGS) if answer_tag else None
     reply = LEFTOVER_TAGS.sub("", MOOD_TAG.sub("", FEELING_TAG.sub("", ANSWER_TAG.sub("", reply)))).rstrip()
-    reply = LEADING_TAGS.sub("", reply)  # (any other tag-like slip at the very start)
-    if on_text and len(reply) > shown:  # a "[" that wasn't a tag after all: show the rest now
+    reply = LEADING_TAGS.sub("", reply)
+    if on_text and len(reply) > shown:  # a "[" that wasn't a tag after all
         on_text(reply[shown:])
 
-    # remember the model's own answer, tag included: seeing their own tags keeps them adding them
+    # kept with her tags: seeing her own tags keeps her writing them
     messages.append({"role": "assistant", "content": f"[{feeling}] [mood: {mood or 'neutral'}] {reply}"})
 
     forget_oldest(messages, keep, context_used(timings))
     return reply.strip(), timings, feeling, mood, answered
 
 def forget_oldest(messages, keep, used, full=FORGET_AT, down_to=0.5):
-    """When the context is over `full` of N_CTX, forget the oldest chat lines (question + answer pairs, never the
-    first `keep` messages) in one go, until it's down to about `down_to`. One big cut instead of a pair every reply:
-    each cut makes the server re-read everything after `keep`, so after one slow reply the next many are fast again.
-    Token counts per message aren't known, so they're guessed from their share of the letters."""
+    """Over `full` of N_CTX: forget the oldest question+answer pairs (never the first `keep`) down to about
+    `down_to`, in one cut, so only one reply pays for the re-read. Tokens are guessed from letter counts."""
     if used <= N_CTX * full:
         return 0
     letters = [len(m["content"]) for m in messages]
-    target = sum(letters) * (N_CTX * down_to / used)  # letters that fit in `down_to` of the context
+    target = sum(letters) * (N_CTX * down_to / used)
     total, dropped = sum(letters), 0
     while total > target and len(messages) > keep + 2:
-        total -= len(messages.pop(keep)["content"]) + len(messages.pop(keep)["content"])  # a question and its answer
+        total -= len(messages.pop(keep)["content"]) + len(messages.pop(keep)["content"])
         dropped += 2
     return dropped
 
 def context_used(timings):
-    # how full the context is = cached tokens + newly read tokens + reply tokens
+    # cached + newly read + reply tokens
     return timings.get("cache_n", 0) + timings.get("prompt_n", 0) + timings.get("predicted_n", 0)

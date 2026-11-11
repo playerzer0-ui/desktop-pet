@@ -1,28 +1,23 @@
-"""Runs session.py (Pip's whole mind: the model, trust, memory, quests, idle talk, events) on its own
-thread, so the window keeps animating smoothly while she thinks. It reports back with Qt signals.
-
-Jobs run one at a time, in order: start, then open/say/tick, and finally close.
+"""Runs her mind (session.py) on its own thread, so the window keeps animating while she thinks.
+Jobs run one at a time, in order; results come back as Qt signals.
 """
 import queue, threading, traceback
 from PySide6.QtCore import QObject, Signal
 
 class Brain(QObject):
-    ready = Signal(str)          # the session is up: "read" (first time since persona/lore changed) or "loaded"
-    speaking = Signal(str)       # she started a reply of this kind: opening, user, idle or quest
-    piece = Signal(str)          # the next bit of her reply, as it's written
-    mood = Signal(str)           # her mood for the reply she's starting (it comes before her words)
-    restaging = Signal(bool)     # True while she re-reads her prompt for a stage she just reached, then False
+    ready = Signal(str)          # the session is up: "read" or "loaded"
+    speaking = Signal(str)       # she started a reply of this kind
+    piece = Signal(str)          # the next bit of her reply
+    mood = Signal(str)           # her mood, before her words
+    restaging = Signal(bool)     # re-reading her prompt for a new stage
     spoke = Signal(object)       # her finished reply (a session.Turn)
-    closed = Signal(list)        # the sitting is over: the diary notes she wrote
-    snapshot = Signal(dict)      # after every job: a copy of trust/today/memories (session.snapshot()) for the
-                                 # screen to show, so the UI never reads the save while this thread writes it
+    closed = Signal(list)        # the diary notes she wrote
+    snapshot = Signal(dict)      # after every job, so the screen never reads the save this thread writes
     failed = Signal(str)
 
     def __init__(self, character, slot=0, slots=1, company=(), greeting_note=None):
-        """slot, slots, company, greeting_note: see Session (her server slot, how many there are, who else is on
-        the desktop, something for her greeting to bring up)."""
         super().__init__()
-        self.character = character  # who this mind is (character.py)
+        self.character = character
         self.slot, self.slots, self.company, self.greeting_note = slot, slots, list(company), greeting_note
         self.session = None
         self.jobs = queue.Queue()
@@ -33,7 +28,6 @@ class Brain(QObject):
         self.jobs.put(("start",))
 
     def open(self, heard=None):
-        """Her greeting. heard = (name, words) someone else on the desktop greeted the user with just before her."""
         self.jobs.put(("open", heard))
 
     def say(self, text):
@@ -41,28 +35,23 @@ class Brain(QObject):
 
     @property
     def working(self):
-        """Busy with a job, or holding one it hasn't started yet (like your message, just sent)."""
+        """Busy with a job, or holding one it hasn't started yet."""
         return self.busy or not self.jobs.empty()
 
     def tick(self):
-        """Let her speak up on her own if she wants to (an idle thought, a quest, today's news)."""
         if not self.working:
             self.jobs.put(("tick",))
 
     def settle(self, number):
-        """Her mood after reply `number` eases back to neutral (in the save too, so events and Status agree)."""
         self.jobs.put(("settle", number))
 
     def goodbye(self):
-        """You used Say goodbye while her story wants goodbyes: she begs to stay, or the last time goes home."""
         self.jobs.put(("goodbye",))
 
     def duet(self, direction):
-        """One line of a chat with the other character on the desktop (duets.py)."""
         self.jobs.put(("duet", direction))
 
     def story_duet_done(self):
-        """The chat her story wanted with her friend is over (story.py): her story moves on."""
         self.jobs.put(("story_duet_done",))
 
     def close(self):
@@ -76,7 +65,7 @@ class Brain(QObject):
                 self._do(*job)
                 if self.session:
                     self.snapshot.emit(self.session.snapshot())
-            except SystemExit as e:  # (server.py says what's wrong this way: no llama-server, it crashed...)
+            except SystemExit as e:  # server.py's way of saying what's wrong
                 self.failed.emit(str(e.code) if isinstance(e.code, str) else traceback.format_exc(limit=3))
             except Exception:
                 self.failed.emit(traceback.format_exc(limit=3))
@@ -85,7 +74,7 @@ class Brain(QObject):
 
     def _do(self, what, *args):
         if what == "start":
-            from mind.session import Session  # imported here: it starts nothing until asked
+            from mind.session import Session
             self.session = Session(self.character, say=lambda *_: None, slot=self.slot, slots=self.slots,
                                    company=self.company, greeting_note=self.greeting_note)
             self.ready.emit(self.session.prompt_was)
@@ -116,13 +105,13 @@ class Brain(QObject):
         self.speaking.emit(kind)
 
         def on_text(piece):
-            if piece is None:  # the server had to be restarted: her reply starts over
+            if piece is None:  # the server was restarted: her reply starts over
                 self.speaking.emit(kind)
             else:
                 self.piece.emit(piece)
         turn = call(*args, on_text=on_text, on_mood=self.mood.emit)
         self.spoke.emit(turn)
-        if self.session.restage_due:  # a gate just opened: her new stage's prompt, while you read this reply
+        if self.session.restage_due:  # a gate just opened: read the new stage's prompt while you read this
             self.restaging.emit(True)
             try:
                 self.session.restage()

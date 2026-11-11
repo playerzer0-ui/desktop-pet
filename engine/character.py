@@ -1,30 +1,19 @@
-"""A character: everything that makes Pip Pip, loaded from her folder (character/pip/).
-The code never names a character itself, so another one is just another folder.
+"""A character, loaded from her folder (character/pip/). The code never names a character, so another one is
+just another folder.
 
     pip = Character("pip")
-    pip.text("persona.md")        a prose file from her folder (persona.md, lore.md, events.md)
-    pip.staged("lore.md", 2)      the same, with only the '# Stage N' blocks she's ready to share at trust stage 2
-    pip.events                    her dated world events (events.md, parsed by events.py)
-    pip.sprites                   the folder with her <mood>.png sprites
-    pip.portal                    the portal she arrives through while her mind loads (character/portal.png, shared)
-    pip.save_path                 her own save (saves/pip.json): trust, mood, memories... are per character
-    pip.log_path                  her reply stats for tuning (pip.log)
+    pip.staged("lore.md", 2)      a file from her folder, with only what she shares at trust stage 2
     pip.fill("{name} says something on {their} own")  ->  "Pip says something on her own"
-
-The rest comes from character.toml: name, pronouns, moods, stage_names, examples, idle_topics, quests.
-(Pronouns fill {they} {them} {their}, and {They} etc. at the start of a sentence. The code's prompts are
-written with singular verbs, "{They} greets", which suits she/he.)
 """
 import datetime, os, re, tomllib
 from mind import events
 from engine.config import HERE, LOG_DIR, SAVES_DIR
 
-DEFAULT = "pip"  # who main.py opens when no character is named
-PORTAL = os.path.join(HERE, "character", "portal.png")  # every character arrives through the same portal (for now)
+DEFAULT = "pip"  # who opens when no character is named
+PORTAL = os.path.join(HERE, "character", "portal.png")  # shared by everyone
 
 def cast():
-    """Every character's names: the name they go by and their folder (Vesper's is her real name, Mira).
-    Her diary never writes notes about any of them (memory.write_diary): the user is never one of them."""
+    """Every character's names: the name they go by and their folder (Vesper / Mira)."""
     names = set()
     root = os.path.join(HERE, "character")
     for folder in sorted(os.listdir(root)):
@@ -44,56 +33,51 @@ class Character:
         self.pronouns = dict(zip(("they", "them", "their"), c["pronouns"]))
         self.about = c["about"]
         self.moods = set(c["moods"])
-        self.story_moods = set(c.get("story_moods", []))  # moods only a story step puts her in (a sprite each, but
-                                                           # never on the list the model picks from), like injured
+        self.story_moods = set(c.get("story_moods", []))  # only a story step sets these, like injured
         self.stage_names = {i + 1: name for i, name in enumerate(c["stage_names"])}
         self.examples = [(e["user"], e["reply"]) for e in c["examples"]]
         self.idle_topics = [(int(stage), topic) for stage, topics in c["idle_topics"].items() for topic in topics]
-        self.idle_note = c["idle_note"]  # (required, even if "": a key misplaced under a [table] fails loudly)
-        self.daily_minutes = c.get("daily_minutes")  # how long they can stay each day (visits.py); None = no limit
+        self.idle_note = c["idle_note"]  # required, so a key misplaced under a [table] fails loudly
+        self.daily_minutes = c.get("daily_minutes")  # None = no limit
         if self.daily_minutes is not None and (not isinstance(self.daily_minutes, int) or self.daily_minutes <= 0):
             raise ValueError("daily_minutes must be a whole number of minutes above 0 (or left out for no limit)")
-        needed = self.daily_minutes is not None  # (what they say when it runs low / runs out, by trust stage)
+        needed = self.daily_minutes is not None
         self.time_warning = _by_stage(c, "time_warning", needed)
         self.time_up = _by_stage(c, "time_up", needed)
-        # her public self, when her friend is on the desktop too: her prompt, idle talk and events go no higher than
-        # this stage then, and private memories are left out (Session.shown_stage), so her secrets can't slip out
+        # the stage she shows while her friend is on the desktop, so her secrets can't slip out
         self.with_friend_stage = c.get("with_friend_stage")
         if self.with_friend_stage is not None and self.with_friend_stage not in (1, 2, 3, 4, 5):
             raise ValueError("with_friend_stage must be a trust stage, 1-5 (or left out: no mask)")
         self.quests = [(quest_id, int(stage), about)
                        for stage, asks in c["quests"].items() for quest_id, about in asks.items()]
         self.major_quests = _major_quests(c.get("major_quests", {}), self.moods | self.story_moods, folder)
-        # stage -> {id, starts, done_when, memory, points}, or a story over several days: {id, memory, points, steps}
-        self.first_visit = c.get("first_visit")  # what their very first greeting is about (a stage direction), or None
+        self.first_visit = c.get("first_visit")  # what her very first greeting is about
         self.sprites = os.path.join(self.dir, "sprites")
         self.portal = PORTAL
-        self.save_path = os.path.join(SAVES_DIR, folder + ".json")  # (the player's own folder: see config.py)
+        self.save_path = os.path.join(SAVES_DIR, folder + ".json")
         self.log_path = os.path.join(LOG_DIR, folder + ".log")
         self.events = events.parse(self.text("events.md"))
 
     @staticmethod
     def at_stage(lines, stage):
-        """From {stage: line} (like time_warning), the line for this trust stage: the highest one at or below it."""
+        """From {stage: line}, the line for this stage: the highest at or below it."""
         return lines[max(s for s in lines if s <= stage)]
 
     @property
     def gates(self):
-        """Stage -> the quest id (as saved in quests_done) that opens the next stage, for trust.py."""
+        """Stage -> the quest id that opens the next stage."""
         return {stage: "major-" + q["id"] for stage, q in self.major_quests.items()}
 
     def text(self, name):
-        """A file from their folder, like persona.md."""
         with open(os.path.join(self.dir, name), encoding="utf-8") as f:
             return f.read()
 
     def staged(self, name, stage, today=None):
-        """A file from their folder with only what they're ready to share at this trust stage (see for_stage), and
-        only the dated lines that are true today (see on_date), without lines a later stage replaced (before_stage)."""
+        """A file with only what she shares at this stage, and only the dated lines true today."""
         return for_stage(before_stage(on_date(self.text(name), today), stage), stage)
 
     def fill(self, text):
-        """Put her name and pronouns into a prompt written with {name}, {they}, {them}, {their} (or {They}...)."""
+        """Fill {name}, {they}, {them}, {their} (and {They}...) in a prompt."""
         for key, word in self.pronouns.items():
             text = text.replace("{" + key + "}", word).replace("{" + key.capitalize() + "}", word.capitalize())
         return text.replace("{name}", self.name)
@@ -101,10 +85,7 @@ class Character:
 RETIRES = re.compile(r"\[until stage ([1-5])\]\s*")
 
 def before_stage(text, stage):
-    """Lines that a later stage replaces, so the top stage doesn't carry both (Vesper's "won't say who pays her",
-    once stage 4 says it's Lind):
-        - [until stage 4] Someone dangerous pays her to watch the chapel, and she won't say who
-    kept below that stage, with the mark taken out, and left out from it on."""
+    """Drop lines a later stage replaces, like:  - [until stage 4] Someone pays her, and she won't say who"""
     kept = []
     for line in text.splitlines():
         mark = RETIRES.search(line)
@@ -116,12 +97,8 @@ def before_stage(text, stage):
 DATED = re.compile(r"\[(until|from) (\d{4}-\d\d-\d\d)\]\s*")
 
 def on_date(text, today=None):
-    """Lines that are only true for a while, for things that happen on a set day (the library's last day):
-        - [until 2026-11-20] the library is to be torn down on November 20, 2026
-        - [from 2026-11-20] the library was torn down on November 20, 2026
-    "until" lines are kept before that day, "from" lines from that day on, with the mark taken out. The model
-    doesn't work it out from the date itself (told it was later, she still said the library was standing).
-    The prompt changes on that day, so it's read once more then (pet.warm_up caches by its text)."""
+    """Keep only the dated lines true today, like:  - [until 2026-11-20] the library is still standing
+    (the model doesn't work it out from the date itself)."""
     today = (today or datetime.date.today()).isoformat()
     kept = []
     for line in text.splitlines():
@@ -135,14 +112,12 @@ def on_date(text, today=None):
     return "\n".join(kept)
 
 def for_stage(text, stage):
-    """Character files are sorted by trust: '# Stage N' blocks, each holding '##'/'###' sections.
-    Keep the blocks up to this trust stage (1-5) and merge sections with the same heading,
-    so the model reads e.g. Republic once, with everything they're ready to share about it.
-    Lines before the first '# Stage' block are always kept as they are."""
+    """Keep the '# Stage N' blocks up to this stage, merging sections with the same heading so the model reads
+    each topic once. Lines before the first block are always kept."""
     preamble = []
-    tree = {"lines": [], "children": {}}  # heading -> section, in the order headings first appear
-    block = None  # stage of the block we're in (None = before the first block)
-    path = []     # headings we're currently inside
+    tree = {"lines": [], "children": {}}
+    block = None  # stage of the block we're in
+    path = []     # headings we're inside
     for line in text.splitlines():
         if not line.strip():
             continue
@@ -171,8 +146,7 @@ def for_stage(text, stage):
     return "\n\n".join(parts)
 
 def _by_stage(toml, key, required):
-    """A [key] table of lines by the trust stage they start at, like [time_warning]: {1: "...", 3: "..."}.
-    required = it must exist, with a line for stage 1 (so every stage has one)."""
+    """A [key] table of lines by the stage they start at, like [time_warning]: {1: "...", 3: "..."}."""
     table = {int(stage): line for stage, line in toml.get(key, {}).items()}
     if any(not 1 <= stage <= 5 for stage in table):
         raise ValueError(f"[{key}]: stages are 1-5")
@@ -181,8 +155,7 @@ def _by_stage(toml, key, required):
     return table
 
 def _major_quests(tables, moods, folder=None):
-    """[major_quests.N] from character.toml, checked: one per stage 1-4 at most, with every field filled in.
-    Either one moment (starts, done_when) or a story told in steps over several days (steps: see story.py)."""
+    """[major_quests.N], checked: one moment (starts, done_when) or a story in steps."""
     found = {}
     for stage, q in tables.items():
         where = f"[major_quests.{stage}]"
@@ -212,7 +185,6 @@ def _major_quests(tables, moods, folder=None):
     return found
 
 def is_character(folder):
-    """True if character/<folder>/ is a character (has a character.toml)."""
     return isinstance(folder, str) and os.path.isfile(os.path.join(HERE, "character", folder, "character.toml"))
 
 def folder_of(name):
@@ -226,7 +198,7 @@ def folder_of(name):
     return None
 
 def _check_step(where, step, moods, folder=None):
-    """One step of a story quest (story.py), with its defaults filled in. folder = whose quest it is."""
+    """One story step, checked, with its defaults filled in."""
     if "opens" not in step:
         raise ValueError(f"{where} is missing: opens")
     step.setdefault("leaves", False)
@@ -262,11 +234,7 @@ def _check_step(where, step, moods, folder=None):
         raise ValueError(f"{where}: away_days must be a whole number, 0 or more")
 
 def _check_who(where, step, folder=None):
-    """Who has to be on the desktop for a story step (story.who_comes), one of:
-        needs = ["pip", "mira"]   exactly these come (folders, the first one leads), her own folder among them
-        told_by = "pip"           she stays away, and this one comes on her own and tells the step in her greeting
-        day = "together" / "alone" / "away"   the same, said about the one she comes with (roster.py's partner)
-    Or none of them: whoever comes that day. A step that ends with a duet chats with someone there."""
+    """Who has to be on the desktop for a step: needs, told_by or day (one of them, or none)."""
     said = [key for key in ("needs", "told_by", "day") if key in step]
     if len(said) > 1:
         raise ValueError(f"{where}: use one of needs, told_by and day, not {' and '.join(said)}")

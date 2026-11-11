@@ -1,24 +1,17 @@
-"""Where a character's sentences end, so "Mr. Halloway" or "St. Raos" isn't cut in two.
-Used by the speech bubble (one sentence per page) and by pet.trim_to_sentence (a reply cut off at max_tokens).
+"""Where sentences end, so "Mr. Halloway" or "St. Raos" isn't cut in two. Used by the speech bubble and pet.py.
 
-    ends("Mr. Halloway is kind. He'll take me to St. Raos.")   ->  [the index after "kind.", the index after "Raos."]
-    first_end(text, final=False)   while a reply is still streaming in: None if the end can't be told apart yet
-
-A "." isn't an end after a title or short form (Mr. Dr. St. e.g. ...), after a single capital initial
-("J. R. Tolkien"), or when the next word starts with a small letter ("I was... thinking").
+    ends("Mr. Halloway is kind. He'll take me to St. Raos.")   ->  [index after "kind.", index after "Raos."]
 """
 import re
 
-PUNCTUATION = re.compile(r"[.!?…~]+[\"')*]*(?=\s|$)")  # the end of a sentence, with any closing quote or *
+PUNCTUATION = re.compile(r"[.!?…~]+[\"')*]*(?=\s|$)")  # with any closing quote or *
 ABBREVIATIONS = {
     "mr", "mrs", "ms", "mx", "dr", "st", "mt", "jr", "sr", "prof", "rev", "fr", "sgt", "capt", "lt", "col", "gen",
     "gov", "pres", "sen", "rep", "hon", "vs", "approx", "dept", "est", "fig", "vol", "e.g", "i.e", "cf",
 }
 
 def ends(text, final=True):
-    """Every place a sentence ends in text: the index just after its punctuation and the spaces after it.
-    final = text is complete. While it's still streaming in (final=False), an end at the very end of the text
-    isn't counted yet: the next word decides whether it really is one."""
+    """Index after each sentence end. final=False while streaming: an end at the very end isn't counted yet."""
     found = []
     for m in PUNCTUATION.finditer(text):
         after = len(text) - len(text[m.end():].lstrip())  # past the spaces
@@ -30,17 +23,16 @@ def ends(text, final=True):
     return found
 
 def first_end(text, final=True):
-    """Where the first sentence in text ends (see ends), or None."""
     found = ends(text, final)
     return found[0] if found else None
 
 def _is_end(text, m, after):
     if text[after:after + 1].islower():
-        return False  # "I was... thinking", "Mr. smith": the sentence goes on
+        return False  # "I was... thinking"
     if m.group().rstrip("\"')*") != ".":
-        return True   # ! ? … or "..." always end one
+        return True   # ! ? … always end one
     word = re.search(r"([A-Za-z]+(?:\.[A-Za-z]+)*)$", text[:m.start()])
     if not word:
         return True
     word = word.group(1)
-    return not (word.lower() in ABBREVIATIONS or (len(word) == 1 and word.isupper()))
+    return not (word.lower() in ABBREVIATIONS or (len(word) == 1 and word.isupper()))  # "Mr." or "J. R."

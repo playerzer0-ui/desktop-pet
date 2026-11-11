@@ -1,15 +1,9 @@
 """The Status card, drawn as a little picture for the speech bubble:
 
-    Trust ■■■□□□□□□□      one box per trust level (out of 10)
-    exp   ━━━━━──────      how far she is from this trust level to the next (with a ✻ while her major quest
-                                                                          holds trust back)
-    [talk] 5/10   [clock] 139/240 min    talks today (out of the daily cap), and minutes together today
-                                         (out of her daily limit, if she has one: visits.py)
-    context ━━━━──┆── 34%               how full her slot's context is (her prompt + the chat so far). The tick is
-                                         where she starts forgetting the oldest lines (config.FORGET_AT): the bar
-                                         turns rose past it, then drops back once she has forgotten them
-
-The icons are talk.png and clock.png (16 px) in character/, next to portal.png.
+    Trust ■■■□□□□□□□          trust level, out of 10
+    exp   ━━━━━──────         progress to the next level (✻ while her major quest holds it back)
+    [talk] 5/10   [clock] 139/240 min
+    context ━━━━──┆── 34%     how full her context is; the tick is where she starts forgetting
 """
 import os
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -18,13 +12,13 @@ from engine.config import HERE, FORGET_AT
 from desktop.bubble import CREAM, GRAY, GOLD, INK, ROSE
 
 ART = os.path.join(HERE, "character")
-WIDTH, HEIGHT = 206, 82  # (the bubble's width, inside its margins)
-LEFT = 50                # where the boxes and the exp bar start, after "Trust" / "exp"
-TRACK = "#EADFCB"        # the empty part of the exp bar
+WIDTH, HEIGHT = 206, 82  # the bubble's width, inside its margins
+LEFT = 50                # where the bars start, after their labels
+TRACK = "#EADFCB"        # the empty part of a bar
 
 def card(summary):
     """The Status picture for trust.summary(...)."""
-    ratio = QGuiApplication.primaryScreen().devicePixelRatio()  # drawn at the screen's real pixels: crisp text
+    ratio = QGuiApplication.primaryScreen().devicePixelRatio()  # real pixels: crisp text
     picture = QPixmap(int(WIDTH * ratio), int(HEIGHT * ratio))
     picture.setDevicePixelRatio(ratio)
     picture.fill(Qt.transparent)
@@ -35,7 +29,7 @@ def card(summary):
     p.setPen(QColor(INK))                                   # Trust ■■■□□□□□□□
     p.setFont(QFont("Segoe UI", 11))
     p.drawText(QRectF(0, 0, LEFT, 22), Qt.AlignLeft | Qt.AlignVCenter, "Trust")
-    box, gap = 12, (WIDTH - LEFT - 2 - 10 * 12) / 9  # (2: room for the last box's outline)
+    box, gap = 12, (WIDTH - LEFT - 2 - 10 * 12) / 9
     for i in range(10):
         filled = i < summary["trust"]
         p.setPen(QPen(QColor(INK if filled else GRAY), 1.5))
@@ -45,7 +39,7 @@ def card(summary):
     p.setPen(QColor(GRAY))                                  # exp ━━━━━──────
     p.setFont(QFont("Segoe UI", 8))
     p.drawText(QRectF(0, 24, LEFT, 14), Qt.AlignLeft | Qt.AlignVCenter, "exp")
-    gated = summary.get("gated")  # trust is held back by her major quest: a ✻ at the end of the bar
+    gated = summary.get("gated")
     bar = QRectF(LEFT, 28, WIDTH - LEFT - 1 - (16 if gated else 0), 6)
     if gated:
         p.setPen(QColor(GOLD))
@@ -62,7 +56,7 @@ def card(summary):
 
     p.setFont(QFont("Segoe UI", 10))                        # [talk] 5/10   [clock] 139 min
     _stat(p, "talk.png", 0, f"{summary['talk_today']}/{summary['talk_cap']}")
-    _stat(p, "clock.png", 100, clock_text(summary))  # (100: room for "240/240 min", 72 px in Segoe UI 10, inside 206)
+    _stat(p, "clock.png", 100, clock_text(summary))  # 100: room for "240/240 min"
 
     p.setPen(QColor(GRAY))                                  # context ━━━━──┆── 34%
     p.setFont(QFont("Segoe UI", 8))
@@ -79,24 +73,24 @@ def card(summary):
         p.setBrush(QColor(ROSE if full >= FORGET_AT else GRAY))
         p.drawRoundedRect(QRectF(bar.left(), bar.top(), max(bar.height(), bar.width() * min(1.0, full)),
                                  bar.height()), 3, 3)
-    p.setPen(QPen(QColor(INK), 1))  # (where she starts forgetting)
+    p.setPen(QPen(QColor(INK), 1))  # where she starts forgetting
     tick = bar.left() + bar.width() * FORGET_AT
     p.drawLine(QPointF(tick, bar.top() - 2), QPointF(tick, bar.bottom() + 2))
     p.end()
     return picture
 
 def clock_text(summary):
-    """Minutes together today, out of her daily time if she has a limit (visits.py): "139/240 min" or "139 min"."""
+    """"139/240 min", or "139 min" with no daily limit."""
     limit = summary.get("daily_minutes")
     return f"{summary['minutes_today']:.0f}/{limit} min" if limit else f"{summary['minutes_today']:.0f} min"
 
 def context_full(summary):
-    """How full her context is (0-1), from session.snapshot()'s (tokens, size); None before it's known."""
+    """How full her context is (0-1), or None before it's known."""
     used, size = summary.get("context") or (0, 0)
     return used / size if used and size else None
 
 def _stat(p, icon, x, text):
-    p.setRenderHint(QPainter.SmoothPixmapTransform, False)  # keep the pixel-art icons crisp
+    p.setRenderHint(QPainter.SmoothPixmapTransform, False)  # keep pixel-art icons crisp
     p.drawPixmap(QPointF(x, 44), QPixmap(os.path.join(ART, icon)))
     p.setPen(QColor(INK))
     p.drawText(QRectF(x + 22, 42, 90, 20), Qt.AlignLeft | Qt.AlignVCenter, text)

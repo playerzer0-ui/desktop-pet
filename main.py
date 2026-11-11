@@ -1,15 +1,9 @@
-"""A character as a desktop pet: they wander along the bottom of your screen.
+"""Starts the desktop pet.
 
     python main.py          Pip
-    python main.py mira     another character (a folder in character/, with a character.toml)
+    python main.py mira     another character (a folder in character/)
 
-Click them to talk, right-click for the menu (status, memories, goodbye), drag them anywhere.
-The app itself lives in desktop/, and everything they do lives in session.py; who they are is their folder.
-Each sitting's reply stats (timings, context, mood, trust) are written to <character>.log, e.g. pip.log, for tuning,
-in the logs/ of the player's data folder (config.DATA, like %LOCALAPPDATA%\\DesktopPet).
-
-The built game (build.ps1) has no console window, so anything that stops it is shown in a message box too, and a
-crash is written to logs/crash.log.
+The built game has no console, so errors are shown in a message box, and a crash is written to logs/crash.log.
 """
 import os, sys, traceback
 
@@ -20,11 +14,10 @@ def show_error(text):
         app = QApplication.instance() or QApplication(sys.argv)
         QMessageBox.critical(None, "Desktop Pet", text)
     except Exception:
-        pass  # (no screen to show it on: the console line above is all there is)
+        pass  # no screen: the console line is all there is
 
 if __name__ == "__main__":
-    # Linux on Wayland: apps can't place their own windows there, so she couldn't walk along the bottom of the screen.
-    # X11 mode (through XWayland) lets her (start.sh does the same). Set QT_QPA_PLATFORM yourself to choose otherwise.
+    # Wayland doesn't let apps place their own windows, so she runs in X11 mode (as start.sh does)
     if sys.platform.startswith("linux") and os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("QT_QPA_PLATFORM"):
         os.environ["QT_QPA_PLATFORM"] = "xcb"
     try:
@@ -32,7 +25,7 @@ if __name__ == "__main__":
         from desktop.app import main
         main(sys.argv[1] if len(sys.argv) > 1 else DEFAULT)
     except SystemExit as e:
-        if isinstance(e.code, str):  # a message (no llama-server, a save that can't be read...): say it, then stop
+        if isinstance(e.code, str):  # a message for the player
             show_error(e.code)
             sys.exit(1)
         raise
