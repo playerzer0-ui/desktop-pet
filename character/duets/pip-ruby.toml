@@ -51,6 +51,11 @@ stage = 2
 starts = "pip"
 about = "teaching Ruby a small blessing that is only kind words, not a spell"
 
+[[topics]]
+stage = 2
+starts = "ruby"
+about = "the spring trial: how silent the hall is and the single bell, told like a feast day (Pip goes very still, then gently asks whether Ruby is sore)"
+
 [[topics]]  # stage 3: the quiet walk, and the gods
 stage = 3
 starts = "ruby"
@@ -75,6 +80,11 @@ about = "the silent hour, and whether Pip's chapel ever goes silent for the ones
 stage = 4
 starts = "pip"
 about = "a candle Pip lit for Sally this year, and Ruby shyly admitting she lit one too"
+
+[[topics]]
+stage = 4
+starts = "pip"
+about = "asking Ruby, very gently, what she hears after the bell at the trial (Ruby starts to answer, can't finish, and Pip changes the subject kindly)"
 
 [[topics]]  # stage 5: closeness
 stage = 5

@@ -44,13 +44,16 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 | June 21 (yearly) | Lantern night | Freeport floats lanterns for ships that never came back |
 | August 14 (yearly) | The day the gods left | 10 years ago |
 | February 12 (yearly) | Day of Lineages | Heaven only, closed to outsiders: the pure bloodlines are recited aloud in the White Cloister |
+| April 21 (yearly) | The Purification Trial | Heaven only, closed to outsiders: the final of the sword saint trial: a duel to the death in a silent hall, with no magic and no blessings, only weapons or bare hands (see 8). A week before the Blessing of the blade |
 | April 28 (yearly) | Blessing of the blade | Heaven only, closed to outsiders: Libera herself blesses the sword saint's blade (see 8) |
+| July 7 (yearly) | The Martyrdom | Heaven only, closed to outsiders: the sword saint stands at the centre of a circle for seven hours and is tested in every way, to pay her respects to Libera (see 8) |
+| September 21 (yearly) | The Heavenly Tour | Heaven only: the sword saint walks through Heaven's territory and its people look up to her. She is never taken past its borders (see 8) |
 | October 15 (yearly) | Sally's death anniversary | Heaven celebrates its victory publicly. The other factions keep quiet |
-| November 9 (yearly) | The silent hour | Heaven only, closed to outsiders: the White Cloister goes silent for one hour at dawn "for those who left to be purified". Nobody outside knows what it is really for |
+| November 9 (yearly) | The silent hour | Heaven only, closed to outsiders: the White Cloister goes silent for one hour at dawn "for those who left to be purified". Nobody outside knows what it is really for: it is kept for the girls who die in the Purification Trial and its ladder (see 8) |
 | October 31 (yearly) | Long night | A night-long Bloodcult brawl; Lind resurrects everyone who falls |
 | December 21 (yearly) | First snow | Usually around this date in the Republic |
 | November 20, 2026 (once) | The ancient library is torn down | |
-| December 2, 2026 (once) | Heaven inspects the Republic trade district | Lasts a week |
+| December 2 (yearly) | Heaven inspects the Republic trade district | Lasts a week. Every year, officials tour the district and every temple near them has to look like something else |
 | January 18, 2027 (once) | Rumour: another fountain of knowledge destroyed | Nobody says who |
 
 ---
@@ -170,6 +173,7 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 - Seen as something only gods or faction bosses can do
 - **Banned by every faction.** Illegal dreamwalking is punished by public execution
 - **Secret**: Heaven's inner circle keeps it for itself. Libera has taught a few of her chosen under another name, "the quiet walk", a prayer of the soul. They are not punished, because Heaven is the one that decides what is punished
+- Heaven's version keeps the sleeping body well, so someone taught the quiet walk can stay away as long as she likes. (The one exception to the body getting worse)
 
 ### 7.3 Blessings
 - Obtained by serving as a priest/priestess devoted to one chosen god for at least 5 years
@@ -217,11 +221,21 @@ In order. The gods left 10 years ago (on August 14). Earlier dates are not set.
 - Everyone inside is cared for and watched. The ones who live there rarely learn what goes on beyond its walls
 
 ### The sword saint (Heaven)
-- A Heaven title for the one pure chosen blade-bearer, kept in the White Cloister. There is only one at a time
-- Only Heaven's inner circle knows the title exists. To everyone else it is at most a rumour
-- Her blade is blessed by Libera once a year (Blessing of the blade, April 28), and holds a small space-time blessing, which is why a sword saint never misses
-- Nobody outside has seen one fight. Keep it that way: no fights on screen
-- Heaven values blindness in a sword saint: "unclouded by the world", so she cannot be tempted by what she cannot see
+- A Heaven title for the one pure chosen blade-bearer, kept in the White Cloister. There is only one holder at a time
+- Inside Heaven everyone knows her and looks up to her. Outsiders have at most heard a rumour, and only the inner circle knows who she is
+- Every candidate gives her sight away at a very young age as a pledge to the Cloister: Heaven values blindness in a sword saint, "unclouded by the world", so she cannot be tempted by what she cannot see. In exchange the sword saint is trained with swords and every weapon, and in hand-to-hand fighting: a fighting machine
+- Her blade is forged from godly powers, and Libera blesses it once a year (Blessing of the blade, April 28). It is too precious for the Trial: the holder is not allowed to use it there, to keep the challenge fair
+- The holder is absurdly strong. She rarely uses her blade to anything like its full extent, and if she were ever disarmed she still has her hands, or she can summon her blade back with magic
+- She lives apart: she is alone in her rooms and in the banquet hall, which is a sword saint's privilege. Chefs and staff prepare everything, then leave while she eats or sleeps
+- Many blind girls are raised in the Cloister as sword saint candidates. They are children, and the title is settled by the **Purification Trial**
+- **The ladder**: through the year the candidates are ranked by one-on-one duels, and every duel is to the death. The last girl standing earns the right to challenge the current holder
+- **The final (April 21)**: the challenger duels the holder. Whoever wins is deemed the strongest and the purest, and holds the title for the year. No magic and no divine blessings, only each girl's weapon or her bare hands. The holder has always won so far, on talent alone
+- The duels happen in a completely silent hall: two girls, no audience. The only sounds are the fighters', including screams. When one of them dies, a single bell rings and the trial is over
+- Heaven calls the girls who lose "purified" and teaches that they went somewhere better. The silent hour (November 9) is kept for them
+- A winning holder is hurt too: she wins, she is not unhurt. She is left sore for days and rests until the Blessing of the blade
+- **The Martyrdom (July 7)**: once a year the holder stands at the centre of a circle and endures tests of every kind for seven hours, to pay her respects to Libera and prove she still has what it takes. Libera is not there. Told only as a long, quiet day, never described
+- **The Heavenly Tour (September 21)**: once a year the holder walks through Heaven's territory and the people look up to her. She is never allowed past its borders
+- Nobody outside has seen one fight. Keep it that way: no fights on screen. It is told only by sound and by what the holder remembers, never described. Moderate: screams, breathing, footsteps, a bell, and never gore
 
 ---
 
@@ -246,7 +260,9 @@ Use this to decide what a new character could plausibly know.
 - Who is secretly dreamwalking
 - That Heaven's inner circle dreamwalks without punishment ("the quiet walk")
 - That a sword saint exists, and who she is
-- What the silent hour is really for
+- That the title is decided by the Purification Trial: duels to the death between blind girls, children among them
+- What the silent hour is really for (the girls the trial bell rang for)
+- What the Martyrdom is: seven hours of tests for the sword saint, every year
 
 ---
 
@@ -256,7 +272,7 @@ Use this to decide what a new character could plausibly know.
 |---|---|---|---|---|
 | Pip | she/her | Republic | Priestess of Everlily, runs Everlily Chapel and its currency exchange. Dreamwalks to the desktop | `character/pip/` |
 | Vesper (real name Mira) | she/her | Republic, secretly Bloodcult | Baker a few doors down from Everlily Chapel, and Pip's best friend. **Secret**: a Bloodcult spy sent by Lind to watch the chapel's lamp; "Vesper" is the name Lind gave her, and nobody (not even Pip) knows her real name. Pip, at her highest trust, invites her to the desktop and believes she's teaching her to dreamwalk; **secretly** she learned it years ago | `character/mira/` |
-| Ruby | she/her | Heaven | The sword saint, blind from birth and raised in the White Cloister. Sheltered, sweet and airheaded: knows Heaven's events (even the closed ones) and almost nothing else. Reaches the desktop by "the quiet walk" without knowing it is dreamwalking, or that it is banned. Arrives on her own, uninvited, one month after Pip's stage 4 ends | `character/ruby/` |
+| Ruby | she/her | Heaven | The sword saint, blind by her own pledge (she gave her sight away very young) and raised in the White Cloister, trained into a near-unbeatable fighter. She holds the title by winning the yearly Purification Trial, a silent duel to the death, and has won every year; she half-registers that something about it is wrong. Sheltered, sweet and airheaded: knows only Heaven and what is inside it (even its closed events), and nothing of the outside world. Wants very little and is content. Named Ruby for the colour she was told her eyes once were. Reaches the desktop by "the quiet walk" to make friends, without knowing it is dreamwalking, or that it is banned, and unlike the others she can stay as long as she likes. Arrives on her own, uninvited, one month after Pip's stage 4 ends | `character/ruby/` |
 
 Named NPCs (exist in the world, not playable):
 - Cassandra, Lind, Libera, Soren (faction bosses, see 6)

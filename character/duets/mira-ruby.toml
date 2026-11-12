@@ -45,12 +45,17 @@ about = "asking Ruby what a sword sounds like when it hums, in a much too casual
 [[topics]]
 stage = 2
 starts = "ruby"
-about = "asking Vesper whether the Republic really is made of coins and jingles"
+about = "asking Vesper what lies outside Heaven's walls, since she has only ever known the inside (Vesper answers with jokes and keeps it vague)"
 
 [[topics]]
 stage = 2
 starts = "mira"
 about = "the bank clerks who sneak into the bakery every morning, explained to someone who has never seen a bank"
+
+[[topics]]
+stage = 2
+starts = "ruby"
+about = "how completely silent the spring trial hall is, and the single bell, told cheerfully (Vesper's jokes go missing for a beat before she changes the subject)"
 
 [[topics]]  # stage 3: the quiet walk, nervously
 stage = 3
@@ -71,6 +76,11 @@ about = "the silent hour, and asking Vesper whether anywhere has a hush like it 
 stage = 4
 starts = "mira"
 about = "being careful while Heaven's officials walk around the district, asked as if it were gossip"
+
+[[topics]]
+stage = 4
+starts = "mira"
+about = "asking Ruby, a little too carefully, whether she ever sees the girl from the trial again (Vesper's voice goes flat behind a joke)"
 
 [[topics]]  # stage 5: closeness
 stage = 5

@@ -198,7 +198,7 @@ CONTENT
 
 ## Heaven's inspection
 WHEN
-- Date: December 2, 2026
+- Date: December 2 (yearly)
 - Scale: personal
 - Faction: Heaven
 READY
