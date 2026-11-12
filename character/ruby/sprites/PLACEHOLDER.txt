@@ -1,3 +1,0 @@
-These nine are PLACEHOLDERS: copies of Pip's sprites so the game and `python -m desktop.check` run.
-Replace each with Ruby's own art: blind (eyes closed, or covered by a white ribbon), white sanctuary robes, a sword.
-Delete this file once they are replaced.

@@ -83,6 +83,10 @@ def cast_problems(also=()):
         problems += [f"{c.name}: {p}" for p in lore_problems(c)]
         problems += step_problems(c, cast, r["on_screen"])
     problems += duet_problems()
+    try:
+        roster.forced()  # (your today.json, if you have one)
+    except (ValueError, OSError) as e:
+        problems.append(f"{roster.FORCED}: {e}")
     return problems
 
 def step_problems(character, cast, on_screen):

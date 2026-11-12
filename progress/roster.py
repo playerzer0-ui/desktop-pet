@@ -12,17 +12,23 @@ Someone can also arrive uninvited ([[arrivals]]): once `after` reaches a trust, 
 day it runs out she comes on her own, a surprise, and from the day after that she's in the lineups too:
 
     {"arrived": {"ruby": {"started_on": "2026-12-01", "visit_day": "2027-01-01"}}}
+
+For testing, today.json in the data folder (next to saves/, made by hand) decides who comes, every day, while it's
+there: no invites, arrivals, introductions or story lineups. Delete it and the roster takes over again.
+
+    {"members": ["ruby", "pip"], "note": "optional: why the others aren't here (about the first one)"}
 """
-import datetime, os, random, threading, tomllib
+import datetime, json, os, random, threading, tomllib
 from dataclasses import dataclass, field
 from mind import memory
 from progress import story, trust
-from engine.character import Character, DEFAULT
-from engine.config import HERE, SAVES_DIR
+from engine.character import Character, DEFAULT, is_character
+from engine.config import DATA, HERE, SAVES_DIR
 from engine.save import Save, load_save, write_save
 
 RULES = os.path.join(HERE, "character", "roster.toml")
 PATH = os.path.join(SAVES_DIR, "roster.json")
+FORCED = os.path.join(DATA, "today.json")  # (yours, for testing: see forced)
 ON_SCREEN = 2  # most characters on the desktop at once (on_screen in roster.toml)
 _lock = threading.RLock()  # two minds on their own threads may write roster.json
 
@@ -197,11 +203,37 @@ class Need:
     members: list
     owner: str | None = None  # whose story it is (None for a private quest)
 
+def forced(path=None):
+    """today.json (see the top): who you've said comes, as a Today, or None if there's no such file.
+    A mistake in it raises ValueError (desktop/check.py shows it at launch)."""
+    path = path or FORCED
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8-sig") as f:  # (-sig: Notepad may start the file with a BOM)
+        data = json.load(f)
+    members = data.get("members") if isinstance(data, dict) else None
+    if not isinstance(members, list) or not members or len(set(members)) != len(members):
+        raise ValueError('members must be a list of different character folders, like {"members": ["ruby", "pip"]}')
+    for folder in members:
+        if not is_character(folder):
+            raise ValueError(f"{folder!r} isn't a character's folder in character/")
+    on_screen = rules()["on_screen"]
+    if len(members) > on_screen:
+        raise ValueError(f"{len(members)} members, but on_screen in roster.toml is {on_screen}")
+    note = data.get("note")
+    if note is not None and not isinstance(note, str):
+        raise ValueError("note must be text")
+    return Today(list(members), note=Character(members[0]).fill(note.rstrip(".")) + "." if note else None)
+
 def today(lead=DEFAULT, day=None, pick=random.choices, need=None):
     """Who comes today. Only the first character runs the roster; any other, opened by name, comes alone.
-    pick and need are for the tests."""
+    While you have a today.json (forced), it decides instead. pick and need are for the tests."""
     if lead != DEFAULT:
         return Today([lead])
+    chosen = forced()
+    if chosen:
+        print(f"today.json: {', '.join(chosen.members)} (delete it to go back to the roster)")
+        return chosen
     day = day or datetime.date.today()
     iso = day.isoformat()
     with _lock:

@@ -3596,6 +3596,49 @@ class TemplateTest(unittest.TestCase):
         self.assertNotIn("NAME", character.cast())
         self.assertEqual([u["who"] for u in roster.rules()["unlocks"]], ["mira"])
 
+class ForcedTodayTest(unittest.TestCase):
+    """today.json (roster.forced): for testing, a file in the data folder that says who comes, every day."""
+
+    def setUp(self):
+        self.roster = use_roster(self)
+        real = self.roster.FORCED
+        self.roster.FORCED = temp_path("today")
+        self.addCleanup(lambda: setattr(self.roster, "FORCED", real))
+
+    def write(self, text):
+        with open(self.roster.FORCED, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_without_it_the_roster_decides(self):
+        self.assertIsNone(self.roster.forced())
+        self.assertEqual(self.roster.today(day=datetime.date(2026, 12, 1)).members, ["pip"])
+
+    def test_it_decides_who_comes_every_day(self):
+        self.write('{"members": ["ruby", "pip"], "note": "the others are busy today, so {they} brought Pip"}')
+        for day in (datetime.date(2026, 12, 1), datetime.date(2026, 12, 2)):
+            with contextlib.redirect_stdout(io.StringIO()):
+                plan = self.roster.today(day=day)
+            self.assertEqual(plan.members, ["ruby", "pip"])
+        self.assertEqual(plan.note, "the others are busy today, so she brought Pip.")
+        self.assertNotIn("today", self.roster.state(), "roster.json's own record isn't touched")
+        self.assertEqual(self.roster.today("mira").members, ["mira"], "a character opened by name still comes alone")
+
+    def test_a_notepad_bom_is_fine(self):
+        with open(self.roster.FORCED, "w", encoding="utf-8-sig") as f:
+            f.write('{"members": ["mira"]}')
+        self.assertEqual(self.roster.forced().members, ["mira"])
+
+    def test_mistakes_are_shown_at_launch(self):
+        from desktop import check
+        for text, says in [('{"members": "ruby"}', "must be a list"), ('{"members": ["ruby", "ruby"]}', "must be a list"),
+                           ('{"members": ["rubyy"]}', "isn't a character"),
+                           ('{"members": ["ruby", "pip", "mira"]}', "on_screen in roster.toml is 2"),
+                           ('{"members": ["pip"], "note": 5}', "note must be text"), ('{"members": [ruby]}', "Expecting value")]:
+            self.write(text)
+            problems = [p for p in check.cast_problems() if "today" in p]
+            self.assertEqual(len(problems), 1, text)
+            self.assertIn(says, problems[0], text)
+
 class ArrivalTest(unittest.TestCase):
     """roster.py [[arrivals]]: Ruby turns up on her own, 30 days after Pip reaches trust 9."""
 
