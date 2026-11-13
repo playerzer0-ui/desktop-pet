@@ -9,7 +9,7 @@
 Calls take on_text(piece) to stream her reply and on_mood(mood), called before her words.
 Every reply is logged to <character>.log in the data folder's logs/, for tuning.
 """
-import datetime, os, time
+import datetime, difflib, os, time
 from dataclasses import dataclass
 from engine import llm
 from mind import events, memory
@@ -21,7 +21,11 @@ from progress.company import Company
 from progress.quests import Quests, MajorQuests, QUIET_FIRST
 from engine.config import N_CTX
 from engine.server import start_server
-from mind.pet import new_conversation, ask, context_used, warm_up
+from mind.pet import new_conversation, ask, context_used, warm_up, LEADING_TAGS
+
+REPEAT_RATIO = 0.8    # a reply this similar to one of her last few is a copy (_copies), and asked again
+REPEAT_LOOKBACK = 3   # how many of her last replies it's compared with
+REPEAT_MIN = 25       # letters: short replies ("Thank you!") may well be the same again
 from mind.lore import Lore
 from engine.save import write_save
 
@@ -306,16 +310,39 @@ class Session:
         return note, judging
 
     def _ask_retrying(self, text, on_text, note, on_mood):
-        """Ask the model. If the server went away, start it again and retry once."""
+        """Ask the model. If the server went away, start it again and retry once. If her reply copies one of her
+        last few, ask once more, told not to."""
         try:
-            return self._ask(text, on_text, note, on_mood)
+            answer = self._ask(text, on_text, note, on_mood)
         except llm.ServerGone:
             if self.messages and self.messages[-1] == {"role": "user", "content": text}:
                 self.messages.pop()
             self.reconnect()
             if on_text:
                 on_text(None)  # the screen starts her reply over
-            return self._ask(text, on_text, note, on_mood)
+            answer = self._ask(text, on_text, note, on_mood)
+        # (a small model's habit: Pip gave one reply word for word to three different messages, each copy making
+        #  the next likelier. Thrown away and asked again, told what not to say: first, as a judging note goes last)
+        copied = self._copies(answer[0])
+        if copied:
+            self.log(f"repeated herself, asked again: {copied}")
+            del self.messages[-2:]  # (your message and her copy)
+            if on_text:
+                on_text(None)
+            again = self.character.fill(f'(Not part of the message: {{name}} has already said "{copied}" and must not '
+                                        "say it again, or anything like it: {they} answers this message in new words.)")
+            answer = self._ask(text, on_text, "\n\n".join(filter(None, [again, note])), on_mood)
+        return answer
+
+    def _copies(self, reply):
+        """One of her last few replies this sitting that `reply` nearly copies (its words), or None."""
+        if len(reply) < REPEAT_MIN:
+            return None
+        said = [LEADING_TAGS.sub("", m["content"]) for m in self.messages[self.keep:-2] if m["role"] == "assistant"]
+        for earlier in reversed(said[-REPEAT_LOOKBACK:]):
+            if difflib.SequenceMatcher(None, earlier.lower(), reply.lower()).ratio() >= REPEAT_RATIO:
+                return earlier
+        return None
 
     def _after_reply(self, text, kind, feeling, judging, judged):
         """Trust for your message, and whether it finished a quest or moved her story on.

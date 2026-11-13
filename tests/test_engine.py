@@ -3596,6 +3596,51 @@ class TemplateTest(unittest.TestCase):
         self.assertNotIn("NAME", character.cast())
         self.assertEqual([u["who"] for u in roster.rules()["unlocks"]], ["mira"])
 
+class RepeatTest(unittest.TestCase):
+    """Live, Pip gave one reply word for word to three different messages. A copy of one of her last few replies is
+    thrown away and asked again once, with a note saying what not to say."""
+
+    def sitting(self, replies):
+        from mind import session
+        self.notes, self.restarts = [], []
+        replies = iter(replies)
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, **kw):
+            self.notes.append(note)
+            reply = next(replies)
+            messages += [{"role": "user", "content": question},
+                         {"role": "assistant", "content": "[neutral] [mood: worried] " + reply}]
+            return reply, {}, "neutral", "worried", None
+        real = session.start_server, session.warm_up, session.ask
+        session.start_server, session.warm_up, session.ask = (lambda *a, **k: None), (lambda *a, **k: ("loaded", 1)), ask
+        self.addCleanup(lambda: setattr(session, "start_server", real[0]) or setattr(session, "warm_up", real[1])
+                        or setattr(session, "ask", real[2]))
+        c = pip()
+        c.save_path = os.path.join(tempfile.mkdtemp(), "pip.json")
+        s = session.Session(c, say=lambda *_: None)
+        s.quests.next = 1e12
+        return s
+
+    COPY = "*frowns deeply* Oh no, I didn't know that... it's a very dangerous faction to be close to."
+
+    def test_a_copy_is_asked_again(self):
+        s = self.sitting([self.COPY, self.COPY + " Did she say anything?", "*nods slowly* Then let's keep an eye on her."])
+        s.user_says("pip, Vesper is bloodcult!")
+        turn = s.user_says("I don't know, but watch out", on_text=lambda piece: self.restarts.append(piece is None))
+        self.assertEqual(turn.reply, "*nods slowly* Then let's keep an eye on her.")
+        self.assertEqual(len(self.notes), 3, "asked once more")
+        self.assertIn(f'has already said "{self.COPY}"', self.notes[-1])
+        self.assertIn(True, self.restarts, "the screen starts her reply over")
+        said = [m["content"] for m in s.messages[s.keep:]]
+        self.assertEqual(len(said), 4, "the copy isn't kept in her chat")
+        self.assertNotIn(self.COPY + " Did she say anything?", " ".join(said))
+
+    def test_new_words_and_short_replies_are_left_alone(self):
+        s = self.sitting(["Oh no, that's a very dangerous faction to be close to.",
+                          "Then I'll keep a close eye on her at the bakery tomorrow.", "Thank you!", "Thank you!"])
+        for m in ["Vesper is bloodcult!", "watch out", "I made you tea", "and some bread"]:
+            s.user_says(m)
+        self.assertEqual(len(self.notes), 4, "nothing asked again")
+
 class ForcedTodayTest(unittest.TestCase):
     """today.json (roster.forced): for testing, a file in the data folder that says who comes, every day."""
 
