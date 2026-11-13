@@ -86,7 +86,8 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0,
     request = messages[:-1] + [{"role": "user", "content": f"{question}\n\n{note}"}] if note else messages
 
     chunks = llm.chat_stream(request, slot=slot, max_tokens=200,
-                             temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5)  # Qwen's recommended chat settings
+                             temperature=0.7, top_p=0.8, top_k=20, min_p=0.05,
+                             presence_penalty=0.3)  # Qwen's chat settings, but a light penalty: 1.5 pushed her to odd words
 
     reply = ""
     shown = 0  # how much of her words on_text has been given
