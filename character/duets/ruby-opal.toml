@@ -1,0 +1,65 @@
+# Ruby and Opal chatting with each other on the desktop (duets.py, desktop/scene.py). Opal is an NPC
+# (character/npc/opal), so they're only ever here together on the first three days of Ruby's gate 3 story,
+# the-yield: these chats are the user's chance to hear the friendship the story is about to take away.
+# After a few quiet minutes one of them starts a little chat with the other, they take turns for a few lines,
+# and the last line wraps it up. Neither one earns trust from it, and the user can't talk to them until it's over.
+
+every = [3, 6]  # minutes of quiet before they chat (a little sooner than other pairs: they only have three days)
+lines = [3, 4]  # how many lines a chat has
+
+# Topics open at the LOWER of the two stages, and Opal is always at stage 1 (an NPC's trust never grows), so every
+# topic is stage 1. Ruby is at the top of stage 3 by then: they lean only on what both of them know.
+# Opal knows what the trial really is and never lets it show: if it comes near, she jokes and changes the subject,
+# and Ruby doesn't notice. Never describe the trial, the ladder or what happens to the girls who lose.
+#   starts   who starts the chat: "ruby" or "opal" (folder names)
+#   about    what about (it finishes "starts a little chat with her about ...")
+
+[[topics]]
+stage = 1
+starts = "ruby"
+about = "the knocking game through the wall between their halls, and arguing happily over who knocked first, all those weeks ago"
+
+[[topics]]
+stage = 1
+starts = "opal"
+about = "teasing Ruby, calling her Saint, for taking the user's words so literally earlier"
+
+[[topics]]
+stage = 1
+starts = "ruby"
+about = "the strange humming of the desktop, and both of them guessing out loud what could be making it"
+
+[[topics]]
+stage = 1
+starts = "opal"
+about = "the honey cake on feast days, and Opal admitting she has always saved Ruby the sweetest corner"
+
+[[topics]]
+stage = 1
+starts = "ruby"
+about = "the tea the attendants make, never sweet enough, and Opal confessing she's the one who sneaks honey into Ruby's cup"
+
+[[topics]]
+stage = 1
+starts = "opal"
+about = "what the user's world might sound like outside the screen, and daring Ruby to ask the user something brave"
+
+[[topics]]
+stage = 1
+starts = "ruby"
+about = "how lovely it is to have someone to talk to at last, said so plainly that Opal gets flustered and makes a joke"
+
+[[topics]]
+stage = 1
+starts = "opal"
+about = "the elders' cold bells, and Opal doing a funny impression of the eldest one's slow footsteps"
+
+[[topics]]
+stage = 1
+starts = "ruby"
+about = "the spring trial, mentioned cheerfully as a feast day (Opal goes quiet for a moment, then teases Ruby about something else entirely)"
+
+[[topics]]
+stage = 1
+starts = "opal"
+about = "making Ruby promise that, whatever happens, she'll keep finding new sounds to love"

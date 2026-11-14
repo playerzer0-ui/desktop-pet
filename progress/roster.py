@@ -22,7 +22,7 @@ import datetime, json, os, random, threading, tomllib
 from dataclasses import dataclass, field
 from mind import memory
 from progress import story, trust
-from engine.character import Character, DEFAULT, is_character
+from engine.character import Character, DEFAULT, is_character, is_npc
 from engine.config import DATA, HERE, SAVES_DIR
 from engine.save import Save, load_save, write_save
 
@@ -214,9 +214,12 @@ def forced(path=None):
     members = data.get("members") if isinstance(data, dict) else None
     if not isinstance(members, list) or not members or len(set(members)) != len(members):
         raise ValueError('members must be a list of different character folders, like {"members": ["ruby", "pip"]}')
-    for folder in members:
+    for i, folder in enumerate(members):
+        if is_npc(folder) and i:
+            continue  # (an NPC can come along, to test a story she's in, but never leads)
         if not is_character(folder):
-            raise ValueError(f"{folder!r} isn't a character's folder in character/")
+            raise ValueError(f"{folder!r} isn't a character's folder in character/"
+                             + (" (an NPC can't lead: put her after someone)" if is_npc(folder) else ""))
     on_screen = rules()["on_screen"]
     if len(members) > on_screen:
         raise ValueError(f"{len(members)} members, but on_screen in roster.toml is {on_screen}")
@@ -322,7 +325,7 @@ def stories_need(settled, r, day=None):
         members = wanted[0]
         if step.get("day") == "together":
             members = _pair(folder, partner, r)
-        if set(members) <= set(settled):
+        if {m for m in members if not is_npc(m)} <= set(settled):  # (an NPC comes only like this)
             return Need(members, owner=folder)
     for folder in order:
         c, data = _save_of(folder)

@@ -24,8 +24,8 @@ is what her stage 4-5 lore is already about.
 Name: like Ruby, named for the colour of the eyes she gave up as a small child. Heaven says opals are
 "clouded", which she finds very funny.
 
-Folder `character/opal/`, with `npc = true` (see engine changes). Short persona to draft into
-`character/opal/persona.md`:
+Folder `character/npc/opal/` (being there is what makes her an NPC: see engine changes). Sprites go in
+`character/npc/opal/sprites/`. Short persona to draft into `character/npc/opal/persona.md`:
 
 ```
 # Persona
@@ -101,10 +101,13 @@ completes = true
 ```
 
 ## Engine changes needed
-1. **NPC characters** (`engine/character.py`, `progress/roster.py`, `mind/memory.py`, `progress/trust.py`):
-   `npc = true` in a character.toml means: no trust, no stages, no quests, no diary, no memory, no save entry. She is
-   only ever brought by a story step's `needs`, never by `[[lineups]]`, arrivals or unlocks. `is_character("opal")`
-   still has to be true so `needs` passes `_check_step`.
+1. **NPC characters in `character/npc/<folder>/`** (`engine/character.py`, `progress/roster.py`, `mind/memory.py`,
+   `progress/trust.py`, `desktop/check.py`): the character scans only look one level deep, so they skip
+   `character/npc/` like `character/duets/`, and an NPC never joins the roster. An NPC has no trust, no stages, no
+   quests, no diary, no memory and no save entry. `Character` takes a base folder so it can load one from
+   `character/npc/`; `is_character` and the `needs` check in `_check_step` also accept NPC folders (so `needs =
+   ["ruby", "opal"]` works); `roster.today` brings an NPC only when a story step's `needs` names her; and
+   `check.py` also checks `character/npc/*` moods against their sprites.
 2. **`greeting = false`** on a step: the step's character arrives without a greeting line (`story.begin_text` / the
    greeting code in `mind/session.py`). Her sprite and `opens` state still apply.
 3. **`ends = "messages"`** with `messages = N`, `breaks` and optional `breaks_note`: counts the user's messages

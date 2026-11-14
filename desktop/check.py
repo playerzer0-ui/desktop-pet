@@ -7,7 +7,7 @@ plus roster.toml, story steps and duet files. main() won't start until they're a
 import os, re, sys
 from mind import lore
 from progress import duets, roster
-from engine.character import Character, DEFAULT, is_character
+from engine.character import Character, DEFAULT, is_character, is_npc, npcs
 from desktop import moves
 
 def persona_moods(text):
@@ -23,7 +23,7 @@ def events_moods(text):
 def mood_problems(character):
     """Every way her mood lists disagree (empty = all good)."""
     moods = character.moods
-    folder = f"character/{character.folder}/"
+    folder = f"character/{'npc/' if character.npc else ''}{character.folder}/"
     lists = {
         folder + "persona.md": persona_moods(character.text("persona.md")),
         f"the '## Moods' line in {folder}events.md": events_moods(character.text("events.md")),
@@ -73,7 +73,7 @@ def cast_problems(also=()):
         return [f"character/roster.toml: {e}"]
     cast = [DEFAULT] + [u["who"] for u in r["unlocks"] + r["arrivals"]]
     problems = []
-    for folder in cast + [f for f in also if f not in cast]:
+    for folder in cast + [f for f in also if f not in cast] + npcs():
         try:
             c = Character(folder)
         except (ValueError, KeyError, OSError) as e:
@@ -98,7 +98,7 @@ def step_problems(character, cast, on_screen):
             needs = step.get("needs") or []
             named = needs + [step.get("told_by")] + [step.get("duet", {}).get(k) for k in ("starts", "with")]
             for folder in dict.fromkeys(f for f in named if f):
-                if folder not in cast:
+                if folder not in cast and not (is_npc(folder) and folder in needs):  # (an NPC only comes by needs)
                     problems.append(f"{where} names {folder!r}, who isn't in the cast (character/roster.toml): "
                                     "the step would wait for her forever")
             if len(needs) > on_screen:
@@ -113,9 +113,9 @@ def duet_problems():
         if not name.endswith(".toml"):
             continue
         folders = name[:-5].split("-", 1)
-        if len(folders) != 2 or not all(is_character(f) for f in folders):
+        if len(folders) != 2 or not all(is_character(f) or is_npc(f) for f in folders):
             problems.append(f"character/duets/{name}: its name should be <folder>-<folder>.toml, two characters "
-                            "in character/")
+                            "in character/ (or character/npc/)")
             continue
         pair = frozenset(folders)
         if pair in seen:

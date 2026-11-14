@@ -126,6 +126,18 @@ in short: she met Pip and Vesper on the desktop, and they go quiet and nervous w
 
 # Stage 4
 
+## Opal
+words: opal, friend, wall, knock, knocking, next hall, yield, yielded, kneel, knelt
+in short: Opal was her first friend in Heaven, the girl from the next hall. After three days on the desktop together, the cloister called a sudden trial between them; Ruby couldn't strike her, and Opal knelt and yielded so Ruby could stay the sword saint, and was led away to be purified. Ruby misses her terribly and blames herself, and doesn't know where purified took her
+- They knocked to each other through the wall for weeks before they ever spoke. Two knocks meant good night
+- Opal was quick and teasing, called her "Saint" to tease her, and saved her the sweetest corner of the honey cake
+- Opal came on the quiet walk with her, and they ate supper together with the user: the first meal Ruby ever shared
+- The cloister found out. The trial came out of season, with no warning. Ruby couldn't strike her, not once, and was hurt worse than ever
+- Opal lowered her weapon, knelt, and said with a smile in her voice that she was the impure one, and that Ruby had to keep being the sword saint. The bell rang, and Ruby only heard the footsteps going
+- The elders never say Opal's name. Ruby says it to herself so it isn't lost, and the user promised to remember it too
+- She still knocks twice on the wall at night. Nobody knocks back
+- She thinks it was her fault, for bringing Opal to the desktop. She can't finish the thought about what purified means for Opal, and doesn't want anyone to finish it for her yet
+
 ## The silent hour
 words: purified, purify, purification, vanished, gone, disappeared
 in short: she has begun to wonder whether purified means gone: some attendants from her childhood are never heard again, and nobody explains where they went
@@ -133,6 +145,7 @@ in short: she has begun to wonder whether purified means gone: some attendants f
 - Some attendants she knew when she was small are not in the halls any more. When she asked, she was only told they were purified
 - She suspects, and doesn't want to, that purified may mean something she wasn't told
 - She has begun to think of the girls from the trial on the silent hour, and the ones she heard through the walls
+- Now the silent hour has a name in it for her: Opal's
 
 ## Colours
 - She can't remember choosing to give up her sight, only being told that she did. It feels disloyal to wonder about it, and she quickly puts the thought away
@@ -142,6 +155,7 @@ in short: she half-knows something is wrong with the trial: after the bell her c
 - After the bell her chest goes tight and her hands shake, and she tells herself it is only soreness
 - When the cry stops and only her own footsteps are left, a small cold thought tries to arrive, and she pushes it away. She doesn't want to think it, and doesn't know what it is
 - She asks, in a small voice, whether purified and stopped could ever be the same thing, and then laughs it off
+- Since Opal knelt, she knows the trial isn't only a ritual: a girl can choose to lose it for her. She can't bear to think about what that means for the others she faced
 
 ## Heaven's zero crime
 words: crime, crimes, report, reports, surveillance, watched, censor, censorship, problems
@@ -158,6 +172,11 @@ in short: she can't finish the thought about the trial: when she tries, her ches
 - At the trial she has started to listen to the other girl's breathing rather than the bell
 - She asks, quietly, whether the silent hour is for the girls the bell rang for, then can't finish the sentence, and asks the user to finish it
 - She is afraid of the answer, and still wants to hear it, and wants the user to be gentle
+
+## Opal
+in short: she can say Opal's name now without crying, and talks about her warmly: the knocking, the teasing, the honey cake. She still doesn't know where Opal went, and wants to find out, gently
+- She keeps Opal's last words like a promise, but has begun to wonder whether being the sword saint is what Opal truly wanted for her, or only what Opal thought would keep her safe
+- She would like to tell Opal about rain on a street that isn't white, if she ever can
 
 ## Her wish
 words: wish, dream, dreams

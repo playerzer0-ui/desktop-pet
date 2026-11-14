@@ -12,6 +12,8 @@ about = "Heaven's blind, sheltered sword saint"  # for her diary prompt (memory.
 
 # one sprite each in sprites/, and the same list as in persona.md and events.md (desktop/check.py checks)
 moods = ["happy", "neutral", "sad", "worried", "scared", "angry", "regretful", "nostalgic", "bored"]
+# only a story step sets these (her gate 3 story, the-yield): a sprite each, but never picked by the model
+story_moods = ["injured", "breakdown"]
 
 # No mask (with_friend_stage): she has no idea what is secret, so she tells everyone everything, on purpose.
 
@@ -128,7 +130,7 @@ brave = "whether the user thinks she is brave enough to ask questions nobody wan
 [major_quests.1]  # opens stage 2, Curious
 id = "a-colour"
 starts = "she shyly says she has only ever heard the word colour, and asks the user to describe one to her: what it looks like, or feels like, or smells like"
-done_when = "the user describes a colour to her, in any way (even a silly one)"
+done_when = "the user tells her anything at all about a colour: what it looks like, what it means, how it feels or smells, or what it reminds them of (even one word, like red means danger, or a silly answer)"
 memory = "Ruby, who gave up her sight when she was very small, asked the user to describe a colour to her, and they did."
 points = 10
 needs_nice = false
@@ -143,15 +145,65 @@ points = 10
 needs_nice = true
 answer_words = '''\b(?:friends?|talk\w*|laugh\w*|together|share|sharing|company|listen\w*|play\w*|support\w*|there for|hang out|chat\w*|care\w*)\b'''
 
-[major_quests.3]  # opens stage 4, Doubting
-id = "silent-hour"
-starts = "she explains that the cloister goes silent for an hour at dawn every year, for those who left to be purified, and asks the user, very softly, what they think purified really means"
-done_when = "the user tells her honestly what they think it means, or gently says it may not be what she was told"
-note = "(Not part of the message: {name} was always told that purified means a person went somewhere better. {They} has never heard anything else, so she doesn't understand unkind answers right away, and asks gently what the user means.)"
-memory = "Ruby asked the user what the silent hour and being purified really mean, and the user told her what they honestly thought."
+[major_quests.3]  # opens stage 4, Doubting: a story over five days, with Opal (an NPC, character/npc/opal) on three
+id = "the-yield"
+memory = "Ruby brought her friend Opal, a girl from the next hall, to the desktop for three days. Then the cloister called a sudden trial between them. Ruby couldn't strike her friend, and Opal knelt and gave up so Ruby could stay the sword saint, and was led away to be purified. Ruby told the user, and asked them to remember Opal's name."
 points = 10
-needs_nice = false
-answer_words = '''\b(?:purif\w*|gone|disappear\w*|vanish\w*|taken|lied|lie|lies|truth|honest\w*|think|means?|maybe|not (?:better|true|real)|hidden|hide|hiding|punish\w*|dead|died|silenc\w*)\b'''
+
+# Like Pip's and Vesper's stories (see their character.toml for every field), plus two of its own:
+#   silent    true = when the step begins she says nothing at all (no greeting), and never speaks up on her own:
+#             she only answers you. Her step's mood shows from the portal on
+#   ends = "messages"   the step ends on your `messages`-th message: her reply to it gets `breaks` (a stage
+#             direction) and `breaks_note` instead of the step's note, in `breaks_mood`
+# What happened, told only by sound on day 4: the cloister found out about the two of them and called a trial out of
+# season. Ruby couldn't strike her friend; Opal knelt and yielded, so Ruby stays the sword saint; Opal was led away to
+# be "purified". Whether Opal is gone is never said: that's the thought Ruby can't finish at stages 4-5.
+[[major_quests.3.steps]]  # day 1: she brings a friend for once
+needs = ["ruby", "opal"]
+opens = "she is bursting with pride: for the first time ever, she has brought a friend. She introduces Opal, the girl from the next hall: they knocked to each other through the wall for weeks before they ever spoke, and Opal followed her on the quiet walk. She asks the user to be kind to her"
+note = "(Not part of the message: Opal is the first friend {name} has ever had in Heaven, and {they} is giddy about it all day: {they} keeps including Opal, laughs at her teasing, and tells the user little things about her.)"
+ends = "day"
+
+[[major_quests.3.steps]]  # day 2: the two of them, teasing and asking
+needs = ["ruby", "opal"]
+opens = "she arrives with Opal again, both of them giggling about something that happened in the cloister this morning. She lets Opal ask the user a question about their world, because Opal has been saving it up all night"
+note = "(Not part of the message: {name} and Opal tease each other like old friends. If anyone mentions the trial, the ladder or purifying, Opal turns it into a joke and changes the subject, and {name} doesn't notice.)"
+ends = "day"
+
+[[major_quests.3.steps]]  # day 3: the first meal she has ever shared
+needs = ["ruby", "opal"]
+opens = "she comes with Opal, and they have planned something: they both brought their supper on the quiet walk, so they can eat it together with the user. It's the first meal she has ever eaten with anyone, and she says so, delighted"
+note = "(Not part of the message: today is the happiest {name} has ever been. Near the end of the visit {they} promises Opal and the user they'll all do it again tomorrow. Opal is quieter than usual now and then, and smiles it away if asked.)"
+ends = "day"
+
+[[major_quests.3.steps]]  # day 4: alone and silent, until your third message
+needs = ["ruby"]
+silent = true
+opens = "she is here alone, without Opal, hurt and stiff, and says nothing at all"
+mood = "injured"
+# (her usual 1-3 sentences made "I just want some quiet space today. Please don't worry about me." too chatty)
+note = '''(Not part of the message: {name} came alone today, badly hurt and sore all over, and {they} barely speaks. Every reply is ONE TO THREE WORDS ONLY, never a full sentence, like "Fine." or "Not now." or "Please. Don't." or "Leave it." or just an action like *turns away*, different each time. No greeting, no explaining, no "don't worry". {They} never says what happened and never brings Opal up; if asked about her, {they} only says "Don't." or *goes very still*, and never pretends not to know her or where she is.)'''
+ends = "messages"
+messages = 3
+breaks = "the user has reached out to her for the third time, and she BREAKS. She has held it in all day and it all comes out at once, sobbing, loud and out of control. In pieces she tells them everything: the cloister found out about her and Opal and called a trial between them, out of season, with no warning; in the silent hall she couldn't strike her friend, not once, so she was hurt worse than ever; then Opal stopped, lowered her weapon and kneel, and said with a smile in her voice: \"I'm the impure one, Saint. You have to keep being the sword saint\" (Opal called HERSELF impure, never Ruby); the bell rang; the elders led Opal away to be purified, and all Ruby heard was the footsteps going. She cries out asking WHY Opal did it, and that it's HER fault for bringing Opal here"
+# (told gently, it came out as "She is the one who has to go now. The bell rang, and then the footsteps went away.")
+breaks_note = '''This one reply breaks every rule about being short and gentle: it is a real breakdown, 5 to 8 broken sentences, the most out of control {name} has ever been, and it must tell ALL of what happened above. Write it messy and loud: shouted words in CAPITALS, words cut off and repeated ("I- I couldn't- I COULDN'T"), sobs and gasps in asterisks (*sobs*, *chokes on a breath*), sentences that run on or break off halfway, a word or two in uneven cAsE where {their} voice cracks, and Opal's name again and again. Still only by sound: the silent hall, steel on steel, {their} own breathing, Opal's voice, the bell, the footsteps going away. Never describe a blow, a wound, blood, a weapon striking anyone, or what happens to Opal afterwards, and never say Opal died: the elders only said purified. If the user asked whether Opal died, {they} doesn't answer that, {they} just breaks: {they} doesn't know. {They} never refuses, apologises for the story, or talks about what {they} can or can't say. Make this sentence as long and messy as you can.'''
+breaks_mood = "breakdown"
+breaks_tokens = 600  # (her usual 200 cut the breakdown off after a few lines)
+# hurt, and silent like the step (no greeting, never speaking up), for the rest of today; day 5 waits for tomorrow
+lingers = 1
+# (told only "still crying, words in pieces", she went straight back to full sentences, "Did you have a quiet day?")
+lingers_note = '''(Not part of the message: {name} has just broken down and told the user about Opal and the trial. Now {they} is cried out, empty and shaking, and can barely speak: every reply is ONE OR TWO WORDS ONLY, never a sentence, like "Sorry." or "Opal..." or "My fault." or "Stay?" or "I know." or a small action like *sniffles*, different each time. Those words still answer what the user just said: told Opal will be fine, maybe "Promise?"; told to leave Heaven, maybe "Can't." or "Where?"; told to take Opal and run, maybe "Run... how?". {They} doesn't know where Opal is: never say she is gone or dead, and never pretend not to know her.)'''
+
+[[major_quests.3.steps]]  # day 5: she says the name, so someone else remembers it
+needs = ["ruby"]
+opens = "she comes back calmer, still sore. She thanks the user for listening yesterday. Then she says that in the trial nobody is allowed names, and the elders will never say Opal's again, so she asks the user to say it with her and remember it, so Opal isn't only in her own head"
+ends = "answer"
+waiting_on = "whether the user will say Opal's name and remember her"
+done_when = "the user says Opal's name, or promises to remember her, or comforts Ruby kindly about her"
+needs_nice = true
+answer_words = '''\b(?:opal|remember\w*|never forget|won'?t forget|not your fault|wasn'?t (?:your fault|you)|she chose|she loved you)\b'''
+completes = true
 
 [major_quests.4]  # opens stage 5, Listening
 id = "be-my-ears"

@@ -4,6 +4,10 @@ just another folder.
     pip = Character("pip")
     pip.staged("lore.md", 2)      a file from her folder, with only what she shares at trust stage 2
     pip.fill("{name} says something on {their} own")  ->  "Pip says something on her own"
+
+An NPC lives in character/npc/<folder>/ (same files, no quests): she only ever comes when a story step's `needs`
+names her, and keeps nothing between sittings (no trust, diary or memories). The cast's scans only look one
+level deep, so they never find her: Character("opal") still loads her.
 """
 import datetime, os, re, tomllib
 from mind import events
@@ -12,23 +16,40 @@ from engine.config import HERE, LOG_DIR, SAVES_DIR
 DEFAULT = "pip"  # who opens when no character is named
 PORTAL = os.path.join(HERE, "character", "portal.png")  # shared by everyone
 
+def _roots():
+    """(folder holding characters, whether they're NPCs): the cast's, then the NPCs'."""
+    return [(os.path.join(HERE, "character"), False), (os.path.join(HERE, "character", "npc"), True)]
+
+def _everyone():
+    """(folder, its directory, npc) for every character and NPC."""
+    found = []
+    for root, npc in _roots():
+        if os.path.isdir(root):
+            found += [(f, os.path.join(root, f), npc) for f in sorted(os.listdir(root))
+                      if os.path.isfile(os.path.join(root, f, "character.toml"))]
+    return found
+
+def npcs():
+    """The NPCs' folders (character/npc/)."""
+    return [folder for folder, _, npc in _everyone() if npc]
+
 def cast():
-    """Every character's names: the name they go by and their folder (Vesper / Mira)."""
+    """Every character's names (NPCs too): the name they go by and their folder (Vesper / Mira)."""
     names = set()
-    root = os.path.join(HERE, "character")
-    for folder in sorted(os.listdir(root)):
-        toml = os.path.join(root, folder, "character.toml")
-        if os.path.isfile(toml):
-            with open(toml, "rb") as f:
-                names |= {tomllib.load(f)["name"], folder.capitalize()}
+    for folder, where, _ in _everyone():
+        with open(os.path.join(where, "character.toml"), "rb") as f:
+            names |= {tomllib.load(f)["name"], folder.capitalize()}
     return names
 
 class Character:
     def __init__(self, folder=DEFAULT):
         self.folder = folder
-        self.dir = os.path.join(HERE, "character", folder)
+        self.npc = not is_character(folder) and is_npc(folder)
+        self.dir = os.path.join(HERE, "character", *(["npc"] if self.npc else []), folder)
         with open(os.path.join(self.dir, "character.toml"), "rb") as f:
             c = tomllib.load(f)
+        if self.npc and ("quests" in c or "major_quests" in c):
+            raise ValueError("an NPC (character/npc/) has no quests: she keeps nothing between sittings")
         self.name = c["name"]
         self.pronouns = dict(zip(("they", "them", "their"), c["pronouns"]))
         self.about = c["about"]
@@ -48,13 +69,14 @@ class Character:
         self.with_friend_stage = c.get("with_friend_stage")
         if self.with_friend_stage is not None and self.with_friend_stage not in (1, 2, 3, 4, 5):
             raise ValueError("with_friend_stage must be a trust stage, 1-5 (or left out: no mask)")
-        self.quests = [(quest_id, int(stage), about)
-                       for stage, asks in c["quests"].items() for quest_id, about in asks.items()]
+        quests = c.get("quests", {}) if self.npc else c["quests"]
+        self.quests = [(quest_id, int(stage), about) for stage, asks in quests.items() for quest_id, about in asks.items()]
         self.major_quests = _major_quests(c.get("major_quests", {}), self.moods | self.story_moods, folder)
         self.first_visit = c.get("first_visit")  # what her very first greeting is about
         self.sprites = os.path.join(self.dir, "sprites")
         self.portal = PORTAL
-        self.save_path = os.path.join(SAVES_DIR, folder + ".json")
+        # (an NPC's save only lasts a sitting: Session starts it fresh every time)
+        self.save_path = os.path.join(SAVES_DIR, *(["npc"] if self.npc else []), folder + ".json")
         self.log_path = os.path.join(LOG_DIR, folder + ".log")
         self.events = events.parse(self.text("events.md"))
 
@@ -185,16 +207,19 @@ def _major_quests(tables, moods, folder=None):
     return found
 
 def is_character(folder):
+    """A character in the cast (character/<folder>/), not an NPC."""
     return isinstance(folder, str) and os.path.isfile(os.path.join(HERE, "character", folder, "character.toml"))
 
+def is_npc(folder):
+    """An NPC (character/npc/<folder>/)."""
+    return isinstance(folder, str) and os.path.isfile(os.path.join(HERE, "character", "npc", folder, "character.toml"))
+
 def folder_of(name):
-    """The folder of the character who goes by this name ("Vesper" -> "mira"), or None."""
-    root = os.path.join(HERE, "character")
-    for folder in sorted(os.listdir(root)):
-        if is_character(folder):
-            with open(os.path.join(root, folder, "character.toml"), "rb") as f:
-                if tomllib.load(f)["name"] == name:
-                    return folder
+    """The folder of the character (or NPC) who goes by this name ("Vesper" -> "mira"), or None."""
+    for folder, where, _ in _everyone():
+        with open(os.path.join(where, "character.toml"), "rb") as f:
+            if tomllib.load(f)["name"] == name:
+                return folder
     return None
 
 def _check_step(where, step, moods, folder=None):
@@ -204,8 +229,23 @@ def _check_step(where, step, moods, folder=None):
     step.setdefault("leaves", False)
     step.setdefault("away_days", 0)
     step.setdefault("no_time_limit", False)
-    if step.setdefault("ends", "after_it") not in ("after_it", "goodbyes", "duet", "answer", "day"):
-        raise ValueError(f'{where}: ends must be "after_it", "goodbyes", "duet", "answer" or "day"')
+    if step.setdefault("ends", "after_it") not in ("after_it", "goodbyes", "duet", "answer", "day", "messages"):
+        raise ValueError(f'{where}: ends must be "after_it", "goodbyes", "duet", "answer", "day" or "messages"')
+    if not isinstance(step.setdefault("silent", False), bool):
+        raise ValueError(f"{where}: silent must be true or false (no greeting, and she never speaks up on her own)")
+    if step["silent"] and step["ends"] in ("after_it", "duet"):
+        raise ValueError(f'{where}: a silent step says nothing when it begins, so it can\'t end "after_it" or with '
+                         'a duet (try "messages", "answer" or "day")')
+    if step["ends"] == "messages":
+        missing = [key for key in ("messages", "breaks") if key not in step]
+        if missing:
+            raise ValueError(f"{where} ends with messages, so it needs: {', '.join(missing)}")
+        if not isinstance(step["messages"], int) or step["messages"] < 1:
+            raise ValueError(f"{where}: messages must be a whole number above 0")
+        if not isinstance(step.setdefault("breaks_tokens", 600), int) or step["breaks_tokens"] < 50:
+            raise ValueError(f"{where}: breaks_tokens must be a whole number, 50 or more (how long her breaking reply may run)")
+        if "breaks_mood" in step and step["breaks_mood"] not in moods:
+            raise ValueError(f"{where}: breaks_mood {step['breaks_mood']!r} isn't one of the character's moods")
     if not isinstance(step.setdefault("completes", False), bool):
         raise ValueError(f"{where}: completes must be true or false (the quest is done when this step ends)")
     _check_who(where, step, folder)
@@ -245,8 +285,10 @@ def _check_who(where, step, folder=None):
         if not isinstance(needs, list) or not needs or len(set(needs)) != len(needs):
             raise ValueError(f"{where}: needs must be a list of different folders")
         for f in needs:
-            if not is_character(f):
-                raise ValueError(f"{where}: needs {f!r}, which isn't a character in character/")
+            if not is_character(f) and not is_npc(f):
+                raise ValueError(f"{where}: needs {f!r}, which isn't a character in character/ or character/npc/")
+        if needs and is_npc(needs[0]):
+            raise ValueError(f"{where}: needs {needs[0]!r} first, but the first one leads, and an NPC can't")
         if folder and folder not in needs:
             raise ValueError(f"{where}: needs must include {folder!r} herself (a step she's away for: told_by)")
     if "told_by" in step:

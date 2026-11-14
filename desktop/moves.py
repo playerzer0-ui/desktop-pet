@@ -112,7 +112,8 @@ MOOD_MOVES = {  # mood: (move, emote) when her reply had no action that matched
     "happy": ("hop", "note"), "sad": ("sigh", None), "worried": ("tilt", "sweat"), "scared": ("shiver", "exclaim"),
     "angry": ("stomp", "anger"), "regretful": ("sigh", "sweat"), "nostalgic": ("sway", "sparkle"),
     "bored": ("sigh", "zzz"), "neutral": (None, None),
-    "injured": ("shiver", "sweat"),  # a story mood
+    "injured": ("shiver", "sweat"),  # story moods
+    "breakdown": ("shiver", "sweat"),
 }
 
 def for_action(action):
@@ -131,6 +132,9 @@ def idle_shape(mood, t):
     if mood == "happy":       # bouncy
         sx, sy = breathe(1.6, 0.03)
         return sx, sy, 0, 0, -2 * abs(math.sin(math.pi * t / 1.6))
+    if mood == "breakdown":   # shaking sobs
+        sx, sy = breathe(0.7, 0.03)
+        return sx * 1.01, sy * 0.97, 0, random.uniform(-0.8, 0.8), 0
     if mood in ("sad", "regretful", "injured"):  # droopy, slow
         sx, sy = breathe(4.0, 0.012)
         sag = 0.03 if mood == "sad" else 0.02

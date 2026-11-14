@@ -77,17 +77,18 @@ ANSWER_TAG = re.compile(r"\s*\[(?:\w+:\s*)?(not[ _]answered|unanswered|answered|
 YES_TAGS = {"answered", "done"}
 LEFTOVER_TAGS = re.compile(r"(\s*\[\w+(?::\s*[\w ]+)?\])+\s*$")  # any other tag-like slip at the end, like [happy]
 LEADING_TAGS = re.compile(r"^\s*(?:\[(?:\w+(?::\s*[\w ]+)?|not answered|not yet)\]\s*)*", re.I)  # [nice] [mood: happy]
-def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, on_mood=None):
+def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, on_mood=None, max_tokens=200):
     """Send a question, return (reply, timings, feeling, mood, answered). Adds both to messages.
     Her hidden tags: feeling (nice/neutral/rude), mood (one of `moods`, else None), answered (True/False/None).
     note = a hidden note for this request only. on_text streams her words, on_mood gets her mood first.
-    keep = messages at the start that are never forgotten."""
+    keep = messages at the start that are never forgotten. max_tokens = how long her reply may run (a story's
+    breakdown gets more)."""
     messages.append({"role": "user", "content": question})
     request = messages[:-1] + [{"role": "user", "content": f"{question}\n\n{note}"}] if note else messages
 
-    chunks = llm.chat_stream(request, slot=slot, max_tokens=200,
+    chunks = llm.chat_stream(request, slot=slot, max_tokens=max_tokens,
                              temperature=0.7, top_p=0.8, top_k=20, min_p=0.05,
-                             presence_penalty=0.3)  # Qwen's chat settings, but a light penalty: 1.5 pushed her to odd words
+                             presence_penalty=0.5)  # Qwen's chat settings, but a light penalty: 1.5 pushed her to odd words
 
     reply = ""
     shown = 0  # how much of her words on_text has been given

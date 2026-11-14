@@ -83,7 +83,10 @@ class Brain(QObject):
         elif self.session is None:
             return
         elif what == "open":
-            self._speak("opening", self.session.open, args[0] if args else None)
+            if self.session.opens_silently():  # her story has her say nothing: just her mood shows
+                self.mood.emit(self.session.mood)
+            else:
+                self._speak("opening", self.session.open, args[0] if args else None)
         elif what == "say":
             self._speak("user", self.session.user_says, args[0])
         elif what == "duet":

@@ -127,6 +127,7 @@ class Story:
     def __init__(self, character):
         self.character = character
         self.opening_now = False  # the reply being written begins a step
+        self.breaking = False     # the reply being written is an ends = "messages" step's last (its `breaks`)
 
     def _progress(self, save):
         """Her story's progress, started if trust sits at a story quest's gate. Else None."""
@@ -155,6 +156,47 @@ class Story:
         self.opening_now = True
         return self.character.fill(_quest(self.character, progress["quest"])["steps"][progress["step"]]["opens"])
 
+    def begins_silently(self, save, present=None, today=None):
+        """At her greeting: a due silent step begins, or one has begun already (opened again the same day), and she
+        says nothing (True). Else False, and nothing changes."""
+        if self.silent(save):  # (reopened mid-step, she greeted you as if nothing had happened)
+            return True
+        step = next_step(save, self.character, today)
+        if not step or not step.get("silent") or self.begin_text(save, True, today, present) is None:
+            return False
+        self.opening_now = False  # (no reply begins it)
+        return True
+
+    def silent(self, save, today=None):
+        """In a silent step, or the lingering mood after one (the rest of that day): she never speaks up on her own,
+        and has no greeting (only answers you)."""
+        step = current_step(save, self.character)
+        if step:
+            return bool(step.get("silent"))
+        left = lingering(save, today)  # (after her breakdown she asked "Did you have a quiet day?" on her own)
+        return bool(left and left.get("silent"))
+
+    def message_in(self, save):
+        """Your message, during an ends = "messages" step: counted. On the last one, the hidden note that has her
+        break (its `breaks`), and the step ends after her reply (after_reply). Else None."""
+        step = current_step(save, self.character)
+        if not step or step["ends"] != "messages":
+            return None
+        progress = save["story"]
+        progress["messages"] = progress.get("messages", 0) + 1
+        write_save(save)
+        if progress["messages"] < step["messages"]:
+            return None
+        self.breaking = True
+        fill = self.character.fill
+        return fill("(Not part of the user's message: " + step["breaks"].rstrip(".") + "."
+                    + (" " + step["breaks_note"] if step.get("breaks_note") else "") + ")")
+
+    def breaking_tokens(self, save):
+        """How long her `breaks` reply may run: breaks_tokens (default 600)."""
+        step = current_step(save, self.character)
+        return (step or {}).get("breaks_tokens", 600)
+
     def note(self, save, present=None):
         """The step's hidden note on each of her replies, or a lingering mood's note, or None."""
         step = current_step(save, self.character)
@@ -166,6 +208,8 @@ class Story:
     def mood(self, save, present=None):
         """The mood the step (or its lingering) holds her in, whatever her tag says."""
         step = current_step(save, self.character)
+        if step and self.breaking and step.get("breaks_mood"):
+            return step["breaks_mood"]
         if step and step.get("mood"):
             return step["mood"]
         left = lingering(save, character=self.character)
@@ -189,7 +233,11 @@ class Story:
         return bool(step and step["ends"] == "goodbyes")
 
     def after_reply(self, save, today=None):
-        """After each reply: ends an ends = "after_it" step. Returns "leave", "done", "next" or None."""
+        """After each reply: ends an ends = "after_it" step, or an ends = "messages" one she just broke in.
+        Returns "leave", "done", "next" or None."""
+        if self.breaking:
+            self.breaking = False
+            return self._end(save, today)
         if not self.opening_now:
             return None
         self.opening_now = False
@@ -259,7 +307,7 @@ class Story:
         if step.get("mood") and step.get("lingers"):  # an injury doesn't heal the moment the step is over
             last = today + datetime.timedelta(days=step["lingers"] - 1)
             save["lingering"] = {"mood": step["mood"], "until": last.isoformat(),
-                                 "quest": quest["id"], "step": progress["step"]}
+                                 "quest": quest["id"], "step": progress["step"], "silent": step.get("silent", False)}
         last_step = progress["step"] + 1 >= len(quest["steps"])
         completed = (last_step or step["completes"]) and "major-" + quest["id"] not in save.get("quests_done", [])
         if completed:  # the gate opens; any later steps are its epilogue
@@ -269,7 +317,8 @@ class Story:
                 kept["private"] = True
         if not last_step:
             back = today + datetime.timedelta(days=step["away_days"] + 1) if step["away_days"] else None
-            progress.update(step=progress["step"] + 1, begun=False, goodbyes=0, back_on=back and back.isoformat())
+            progress.update(step=progress["step"] + 1, begun=False, goodbyes=0, messages=0,
+                            back_on=back and back.isoformat())
             write_save(save)
             return "done" if completed else "leave" if step["leaves"] else "next"
         del save["story"]

@@ -131,7 +131,11 @@ class MajorQuests:
             quest["starts"] + self.character.fill(
             ". {They} replies as usual. Then, at the very end of {their} reply, {they} judges whether it's done, and adds one "
             "more tag: [done] only if ") + quest["done_when"] + self.character.fill(
-            ". [not yet] if the user changes the subject, brushes it off, or doesn't really respond to it.)")
+            # (Ruby asked what a colour is like, was told "red means danger", "red harms you", and judged [not yet]
+            #  every time, because she wanted to hear more: wanting more is not the same as no answer)
+            ". A real try counts, even a short or silly one, and even if {they} would love to hear more: {they} can "
+            "keep asking about it after [done]. [not yet] only if the user changes the subject, brushes it off, or "
+            "doesn't really respond to it.)")
 
     def finished(self, save, message, feeling, judged):
         """The quest if this message finished it, else None. Needs her [done], and a nice message for a quest

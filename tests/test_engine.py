@@ -253,7 +253,7 @@ class DiaryTest(unittest.TestCase):
             llm.chat = real
         self.assertEqual(notes, [("The user's name is Jerry.", True), ("The user had a long day at work.", False),
                                  ("The user is resting after work.", False)])
-        self.assertIn("The user is never Vesper, and never Pip or Ruby:", prompts[0])
+        self.assertIn("The user is never Vesper, and never Opal or Pip or Ruby:", prompts[0])
         self.assertNotIn("Mira", prompts[0], "her real name stays her secret")
         self.assertEqual(Character("mira").name, "Vesper")
         self.assertTrue({"Pip", "Vesper", "Mira"} <= __import__("engine.character", fromlist=["x"]).cast())
@@ -415,6 +415,8 @@ class MajorQuestTest(unittest.TestCase):
         self.assertTrue(all(notes[:-1]) and notes[-1] is None, "she judges LISTEN_FOR messages, then stops")
         self.assertIn("[done]", notes[0])
         self.assertIn(self.pip.major_quests[1]["done_when"], notes[0])
+        # (Ruby judged "red means danger" [not yet] three times over, because she wanted to hear more)
+        self.assertIn("even if she would love to hear more", notes[0])
 
     def test_only_her_done_finishes_it(self):
         self.major.due(self.save)
@@ -3561,7 +3563,7 @@ class TemplateTest(unittest.TestCase):
         game = tempfile.mkdtemp(prefix="pet-template-")
         try:
             cast = os.path.join(game, "character")
-            for folder in ("pip", "mira", "ruby", "duets"):
+            for folder in ("pip", "mira", "ruby", "npc", "duets"):
                 shutil.copytree(os.path.join(repo, "character", folder), os.path.join(cast, folder))
             shutil.copytree(template, os.path.join(cast, "FOLDER"))
             shutil.copy(os.path.join(template, "duet.toml"), os.path.join(cast, "duets", "FOLDER-pip.toml"))
@@ -3634,6 +3636,14 @@ class RepeatTest(unittest.TestCase):
         self.assertEqual(len(said), 4, "the copy isn't kept in her chat")
         self.assertNotIn(self.COPY + " Did she say anything?", " ".join(said))
 
+    def test_saying_nothing_is_asked_again(self):
+        """Told to answer in one to three words, Ruby once gave an empty reply: an empty bubble."""
+        s = self.sitting(["", "*turns away*"])
+        turn = s.user_says("u getting new eyes")
+        self.assertEqual(turn.reply, "*turns away*")
+        self.assertIn("must say something this time", self.notes[-1])
+        self.assertEqual(len(s.messages[s.keep:]), 2, "the empty reply isn't kept in her chat")
+
     def test_new_words_and_short_replies_are_left_alone(self):
         s = self.sitting(["Oh no, that's a very dangerous faction to be close to.",
                           "Then I'll keep a close eye on her at the bakery tomorrow.", "Thank you!", "Thank you!"])
@@ -3667,6 +3677,13 @@ class ForcedTodayTest(unittest.TestCase):
         self.assertEqual(plan.note, "the others are busy today, so she brought Pip.")
         self.assertNotIn("today", self.roster.state(), "roster.json's own record isn't touched")
         self.assertEqual(self.roster.today("mira").members, ["mira"], "a character opened by name still comes alone")
+
+    def test_an_npc_can_come_along_but_never_lead(self):
+        self.write('{"members": ["ruby", "opal"]}')
+        self.assertEqual(self.roster.forced().members, ["ruby", "opal"], "to test Ruby's days with Opal")
+        self.write('{"members": ["opal", "ruby"]}')
+        with self.assertRaisesRegex(ValueError, "an NPC can't lead"):
+            self.roster.forced()
 
     def test_a_notepad_bom_is_fine(self):
         with open(self.roster.FORCED, "w", encoding="utf-8-sig") as f:
@@ -3764,6 +3781,201 @@ class ArrivalTest(unittest.TestCase):
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
         return path
+
+
+class YieldTest(unittest.TestCase):
+    """Ruby's gate 3 story, the-yield: three days with Opal (an NPC, character/npc/opal), then a silent day that
+    ends on your third message (ends = "messages"), then her answer step. On temporary saves."""
+
+    def setUp(self):
+        from mind import session
+        self.session = session
+        self.real = session.start_server, session.warm_up, session.ask
+        self.judged, self.notes, self.tokens = None, [], []
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, **kw):
+            self.tokens.append(kw.get("max_tokens", 200))
+            self.notes.append(note)
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "ok [nice]"}]
+            return "ok", {}, "nice", "sad", self.judged
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
+        session.ask = ask
+        self.path = gated_save(points=trust.TRUST_POINTS[6] - 1, trust_level=6)  # the top of stage 3
+        trust.start(self.path, self.ruby().gates)
+
+    def tearDown(self):
+        self.session.start_server, self.session.warm_up, self.session.ask = self.real
+
+    def ruby(self):
+        c = Character("ruby")
+        c.save_path, c.log_path = self.path, os.path.join(TMP, "ruby.log")
+        return c
+
+    def opal(self):
+        c = Character("opal")
+        c.save_path, c.log_path = temp_path("opal"), os.path.join(TMP, "opal.log")
+        return c
+
+    def saved(self):
+        from engine.save import load_save
+        data = load_save(self.path)
+        data.gates = self.ruby().gates
+        return data
+
+    def at_step(self, step):
+        from engine.save import load_save, write_save
+        data = load_save(self.path)
+        data["story"] = {"quest": "the-yield", "step": step, "begun": False, "back_on": None, "goodbyes": 0}
+        write_save(data)
+
+    def sitting(self, company=()):
+        s = self.session.Session(self.ruby(), say=lambda *_: None, company=list(company))
+        s.quests.next = time.time() + 3600
+        from mind import idle
+        s.idle.fired = {(datetime.date.today().isoformat(), h, m) for h, m, _ in idle.CLOCK}
+        return s
+
+    def test_her_story_is_set_up(self):
+        from desktop import check
+        r = self.ruby()
+        steps = r.major_quests[3]["steps"]
+        self.assertEqual([s["needs"] for s in steps], [["ruby", "opal"]] * 3 + [["ruby"]] * 2)
+        self.assertEqual([s["ends"] for s in steps], ["day", "day", "day", "messages", "answer"])
+        self.assertEqual([s["silent"] for s in steps], [False, False, False, True, False])
+        self.assertEqual([s["completes"] for s in steps], [False] * 4 + [True], "your answer opens stage 4")
+        self.assertEqual((steps[3]["mood"], steps[3]["breaks_mood"], steps[3]["messages"]), ("injured", "breakdown", 3))
+        self.assertEqual(r.story_moods, {"injured", "breakdown"})
+        self.assertFalse(r.story_moods & r.moods, "the model would pick them on its own")
+        self.assertEqual(check.mood_problems(r), [])
+        self.assertEqual(check.mood_problems(self.opal()), [])
+        self.assertEqual(check.cast_problems(), [])
+
+    def test_opal_is_an_npc(self):
+        from engine import character
+        from progress import roster
+        opal = self.opal()
+        self.assertTrue(opal.npc)
+        self.assertFalse(self.ruby().npc)
+        self.assertEqual((opal.quests, opal.major_quests), ([], {}))
+        self.assertTrue(character.is_npc("opal") and not character.is_character("opal"))
+        self.assertEqual(character.npcs(), ["opal"])
+        self.assertEqual(character.folder_of("Opal"), "opal", "Ruby's story needs her folder, from her name")
+        self.assertIn(os.path.join("saves", "npc"), Character("opal").save_path)
+        cast = {u["who"] for u in roster.rules()["unlocks"] + roster.rules()["arrivals"]}
+        self.assertNotIn("opal", cast, "she never comes in a lineup")
+
+    def test_ruby_and_opal_chat(self):
+        """Their duet file: every topic at stage 1, since Opal (an NPC) is always at stage 1 and a pair's topics
+        open at the lower stage."""
+        from progress import duets
+        from desktop import check
+        pair = duets.load(["opal", "ruby"])
+        self.assertIsNotNone(pair)
+        self.assertEqual(pair.folders, {"ruby", "opal"})
+        self.assertEqual({t["stage"] for t in pair.topics}, {1}, "a later stage would never come up")
+        self.assertEqual({t["starts"] for t in pair.topics}, {"ruby", "opal"})
+        self.assertIsNotNone(pair.pick(1))
+        self.assertEqual(check.duet_problems(), [])
+
+    def test_her_story_brings_opal(self):
+        """Opal is never settled in the roster (she's never unlocked), but Ruby's story still brings her."""
+        from progress import roster
+        from unittest import mock
+        saves = {"ruby": (self.ruby(), self.saved())}
+        for folder in ("pip", "mira"):
+            c = Character(folder)
+            data = Save(temp_path(folder), {"trust": 1, "points": 0, "quests_done": []})
+            data.gates = c.gates
+            saves[folder] = (c, data)
+        with mock.patch.object(roster, "_save_of", lambda folder: saves[folder]):
+            found = roster.stories_need(["pip", "mira", "ruby"], roster.rules())
+        self.assertEqual((found.members, found.owner), (["ruby", "opal"], "ruby"))
+
+    def test_an_npc_keeps_nothing(self):
+        from engine.save import load_save, write_save
+        opal = self.opal()
+        data = trust.start(opal.save_path)
+        data.update(trust=5, points=200)
+        write_save(data)
+        s = self.session.Session(opal, say=lambda *_: None, company=["Ruby"])
+        self.assertEqual(s.save["trust"], 1, "her last sitting's save was kept")
+        s.open(("Ruby", "Hello!"))
+        turn = s.user_says("hello Opal, it's lovely to meet you")
+        self.assertEqual(turn.points_after, turn.points_before, "an NPC earns no trust from talk")
+        self.assertEqual(s.close(), [], "an NPC writes no diary")
+
+    def test_days_1_to_3_with_opal(self):
+        s = self.sitting(company=["Opal"])
+        turn = s.open()
+        self.assertTrue(turn.major_raised)
+        self.assertIn("introduces Opal", s.messages[-2]["content"])
+        s.user_says("nice to meet you both")
+        self.assertIn("first friend", self.notes[-1])
+        self.assertTrue(s.story.unfinished(s.save))
+        alone = self.sitting()
+        self.assertEqual(alone.story.begin_text(self.saved(), True, present=["ruby"]), None, "she needs Opal there")
+
+    def test_day_4_silent_then_she_breaks(self):
+        from progress import story
+        self.at_step(3)
+        self.assertEqual(story.mood_today(self.saved(), self.ruby(), ["ruby"]), "injured", "hurt from the portal on")
+        s = self.sitting()
+        self.assertTrue(s.opens_silently(), "no greeting at all")
+        self.assertEqual(s.mood, "injured")
+        self.assertTrue(self.sitting().opens_silently(), "opened again the same day: still no greeting")
+        self.assertEqual(self.saved()["story"]["step"], 3)
+        s.idle.last = 0  # (a long quiet)
+        self.assertIsNone(s.wants_to_speak(), "silent: she never speaks up on her own")
+        for message in ("are you okay?", "Ruby, what happened? Where's Opal?"):
+            turn = s.user_says(message)
+            self.assertIn("ONE TO THREE WORDS", self.notes[-1])
+            self.assertEqual(turn.mood, "injured")
+        self.assertIn('has just said "ok', self.notes[-1], "a word or two is too short for _copies: she said Opal? x4")
+        turn = s.user_says("please talk to me, I'm worried about you")
+        self.assertIn("she BREAKS", self.notes[-1])
+        self.assertIn("Never describe a blow", self.notes[-1])
+        self.assertNotIn("ONE TO THREE WORDS", self.notes[-1], "the brush-off note would fight the breakdown")
+        self.assertEqual(turn.mood, "breakdown")
+        self.assertEqual(self.tokens[-1], 600, "her breakdown may run long")
+        self.assertEqual(self.tokens[-2], 200)
+        self.assertFalse(turn.story_done, "day 5's answer opens stage 4, not the breakdown")
+        self.assertEqual(self.saved()["story"]["step"], 4)
+        turn = s.user_says("I'm here, take your time")
+        self.assertEqual(turn.mood, "injured", "still hurt for the rest of today")
+        self.assertIn("ONE OR TWO WORDS ONLY", self.notes[-1])
+        s.idle.last = 0
+        self.assertIsNone(s.wants_to_speak(), "after the breakdown she stays silent for the rest of the day")
+        self.assertTrue(self.sitting().opens_silently(), "opened again today: still no greeting, and day 5 waits")
+        self.assertEqual(self.saved()["story"]["step"], 4)
+        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        self.assertFalse(s.story.silent(self.saved(), tomorrow), "tomorrow she talks again (day 5)")
+
+    def test_day_5_her_name(self):
+        self.at_step(4)
+        s = self.sitting()
+        turn = s.open()
+        self.assertIn("say it with her and remember it", s.messages[-2]["content"])
+        self.judged = True
+        self.assertFalse(s.user_says("that's so sad").story_done, "no name, no promise")
+        turn = s.user_says("Opal. I'll remember her, I promise")
+        self.assertTrue(turn.story_done and turn.stage_up)
+        saved = self.saved()
+        self.assertIn("major-the-yield", saved["quests_done"])
+        self.assertIn("Opal knelt and gave up", saved["memories"][-1]["text"])
+        self.assertNotIn("story", saved)
+
+    def test_bad_steps_fail_at_load(self):
+        from engine.character import _check_step
+        moods = {"neutral", "injured"}
+        for step, says in [
+                ({"opens": "x", "silent": True}, "can't end \"after_it\""),
+                ({"opens": "x", "ends": "messages", "breaks": "y"}, "needs: messages"),
+                ({"opens": "x", "ends": "messages", "messages": 0, "breaks": "y"}, "above 0"),
+                ({"opens": "x", "ends": "messages", "messages": 3, "breaks": "y", "breaks_mood": "sobbing"},
+                 "breaks_mood 'sobbing'"),
+                ({"opens": "x", "ends": "day", "needs": ["opal", "ruby"]}, "an NPC can't")]:
+            with self.assertRaisesRegex(ValueError, re.escape(says)):
+                _check_step("[major_quests.3] step 1", dict(step), moods, "ruby")
 
 
 if __name__ == "__main__":

@@ -72,6 +72,8 @@ class Session:
         self.friends = Company(self.character, company)
         self.greeting_note = greeting_note
         start_server(say, slots)
+        if self.character.npc and os.path.exists(self.character.save_path):
+            os.remove(self.character.save_path)  # an NPC keeps nothing from one sitting to the next
         self.save = trust.start(self.character.save_path, self.character.gates)  # counts today as a day logged
         self.save["mood"] = "neutral"  # every sitting starts calm
         write_save(self.save)
@@ -104,6 +106,17 @@ class Session:
         self._raising = bool((begins and self.story.unfinished(self.save)) or major)
         extra = " ".join(filter(None, [self._first_visit(), self.friends.greeting(heard), self.greeting_note, self._news(), major, begins])) or None
         return self._turn(self.idle.opening(extra), "opening", on_text, on_mood)
+
+    def opens_silently(self):
+        """Instead of open(): True if a silent story step begins now, so she has no greeting at all (her step's
+        mood shows). Else False: call open()."""
+        if not self.story.begins_silently(self.save, self.present):
+            return False
+        self.save["mood"] = self.story.mood(self.save, self.present) or self.mood
+        write_save(self.save)
+        self.idle.pip_spoke()  # (her quiet starts now, not when the sitting did)
+        self.log("story: a silent step began, so no greeting")
+        return True
 
     def goodbye(self):
         """Say goodbye from the menu: (stage direction, kind) if she has something to say (her story begs her
@@ -142,7 +155,7 @@ class Session:
         if left is not None and 0 < left <= visits.WARN_MINUTES and not self.warned:
             self.warned = True
             return self._time_cue(self.character.time_warning, left), "time_warning"
-        if self.said_goodbye:
+        if self.said_goodbye or self.story.silent(self.save):  # (silent: she only answers you)
             return None
         if time.time() - self.idle.last >= QUIET_FIRST:
             begins = self.story.begin_text(self.save, greeting=False, present=self.present)
@@ -174,6 +187,9 @@ class Session:
     def close(self):
         """End of the sitting. Returns the diary notes she wrote (may be empty)."""
         self._count_stay()
+        if self.character.npc:  # no diary: she keeps nothing
+            self.log("sitting closed (an NPC: nothing kept)")
+            return []
         try:
             notes = memory.write_diary(self.save, self.transcript, 0, self.character, self.slot)
         except llm.ServerGone:
@@ -284,7 +300,10 @@ class Session:
         """The hidden note for this message (quest, story, old memories, friends, lore), and which quest
         she judges it for: (note or None, judging or None)."""
         note = judging = None
-        stepping = self.story.note(self.save, self.present)
+        breaking = self.story.message_in(self.save) if kind == "user" else None  # (counts your message)
+        stepping = breaking or self.story.note(self.save, self.present)
+        if not breaking and kind == "user" and self.story.silent(self.save):
+            stepping = "\n\n".join(filter(None, [stepping, self._not_again()]))
         answering = self.story.answer_note(self.save) if kind == "user" else None
         if answering:
             note, judging = "\n\n".join(filter(None, [stepping, answering])), "story"
@@ -323,6 +342,14 @@ class Session:
             answer = self._ask(text, on_text, note, on_mood)
         # (a small model's habit: Pip gave one reply word for word to three different messages, each copy making
         #  the next likelier. Thrown away and asked again, told what not to say: first, as a judging note goes last)
+        if not answer[0].strip():  # (told to say one to three words, Ruby once said nothing at all: an empty bubble)
+            self.log("said nothing, asked again")
+            del self.messages[-2:]
+            if on_text:
+                on_text(None)
+            again = self.character.fill("(Not part of the message: {name} must say something this time, even one "
+                                        "word or a short action in asterisks.)")
+            answer = self._ask(text, on_text, "\n\n".join(filter(None, [again, note])), on_mood)
         copied = self._copies(answer[0])
         if copied:
             self.log(f"repeated herself, asked again: {copied}")
@@ -333,6 +360,17 @@ class Session:
                                         "say it again, or anything like it: {they} answers this message in new words.)")
             answer = self._ask(text, on_text, "\n\n".join(filter(None, [again, note])), on_mood)
         return answer
+
+    def _not_again(self):
+        """While a silent story has her answer in a word or two: her last few replies, so she doesn't say them again
+        (too short for _copies, she answered "Opal?" four times running). Else None."""
+        said = [LEADING_TAGS.sub("", m["content"]).strip() for m in self.messages[self.keep:] if m["role"] == "assistant"]
+        said = [s for s in said[-REPEAT_LOOKBACK:] if s and len(s) < REPEAT_MIN * 2]  # (not her breakdown)
+        if not said:
+            return None
+        return self.character.fill("(Not part of the message: {name} has just said " + ", ".join(f'"{s}"' for s in said)
+                                   + ". This reply uses different words from all of those, and answers what the user "
+                                   "just said.)")
 
     def _copies(self, reply):
         """One of her last few replies this sitting that `reply` nearly copies (its words), or None."""
@@ -348,7 +386,7 @@ class Session:
         """Trust for your message, and whether it finished a quest or moved her story on.
         Returns (world quest done, major quest done, story outcome)."""
         done = major_done = None
-        if kind == "user":  # talking on her own earns nothing
+        if kind == "user" and not self.character.npc:  # talking on her own earns nothing (and an NPC has no trust)
             trust.talked(self.save, text, feeling)
             if judging:
                 self.log(f"{judging} judged: " + {True: "yes", False: "no", None: "no tag (doesn't count)"}[judged])
@@ -407,6 +445,8 @@ class Session:
         early = {}
         if on_mood:  # a story step's mood wins over her tag
             early["on_mood"] = lambda mood: on_mood(self.story.mood(self.save, self.present) or mood)
+        if self.story.breaking:  # (at 200 tokens her breakdown was cut off after a few lines)
+            early["max_tokens"] = self.story.breaking_tokens(self.save)
         return ask(self.messages, text, on_text=on_text, keep=self.keep, moods=self.character.moods, note=note, **early,
                    slot=self.slot)
 

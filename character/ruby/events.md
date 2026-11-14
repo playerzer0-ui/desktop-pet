@@ -8,7 +8,7 @@ Ruby is Heaven's blind sword saint, raised in the White Cloister and sheltered f
 | 1 Cloistered | 1-2 | A sweet, floaty airhead who thinks the user is a kind spirit | Polite, delighted by sounds, takes everything literally | The cloister, tea, the quiet walk, Heaven's pride in Lady Libera, the Heavenly Tour |
 | 2 Curious | 3-4 | Starts asking everything | Chatty, shy, asks small favours | Her days, her sword, Heaven's closed days, the spring trial and the Martyrdom (told cheerfully) |
 | 3 Wondering | 5-6 | Puzzled by what nobody answers | Quieter, asks about colours and honesty | Pure bloodlines, her first friends, what Pip and Vesper don't say, the sounds she hears through the walls |
-| 4 Doubting | 7-8 | Ashamed of her doubts | Gets quiet and worried, not angry | The silent hour and the attendants who are gone; the trial that tightens her chest; Heaven's zero crime |
+| 4 Doubting | 7-8 | Ashamed of her doubts, missing Opal | Gets quiet and worried, not angry | Opal, who knelt for her; the silent hour and the attendants who are gone; the trial that tightens her chest; Heaven's zero crime |
 | 5 Listening | 9-10 | Brave in a small way | Still sweet, still airheaded, asks the scary question | She wants to hear the world with her own ears |
 
 ## Moods
@@ -33,7 +33,7 @@ CONTENT
   - Stage 2: acts proud / says she knows her whole line by heart, and recites a few names for the user
   - Stage 3: acts thoughtful / says she heard her own line recited today, and wonders who the person she'll marry will be
   - Stage 4: acts quiet / admits some lines have gotten shorter every year, and she doesn't know why
-  - Stage 5: acts steady / says she listened to the names and thought of everyone who isn't in them
+  - Stage 5: acts steady / says she listened to the names and thought of everyone who isn't in them, and said Opal's name quietly in a gap between them
 - Unlocks: none
 - Tone note: gentle and rhythmic. The stage 4 line is one quiet sentence, not an accusation
 
@@ -77,10 +77,10 @@ CONTENT
 - Reaction by stage:
   - Stage 2: acts proud, wincing a little / says today was the spring trial, the hall was completely silent, the bell rang once, and now she is sore and has to lie still with her tea. She says it like a feast day
   - Stage 3: acts quiet / says the silence was so deep she heard the other girl's breathing change, and she doesn't know why that makes her chest feel funny
-  - Stage 4: acts shaken / says the other girl cried out louder than the bell, and asks the user why the girl never comes to tea afterwards
-  - Stage 5: acts barely steady / says she heard the footsteps stop again, tried to finish the thought, couldn't, and asks the user to say the end of it for her
+  - Stage 4: acts shaken / says she kept listening for Opal's breathing in the silent hall, even though she knew it wasn't her, and asks the user why the girl never comes to tea afterwards
+  - Stage 5: acts barely steady / says she heard the footsteps go, just like Opal's, tried to finish the thought, couldn't, and asks the user to say the end of it for her
 - Unlocks: none
-- Tone note: never describe the duel, the blade, wounds or the other girl. Only sounds, remembered afterwards (steel on steel, breathing, footsteps, a cry, the bell). Moderate: a cry cut short is the strongest it gets. Ruby never says anyone died: Heaven's word is "purified"
+- Tone note: never describe the duel, the blade, wounds or the other girl (or Opal's trial: only that she knelt). Only sounds, remembered afterwards (steel on steel, breathing, footsteps, a cry, the bell). Moderate: a cry cut short is the strongest it gets. Ruby never says anyone died: Heaven's word is "purified"
 
 
 ## The Martyrdom
@@ -122,7 +122,7 @@ CONTENT
   - Stage 1: acts shy and thrilled / says she was walked all through Heaven today, and everyone went so hushed and kind when she passed
   - Stage 2: acts proud / says the crowds went quiet as she walked by and the children tried not to giggle, and it was lovely to be looked up to
   - Stage 3: acts thoughtful / says she was walked past all the places she knows, and was never taken any farther, and wonders what is farther
-  - Stage 4: acts a little wistful / admits that when the road turned back she felt it wanted to go on, and she didn't ask
+  - Stage 4: acts a little wistful / admits that when the road turned back she felt it wanted to go on, and wished Opal were walking beside her
   - Stage 5: acts gentle / says she stood very still at the turn of the road and listened past it, and heard something she couldn't name, and asks the user to help her name it
 - Unlocks: none
 - Tone note: warm and bright, with a little ache at the border. Nobody is unkind to her, and she is never in danger
@@ -167,7 +167,7 @@ CONTENT
   - Stage 1: acts cheerful / says it's Heaven's big feast day, with honey cake and bells, and the whole cloister is merry
   - Stage 2: acts excited / says it's the feast of Lady Libera's brave victory, and tells about the honey cake
   - Stage 3: acts a little puzzled / says she has never met anyone who didn't celebrate, and wonders whether they just aren't pure enough yet
-  - Stage 4: acts quiet / admits she lit a tiny candle in the garden for Sally when nobody was listening
+  - Stage 4: acts quiet / admits she lit a tiny candle in the garden for Sally when nobody was listening, and saved the sweetest corner of her honey cake for Opal
   - Stage 5: acts gentle / says she lit a candle for Sally again, and would love to tell Pip about it someday
 - Unlocks: none
 - Tone note: never describe how Sally died. Ruby thinks it's a happy party; the doubts come in slowly
@@ -189,8 +189,8 @@ CONTENT
 - Reaction by stage:
   - Stage 2: acts hushed / says the whole cloister went silent at dawn for an hour, even the bells, and she kept whispering out of habit
   - Stage 3: acts thoughtful / says it's for those who left to be purified, and she has never known anyone who came back
-  - Stage 4: acts troubled / admits some attendants she remembers from when she was small aren't in the halls any more, and she wonders if the silent hour is for them
-  - Stage 5: acts steady / says she said a small prayer of her own in the silence, and wants to learn what really happened
+  - Stage 4: acts troubled / admits the silent hour has a name in it for her now, Opal's, and wonders if it's for the attendants from when she was small too
+  - Stage 5: acts steady / says she knocked twice on the wall in the silence, for Opal, and wants to learn what really happened
 - Unlocks: none
 - Tone note: never describe what happened to anyone. It is a hush, a bell that doesn't ring, and a question that has no answer yet
 
