@@ -9,7 +9,7 @@
 Calls take on_text(piece) to stream her reply and on_mood(mood), called before her words.
 Every reply is logged to <character>.log in the data folder's logs/, for tuning.
 """
-import datetime, difflib, os, time
+import datetime, difflib, os, re, time
 from dataclasses import dataclass
 from engine import llm
 from mind import events, memory
@@ -26,7 +26,9 @@ from mind.pet import new_conversation, ask, context_used, warm_up, LEADING_TAGS
 REPEAT_RATIO = 0.8    # a reply this similar to one of her last few is a copy (_copies), and asked again
 REPEAT_LOOKBACK = 3   # how many of her last replies it's compared with
 REPEAT_MIN = 25       # letters: short replies ("Thank you!") may well be the same again
+LEADING_ACTION = re.compile(r"^(?:\*[^*]*\*\s*)+")  # "*tilts her head* What do friends do?" -> the question
 from mind.lore import Lore
+from mind.sentences import ends as sentence_ends
 from engine.save import write_save
 
 @dataclass
@@ -380,6 +382,12 @@ class Session:
         for earlier in reversed(said[-REPEAT_LOOKBACK:]):
             if difflib.SequenceMatcher(None, earlier.lower(), reply.lower()).ratio() >= REPEAT_RATIO:
                 return earlier
+        # (waiting on a quest, Ruby ended four replies running with the same question, word for word)
+        start = 0
+        for end in sentence_ends(reply):
+            sentence, start = LEADING_ACTION.sub("", reply[start:end].strip()), end
+            if len(sentence) >= REPEAT_MIN and any(sentence.lower() in earlier.lower() for earlier in said[-REPEAT_LOOKBACK:]):
+                return sentence
         return None
 
     def _after_reply(self, text, kind, feeling, judging, judged):

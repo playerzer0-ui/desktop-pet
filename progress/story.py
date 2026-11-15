@@ -290,7 +290,7 @@ class Story:
         step = current_step(save, self.character)
         if not step or step["ends"] != "answer" or judged is not True or feeling == "rude":
             return None
-        if step["needs_nice"] and feeling != "nice":
+        if step["needs_nice"] and not quests.felt_nice(message, feeling):
             return None
         if len(message.split()) < 2 or quests.is_dodge(message) or not quests.looks_like_words(message):
             return None

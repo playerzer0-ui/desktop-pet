@@ -293,7 +293,10 @@ class QuestTest(unittest.TestCase):
         for judged in (False, None):  # she judged it a non-answer, or forgot to judge it
             q.next = 0; q.due(s)
             self.assertIsNone(q.answered(s, "ajsdasdad oafhoiqwfhef aosidoaidaid burgersssss", "neutral", judged))
-            self.assertIsNone(q.pending, "one chance: it's dropped")
+            self.assertTrue(q.pending, "she keeps waiting: a non-answer doesn't lose the quest")
+            for _ in range(quests.TRIES - 1):
+                q.answered(s, "ajsdasdad oafhoiqwfhef aosidoaidaid burgersssss", "neutral", judged)
+            self.assertIsNone(q.pending, "after TRIES of your messages she lets it go")
         self.assertEqual((s["quests_done"], s["points"]), ([], 3))
         q.next = 0; q.due(s)
         note = q.answer_note()
@@ -331,6 +334,26 @@ class AnswerCheckTest(unittest.TestCase):
             self.assertTrue(quests.is_dodge(answer), answer)
         for answer in self.JUNK:
             self.assertFalse(quests.looks_like_words(answer), answer)
+
+    def test_a_question_back_then_the_answer(self):
+        # ("what do you mean?" used to lose the quest: the real answer after it was never judged)
+        q = quests.Quests(pip())
+        s = Save(temp_path(), {"trust": 1, "points": 3, "quests_done": [], "today": {"talk": 0, "minutes": 0}})
+        q.next = 0; q.due(s)
+        quest_id = q.pending[0]
+        self.assertIsNone(q.answered(s, "what do you mean?", "nice", False))
+        self.assertTrue(q.answer_note(), "she still judges your next message")
+        self.assertEqual(q.answered(s, "it rains here almost every evening", "nice", True), quest_id)
+        self.assertIsNone(q.pending)
+        self.assertIn(quest_id, s["quests_done"])
+
+    def test_an_old_question_is_let_go(self):
+        q = quests.Quests(pip())
+        s = Save(temp_path(), {"trust": 1, "points": 3, "quests_done": [], "today": {"talk": 0, "minutes": 0}})
+        q.next = 0; q.due(s)
+        q.pending = (q.pending[0], time.time() - quests.ANSWER_WITHIN * 60 - 1)
+        self.assertIsNone(q.answered(s, "it rains here almost every evening", "nice", True), "too late")
+        self.assertIsNone(q.pending)
 
     def test_even_if_she_judged_it_answered(self):
         q = quests.Quests(pip())
@@ -395,6 +418,23 @@ class MajorQuestTest(unittest.TestCase):
         self.major.due(self.save)
         self.assertIsNone(self.major.finished(self.save, "thanks I guess, that's a blessing", "neutral", True))
         self.assertTrue(self.major.finished(self.save, "thanks I guess, that's a blessing", "nice", True))
+
+    def test_kind_words_tagged_neutral_still_count(self):
+        # (Pip tagged "of course... you're always welcome" [neutral] 2 times in 5, while calling it kind)
+        self.assertTrue(quests.felt_nice("of course you can keep coming here to rest, you're always welcome", "neutral"))
+        self.assertFalse(quests.felt_nice("of course you can keep coming here to rest, you're always welcome", "rude"))
+        self.assertFalse(quests.felt_nice("sure, rest if you have to", "neutral"), "no kind words: her tag decides")
+        self.assertTrue(quests.felt_nice("sure, rest if you have to", "nice"))
+
+    def test_her_own_word_back_is_no_answer(self):
+        # ("a blessing? for me?" finished Pip's thank-you, "it's a color" Ruby's colour and "the truth about what?" her
+        #  last quest: answer_words had her own words in them)
+        for folder, stage, echo, real in (("pip", 1, "a blessing? for me?", "that's so sweet, thank you"),
+                                          ("ruby", 1, "it's a color", "red usually means danger"),
+                                          ("ruby", 4, "the truth about what?", "I promise I'll tell you the truth")):
+            words = Character(folder).major_quests[stage]["answer_words"]
+            self.assertIsNone(re.search(words, echo, re.I), echo)
+            self.assertTrue(re.search(words, real, re.I), real)
 
     def test_brought_up_once_a_sitting(self):
         self.assertEqual(self.major.active(self.save)["id"], "thank-you")
@@ -3643,6 +3683,17 @@ class RepeatTest(unittest.TestCase):
         self.assertEqual(turn.reply, "*turns away*")
         self.assertIn("must say something this time", self.notes[-1])
         self.assertEqual(len(s.messages[s.keep:]), 2, "the empty reply isn't kept in her chat")
+
+    def test_the_same_question_again_is_asked_again(self):
+        """Waiting on a quest, Ruby ended reply after reply with the same question, word for word."""
+        question = "What do friends do together when they are alone?"
+        s = self.sitting(["Nobody has ever just spoken to me before. " + question,
+                          "That sounds a little heavy, but I am glad you are here. *tilts head* " + question,
+                          "It is heavy, but less so with you here."])
+        s.user_says("nobody? really?")
+        turn = s.user_says("that sounds lonely")
+        self.assertEqual(turn.reply, "It is heavy, but less so with you here.")
+        self.assertIn(f'has already said "{question}"', self.notes[-1])
 
     def test_new_words_and_short_replies_are_left_alone(self):
         s = self.sitting(["Oh no, that's a very dangerous faction to be close to.",

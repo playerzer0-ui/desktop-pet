@@ -140,7 +140,7 @@ done_when = "the user thanks her or is kind to her in return, so she gets to acc
 memory = "Pip gave the user a small blessing, and for once she let herself accept their thanks."
 points = 10
 needs_nice = true
-answer_words = '''\b(?:thank|thanks|thx|ty|kind|sweet|bless\w*|appreciate\w*|grateful|lovely|nice of you|means a lot)\b'''
+answer_words = '''\b(?:thank|thanks|thx|ty|kind|sweet|bless you|appreciate\w*|grateful|lovely|nice of you|means a lot)\b'''
 
 [major_quests.2]  # opens stage 3, Admitting the silence
 id = "first-favour"

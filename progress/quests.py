@@ -11,6 +11,7 @@ FIRST_AFTER = (30, 60)  # minutes open before the first quest
 GAP = (30, 60)          # minutes between quests
 PER_DAY = 2
 ANSWER_WITHIN = 30      # minutes
+TRIES = 4               # your messages she judges after asking: "what do you mean?" doesn't lose the quest
 
 # checked by code on top of her [answered] tag (the model is easily fooled by these)
 DODGES = re.compile(r"\bi\s+(?:really\s+|honestly\s+)?(?:do\s*n'?t|dont|do\s+not)\s+(?:really\s+)?know\b|\bidk\b|\bdunno\b|"
@@ -20,6 +21,15 @@ DODGES = re.compile(r"\bi\s+(?:really\s+|honestly\s+)?(?:do\s*n'?t|dont|do\s+not
 FILLER = set("i you it that this the a an um uh hmm well so yeah yes no nah oh ok okay really honestly haha lol "
              "actually just like but and or maybe what about how do does".split())
 CONSONANT_RUN = re.compile(r"[bcdfghjklmnpqrstvwxz]{4,}")  # keyboard mashing
+
+# plainly kind words: with them a [neutral] message is nice enough for a quest that needs a nice one (felt_nice)
+KIND = re.compile(r"\b(?:of course|welcome|always|any ?time|please do|promise|friends?|glad|love|care)\b", re.I)
+
+def felt_nice(message, feeling):
+    """For a quest or step with needs_nice: her [nice] tag, or [neutral] on plainly kind words. (Told "of course you
+    can keep coming here to rest, you're always welcome", Pip answered "that is so kind of you" and still tagged it
+    [neutral], 2 times in 5.) Rude never counts."""
+    return feeling == "nice" or (feeling == "neutral" and bool(KIND.search(message)))
 
 TAG_TALK = re.compile(r"\[\s*[a-z_:\s]*[a-z][a-z_:\s]*\]|\bsquare\s+brackets?\b", re.I)
 
@@ -45,6 +55,7 @@ class Quests:
         self.character = character
         self.next = time.time() + random.uniform(*FIRST_AFTER) * 60
         self.pending = None  # (quest id, time asked) while she waits for an answer
+        self.tries = 0       # your messages since she asked
 
     def due(self, save):
         """A stage direction for her question if it's time for one, else None."""
@@ -55,6 +66,7 @@ class Quests:
             return None
         quest_id, _, topic = random.choice(unasked)
         self.pending = ("world-" + quest_id, time.time())
+        self.tries = 0
         self.next = time.time() + random.uniform(*GAP) * 60
         return direction(self.character.fill("{name} has never seen the user's world and is curious about it. "
                                              "{They} asks the user about ") + f"{topic}.")
@@ -66,21 +78,29 @@ class Quests:
         topic = self.topic(self.pending[0])
         return self.character.fill(
             "(Not part of the user's message: {name} had just asked the user about ") + topic + self.character.fill(
-            ". {They} replies as usual. Then, at the very end of {their} reply, {they} judges strictly whether this message "
+            # (waiting, Ruby asked her question again in the same words after every message)
+            ". {They} answers what the user just said, in new words: {they} doesn't repeat {their} question word for "
+            "word, and doesn't apologise for asking. Then, at the very end of {their} reply, {they} judges strictly whether this message "
             "tells {them} something about that, and adds one more tag: [answered] only if it gives at least part of "
             "an answer about ") + topic + self.character.fill(
             ". [not answered] if it's about something else, asks {them} the question back, says they don't know, "
             "or is nonsense. A friendly message on another subject is still [not answered].)")
 
     def answered(self, save, message, feeling, judged=None):
-        """The quest id if this message finished it, else None. judged = her own tag: only True counts."""
+        """The quest id if this message finished it, else None. judged = her own tag: only True counts.
+        She keeps waiting for TRIES of your messages (a question back, then the answer), then lets it go: she can
+        ask again another time."""
         if not self.pending:
             return None
         quest_id, asked = self.pending
-        self.pending = None  # one chance: she can ask again another time
-        if (judged is not True or time.time() - asked > ANSWER_WITHIN * 60 or feeling == "rude"
+        self.tries += 1
+        late = time.time() - asked > ANSWER_WITHIN * 60
+        if (judged is not True or late or feeling == "rude"
                 or len(re.findall(r"\w+", message)) < 4 or is_dodge(message) or not looks_like_words(message) or mentions_tags(message)):
+            if late or self.tries >= TRIES:
+                self.pending = None
             return None
+        self.pending = None
         save["today"]["quests"] = save["today"].get("quests", 0) + 1
         trust.quest_done(save, quest_id, POINTS)
         return quest_id
@@ -129,7 +149,8 @@ class MajorQuests:
         return extra + self.character.fill(
             "(Not part of the user's message: {name} had just brought up something important to {them}: ") + \
             quest["starts"] + self.character.fill(
-            ". {They} replies as usual. Then, at the very end of {their} reply, {they} judges whether it's done, and adds one "
+            ". {They} answers what the user just said, in new words: {they} doesn't repeat what {they} already said "
+            "word for word, and doesn't apologise for bringing it up. Then, at the very end of {their} reply, {they} judges whether it's done, and adds one "
             "more tag: [done] only if ") + quest["done_when"] + self.character.fill(
             # (Ruby asked what a colour is like, was told "red means danger", "red harms you", and judged [not yet]
             #  every time, because she wanted to hear more: wanting more is not the same as no answer)
@@ -141,7 +162,7 @@ class MajorQuests:
         """The quest if this message finished it, else None. Needs her [done], and a nice message for a quest
         with needs_nice (a harsh reply sometimes still got [done]). Never rude, a dodge or mashing."""
         quest = self._moment(save)
-        unkind = feeling == "rude" or (quest and quest["needs_nice"] and feeling != "nice")
+        unkind = feeling == "rude" or (quest and quest["needs_nice"] and not felt_nice(message, feeling))
         if (not quest or judged is not True or unkind or len(re.findall(r"\w+", message)) < 2
                 or is_dodge(message) or not looks_like_words(message) or mentions_tags(message)):
             return None

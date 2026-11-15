@@ -70,7 +70,13 @@ class Company:
             f"but this message is from the user, the human who owns the desktop, and {{name}} answers the user. "
             f'In {{their}} reply, "you" is the user. {others} {are} {else_}: when the message is about {others}, '
             f"{{they}} talks about {others} by name. {{They}} never mixes up what is {{their}} own, what is {whose} "
-            f"and what is the user's.)")
+            f"and what is the user's. "
+            # (asked about Ruby, whom she only knows from the desktop, Pip said "my best friend, always ready to chat
+            #  about baking", and Vesper "she helps me with the baking stuff")
+            f"About {others}, {{they}} knows only what {{their}} own background says and what was said in this chat: "
+            f"{{they}} never makes up how they met, a shared past, or what {others} likes. If {{their}} background "
+            f"doesn't say how {{they}} knows {others}, they have only ever met here, on the user's desktop, and "
+            f"{{they}} says so.)")
 
     @property
     def _are(self):

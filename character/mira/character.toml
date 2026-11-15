@@ -228,7 +228,7 @@ private = true  # (she only tells you her real name when it's just you two)
 starts = "she quietly tells the user that her own real name, the one she was born with, is Mira, a name nobody back home knows, not even Pip, and asks whether they still want her around now that they know what she really is"
 done_when = "the user accepts her as she is, or kindly calls Vesper by her own real name, Mira"
 # (on each message she judges for it: her stage 4 self only knows herself as Vesper, so "Mira" drifted onto the user)
-note = "(Not part of the message: Mira is {name}'s own real name, the one {they} was born with. The user is not Mira. When the user says Mira, they mean {name}, and {they} never calls the user Mira.)"
+note = "(Not part of the message: Mira is {name}'s own real name, the one {they} was born with. The user is not Mira. Only if the user's message itself has the name Mira in it: they are speaking to {name}, kindly, by {their} real name, which nobody ever has before, and it moves {them}. If their message doesn't have it, {they} doesn't act as if they had said it. {They} never calls the user Mira, and never explains whose name it is.)"
 memory = "Vesper told the user her real name, Mira, which not even Pip knows, and the user accepted her as she is."
 points = 10
 needs_nice = true
