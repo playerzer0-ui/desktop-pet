@@ -12,7 +12,7 @@ Every reply is logged to <character>.log in the data folder's logs/, for tuning.
 import datetime, difflib, os, re, time
 from dataclasses import dataclass
 from engine import llm
-from mind import events, memory
+from mind import events, judge, memory
 from progress import roster, story, trust, visits
 from engine.character import Character, DEFAULT, folder_of
 from mind.directions import direction
@@ -276,6 +276,8 @@ class Session:
 
         note, judging = self._notes_for(text, kind)
         reply, timings, feeling, mood, judged = self._ask_retrying(text, on_text, note, on_mood)
+        if kind == "user" and not self.character.npc:
+            feeling, judged = self._judged(text, feeling, judged, judging)
         self.transcript += self.messages[-2:]
         mood = self.story.mood(self.save, self.present) or mood  # a story step can hold her mood
         self.save["mood"] = mood or self.mood
@@ -307,16 +309,22 @@ class Session:
         if not breaking and kind == "user" and self.story.silent(self.save):
             stepping = "\n\n".join(filter(None, [stepping, self._not_again()]))
         answering = self.story.answer_note(self.save) if kind == "user" else None
+        self._asking = None  # for the judge: (what she asked, what counts as done)
         if answering:
             note, judging = "\n\n".join(filter(None, [stepping, answering])), "story"
+            self._asking = self.story.asking(self.save)
         elif stepping:
             note = stepping
         elif kind == "user":
             note = self.major.answer_note(self.save)
             judging = "major" if note else None
-            if not note:
+            if note:
+                self._asking = self.major.asking(self.save)
+            else:
                 note = self.quests.answer_note()
                 judging = "world quest" if note else None
+                if note:
+                    self._asking = self.quests.asking()
         recalled = memory.recall(self._public(), text) if kind == "user" else []
         if recalled:
             self.log("brought back: " + " · ".join(m["text"] for m in recalled))
@@ -329,6 +337,20 @@ class Session:
             self.log("lore details: " + " · ".join(self.lore.shown))
             note = "\n\n".join(filter(None, [told, note]))
         return note, judging
+
+    def _judged(self, text, feeling, judged, judging):
+        """How your message felt and whether it finished what she's judging, from the judge (mind/judge.py): asked
+        on its own, it is far more reliable than the tags she wrote while in character. Her own tags are kept only
+        where the judge couldn't be asked. Returns (feeling, judged)."""
+        judge_slot = self.slots  # the slot after the characters'
+        felt = judge.feeling(self.character, text, judge_slot)
+        if felt and felt != feeling:
+            self.log(f"judge: felt {felt} (her own tag said {feeling})")
+        verdict = judge.done(self.character, *self._asking, text, judge_slot) if judging and self._asking else None
+        if verdict is not None and verdict != judged:
+            was = {True: "yes", False: "no", None: "no tag"}
+            self.log(f"judge: {judging} {was[verdict]} (her own tag said {was[judged]})")
+        return felt or feeling, judged if verdict is None else verdict
 
     def _ask_retrying(self, text, on_text, note, on_mood):
         """Ask the model. If the server went away, start it again and retry once. If her reply copies one of her

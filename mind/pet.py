@@ -68,7 +68,17 @@ def prefix_of(messages):
     """The exact text a request with these messages starts with, before the next question."""
     marker = "PIP_NEXT_QUESTION"
     full = llm.template(messages + [{"role": "user", "content": marker}])
-    return full[:full.rindex("<|im_start|>", 0, full.index(marker))]
+    before = full[:full.index(marker)]
+    # back to where the question's turn starts, whatever the model calls it (Qwen: <|im_start|>, Gemma: <start_of_turn>)
+    start = max(before.rfind(mark) for mark in TURN_STARTS)
+    if start < 0:
+        return before  # a chat format we don't know: the text up to the question is still what a request starts with
+    last = messages[-1] if messages else None
+    if last and last["role"] == "user" and last["content"][-40:] in before[start:]:
+        return before  # the question shares its turn with the message before it (llm.py joined them: Gemma)
+    return before[:start]
+
+TURN_STARTS = ("<|im_start|>", "<start_of_turn>", "<|start_header_id|>", "[INST]")
 
 FEELING_TAG = re.compile(r"\s*\[(?:feeling:\s*)?(nice|neutral|rude)\]", re.I)  # (it sometimes adds "feeling:")
 MOOD_TAG = re.compile(r"\s*\[mood:\s*([a-z]+)\]", re.I)

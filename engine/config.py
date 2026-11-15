@@ -27,12 +27,13 @@ PORT = int(os.environ.get("PET_PORT", 8080))
 SERVER = f"http://127.0.0.1:{PORT}"  # not "localhost": on Windows that tries IPv6 first, ~2 s per request
 N_CTX = 12288  # context per character (at 8192 she forgot the chat after ~10 exchanges)
 FORGET_AT = 0.75  # this full, she forgets the oldest chat lines
+JUDGE_CTX = 1024  # extra context for the judge's own slot (mind/judge.py): its questions are a few hundred tokens
 
 # change all four together to switch models
-MODEL_FILE = "Qwen3.5-4B-Q5_K_M.gguf"
-MODEL_URL = "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q5_K_M.gguf"
-MODEL_SHA256 = "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39"
-MODEL_SIZE = 3_143_656_608  # bytes
+MODEL_FILE = "gemma-3-4b-it-Q5_K_M.gguf"
+MODEL_URL = "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q5_K_M.gguf"  # not yet checked
+MODEL_SHA256 = "974e5c2f13c321fc3258b6fbf2ce326a09d8ace511aa6846df1db62baf7df7d4"
+MODEL_SIZE = 2_829_698_176  # bytes
 
 def _model():
     """DATA/models, or models/ next to the code. If in neither yet: where it will be downloaded."""

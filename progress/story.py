@@ -285,6 +285,11 @@ class Story:
             ". [not yet] if it doesn't: a question back, a change of subject, kind words that don't answer it, or "
             "brushing it off.)")
 
+    def asking(self, save):
+        """For the judge (mind/judge.py), during an ends = "answer" step: (what she asked, what counts as done)."""
+        step = current_step(save, self.character)
+        return "{they} asked the user " + (step.get("waiting_on") or "about what {they} brought up"), step["done_when"]
+
     def answered(self, save, message, feeling, judged, today=None):
         """Ends the step if she judged [done] (and it felt nice, with needs_nice). Never rude, a dodge or mashing."""
         step = current_step(save, self.character)

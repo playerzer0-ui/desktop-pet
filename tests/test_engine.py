@@ -9,7 +9,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # no windows pop up
 os.environ["PET_DATA_DIR"] = tempfile.mkdtemp(prefix="pet-tests-data-")  # (never the player's real saves/logs)
 
-from mind import memory, pet
+from mind import judge, memory, pet
+REAL_JUDGE = judge.feeling, judge.done
+judge.feeling = judge.done = lambda *a, **k: None  # (no server here: her own tags decide, except in JudgeTest)
 from progress import quests, trust
 from engine.character import Character, for_stage
 from engine.save import Save, stage_of
@@ -3701,6 +3703,132 @@ class RepeatTest(unittest.TestCase):
         for m in ["Vesper is bloodcult!", "watch out", "I made you tea", "and some bread"]:
             s.user_says(m)
         self.assertEqual(len(self.notes), 4, "nothing asked again")
+
+class JudgeTest(unittest.TestCase):
+    """How your message felt and whether it finished a quest are asked in a short call of their own (mind/judge.py):
+    Gemma tagged 1 kind message in 12 [nice] while in character, and 16 of 16 when asked alone."""
+
+    def setUp(self):
+        from unittest import mock
+        from engine import llm
+        self.asked = []
+        def pick(messages, words, slot=0):
+            self.asked.append((messages, tuple(words), slot))
+            return self.answer if self.answer in words else words[0]
+        patch = mock.patch.object(llm, "pick", pick)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.feeling, self.done = REAL_JUDGE
+
+    def test_feeling_is_one_of_three_words(self):
+        self.answer = "nice"
+        self.assertEqual(self.feeling(pip(), "thank you, that's so kind", 2), "nice")
+        messages, words, slot = self.asked[-1]
+        self.assertEqual((words, slot), (("nice", "neutral", "rude"), 2), "its own slot, and no other answer possible")
+        self.assertIn('"thank you, that\'s so kind"', messages[-1]["content"])
+        self.assertIn("not how Pip feels today", messages[-1]["content"], "(Gemma tagged the character's own mood)")
+        self.assertNotIn("# Persona", str(messages), "no persona: it judges as an outside reader")
+
+    def test_done_is_yes_or_no(self):
+        quest = pip().major_quests[2]
+        for self.answer, expected in (("yes", True), ("no", False)):
+            self.assertIs(self.done(pip(), quest["starts"], quest["done_when"], "how about Basil?", 2), expected)
+        question = self.asked[-1][0][-1]["content"]
+        self.assertIn(quest["done_when"], question)
+        self.assertIn('"how about Basil?"', question)
+        self.assertEqual(self.asked[-1][1], ("yes", "no"))
+
+    def test_no_judge_no_answer(self):
+        from unittest import mock
+        from engine import llm
+        def gone(*a, **k):
+            raise llm.ServerGone("no server")
+        with mock.patch.object(llm, "pick", gone):
+            self.assertIsNone(self.feeling(pip(), "hello there", 1))
+            self.assertIsNone(self.done(pip(), "she asked the user about rain", "it says something about rain", "hi", 1))
+
+    def sitting(self, tags):
+        """A sitting whose replies carry these (feeling, judged) tags of her own."""
+        from mind import session
+        tags = iter(tags)
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, **kw):
+            feeling, judged = next(tags)
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "[neutral] [mood: happy] ok"}]
+            return "A reply of her own, long enough.", {}, feeling, "happy", judged
+        real = session.start_server, session.warm_up, session.ask
+        session.start_server, session.warm_up, session.ask = (lambda *a, **k: None), (lambda *a, **k: ("loaded", 1)), ask
+        self.addCleanup(lambda: setattr(session, "start_server", real[0]) or setattr(session, "warm_up", real[1])
+                        or setattr(session, "ask", real[2]))
+        c = pip()
+        c.save_path = os.path.join(tempfile.mkdtemp(), "pip.json")
+        s = session.Session(c, say=lambda *_: None, slot=0, slots=2)
+        s.quests.next = 1e12
+        return s
+
+    def test_the_judge_overrides_her_own_tags(self):
+        from unittest import mock
+        s = self.sitting([("rude", None), ("neutral", None)])
+        with mock.patch.object(judge, "feeling", lambda c, text, slot: "nice"), \
+                mock.patch.object(judge, "done", lambda c, asked, counts, text, slot: True):
+            turn = s.user_says("I'm so sorry, that sounds awful")
+            self.assertEqual(turn.feeling, "nice", "her own tag said rude: she was the one hurting")
+            self.assertEqual(turn.points_after - turn.points_before, 2, "a nice message earns 2")
+            # a world quest she's waiting on: she forgot her tag, the judge says it's answered
+            s.character.quests = [q for q in s.character.quests if q[0] == "rain"]
+            s.quests.next = 0
+            self.assertTrue(s.quests.due(s.save))
+            turn = s.user_says("it rains here almost every evening")
+            self.assertTrue(turn.quest_done)
+
+    def test_the_judge_slot_is_the_one_after_the_characters(self):
+        from unittest import mock
+        s = self.sitting([("neutral", None)])
+        slots = []
+        with mock.patch.object(judge, "feeling", lambda c, text, slot: slots.append(slot)):
+            s.user_says("hello there Pip")
+        self.assertEqual(slots, [2], "two characters have slots 0 and 1")
+
+    def test_without_the_judge_her_own_tags_stand(self):
+        s = self.sitting([("nice", None)])
+        self.assertEqual(s.user_says("you're lovely, thank you").feeling, "nice")
+
+class OtherModelTest(unittest.TestCase):
+    """Another model's chat format (Gemma 3): turns are <start_of_turn>, not <|im_start|>, and two messages in a row
+    from the same side are refused. Ruby "couldn't wake up": ValueError: substring not found."""
+
+    def gemma(self, messages):
+        text = ""
+        for m in messages:
+            text += f"<start_of_turn>{'model' if m['role'] == 'assistant' else 'user'}\n{m['content']}<end_of_turn>\n"
+        return text + "<start_of_turn>model\n"
+
+    def test_the_prefix_ends_where_the_question_turn_starts(self):
+        from unittest import mock
+        from engine import llm
+        fixed = [{"role": "user", "content": "PERSONA\n\nhello"}, {"role": "assistant", "content": "hi"}]
+        with mock.patch.object(llm, "template", self.gemma):
+            self.assertEqual(pet.prefix_of(fixed), "<start_of_turn>user\nPERSONA\n\nhello<end_of_turn>\n"
+                                                   "<start_of_turn>model\nhi<end_of_turn>\n")
+        chatml = lambda messages: "".join(f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n" for m in messages)
+        with mock.patch.object(llm, "template", chatml):
+            self.assertEqual(pet.prefix_of(fixed), "<|im_start|>user\nPERSONA\n\nhello<|im_end|>\n"
+                                                   "<|im_start|>assistant\nhi<|im_end|>\n", "Qwen: as before")
+
+    def test_memories_and_your_message_share_a_turn(self):
+        from unittest import mock
+        from engine import llm
+        messages = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"},
+                    {"role": "user", "content": "MEMORIES"}, {"role": "user", "content": "how are you?"}]
+        with mock.patch.object(llm, "alternates", lambda: True):
+            joined = llm.fit(messages)
+            self.assertEqual([m["role"] for m in joined], ["user", "assistant", "user"])
+            self.assertEqual(joined[-1]["content"], "MEMORIES\n\nhow are you?")
+            self.assertEqual(len(messages), 4, "her own list is left as it was")
+            # her prompt read ahead of time includes the memories, up to where your message will go
+            with mock.patch.object(llm, "template", lambda m: self.gemma(llm.fit(m))):
+                self.assertTrue(pet.prefix_of(messages[:3]).endswith("<start_of_turn>user\nMEMORIES\n\n"))
+        with mock.patch.object(llm, "alternates", lambda: False):
+            self.assertIs(llm.fit(messages), messages, "Qwen takes them as they are")
 
 class ForcedTodayTest(unittest.TestCase):
     """today.json (roster.forced): for testing, a file in the data folder that says who comes, every day."""

@@ -18,9 +18,36 @@ def _post(path, payload, stream=False):
     except (requests.ConnectionError, requests.Timeout) as e:
         raise ServerGone(f"llama-server didn't answer {path}: {e}") from e
 
+_strict = None  # whether the model's chat format refuses two messages in a row from the same side (asked once)
+
+def alternates():
+    """True for a model whose chat format needs user and assistant to take turns (Gemma: two user messages in a row,
+    her memories and then your message, are refused with an error). Qwen takes them as they are."""
+    global _strict
+    if _strict is None:
+        two = [{"role": "user", "content": "a"}, {"role": "user", "content": "b"}]
+        try:
+            _strict = not requests.post(SERVER + "/apply-template", json={"messages": two}, timeout=10).ok
+        except requests.RequestException:
+            return False  # no server to ask yet: ask again next time
+    return _strict
+
+def fit(messages):
+    """The messages as this model can take them: for one that needs turns to alternate, messages in a row from the
+    same side are joined into one."""
+    if not alternates():
+        return messages
+    joined = []
+    for m in messages:
+        if joined and joined[-1]["role"] == m["role"]:
+            joined[-1] = {"role": m["role"], "content": joined[-1]["content"] + "\n\n" + m["content"]}
+        else:
+            joined.append(dict(m))
+    return joined
+
 def chat_stream(messages, slot=0, **settings):
     """Her reply as it's written: yields each chunk the server sends ("timings" in the last)."""
-    response = _post("/v1/chat/completions", {"messages": messages, **settings, **NO_THINKING, "stream": True, "id_slot": slot},
+    response = _post("/v1/chat/completions", {"messages": fit(messages), **settings, **NO_THINKING, "stream": True, "id_slot": slot},
                      stream=True)
     response.raise_for_status()
     try:
@@ -32,13 +59,22 @@ def chat_stream(messages, slot=0, **settings):
 
 def chat(messages, slot=0, **settings):
     """A whole reply at once (the diary)."""
-    response = _post("/v1/chat/completions", {"messages": messages, **settings, **NO_THINKING, "id_slot": slot})
+    response = _post("/v1/chat/completions", {"messages": fit(messages), **settings, **NO_THINKING, "id_slot": slot})
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"]
 
+def pick(messages, words, slot=0):
+    """A one-word answer that can only be one of `words`: the server's grammar allows nothing else, so there is
+    always an answer and never a made-up one (the judge: mind/judge.py)."""
+    grammar = "root ::= " + " | ".join(json.dumps(word) for word in words)
+    response = _post("/v1/chat/completions", {"messages": fit(messages), "grammar": grammar, "temperature": 0,
+                                              "max_tokens": 4, **NO_THINKING, "id_slot": slot, "cache_prompt": True})
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"].strip()
+
 def template(messages):
     """The exact text these messages become in the model's chat template."""
-    response = _post("/apply-template", {"messages": messages, **NO_THINKING})
+    response = _post("/apply-template", {"messages": fit(messages), **NO_THINKING})
     response.raise_for_status()
     return response.json()["prompt"]
 

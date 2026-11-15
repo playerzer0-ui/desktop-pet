@@ -86,6 +86,11 @@ class Quests:
             ". [not answered] if it's about something else, asks {them} the question back, says they don't know, "
             "or is nonsense. A friendly message on another subject is still [not answered].)")
 
+    def asking(self):
+        """For the judge (mind/judge.py), while she waits: (what she asked, what counts as an answer)."""
+        topic = self.topic(self.pending[0])
+        return "{they} asked the user about " + topic, "the message tells {them} at least part of an answer about " + topic
+
     def answered(self, save, message, feeling, judged=None):
         """The quest id if this message finished it, else None. judged = her own tag: only True counts.
         She keeps waiting for TRIES of your messages (a question back, then the answer), then lets it go: she can
@@ -157,6 +162,11 @@ class MajorQuests:
             ". A real try counts, even a short or silly one, and even if {they} would love to hear more: {they} can "
             "keep asking about it after [done]. [not yet] only if the user changes the subject, brushes it off, or "
             "doesn't really respond to it.)")
+
+    def asking(self, save):
+        """For the judge (mind/judge.py): (what she brought up, what counts as done)."""
+        quest = self._moment(save)
+        return quest["starts"], quest["done_when"]
 
     def finished(self, save, message, feeling, judged):
         """The quest if this message finished it, else None. Needs her [done], and a nice message for a quest
