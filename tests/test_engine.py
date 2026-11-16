@@ -217,6 +217,34 @@ class DiaryTest(unittest.TestCase):
                                  "- The user is leaving now.")
         self.assertEqual(notes, ["The user is a student.", "The user's boss asked them to work on Saturday."])
 
+    def test_bits_of_the_chat_are_not_notes(self):
+        """Ruby's save, with Gemma: "my eye has a smudge", "hello", "you", "you are feeling better" were kept."""
+        said = ["hello", "what is that on your eye", "you are feeling better I hope", "my eye has a smudge too lol",
+                "I'm going to the cinema with my sister Mei tonight"]
+        notes = self.diary(said, "- my eye has a smudge\n- hello\n- you\n- you are feeling better\n"
+                                 "- The user is going to the cinema with their sister Mei tonight.")
+        self.assertEqual(notes, ["The user is going to the cinema with their sister Mei tonight."])
+
+    def test_gemmas_marks_are_cleaned_off(self):
+        """Live, Gemma left ": The user is a student." and kept ": The user is leaving now." (the colon hid it)."""
+        from engine import llm
+        said = ["I'm a student, I study engineering", "I have a cat called Miso", "my favourite food is ramen",
+                "I have to go now, bye pip"]
+        messages = []
+        for line in said:
+            messages += [{"role": "user", "content": line}, {"role": "assistant", "content": "[mood: happy] Oh!"}]
+        real = llm.chat
+        llm.chat = lambda *a, **k: ("- : The user is a student.\n- **(lasting)**: The user has a cat called Miso.\n"
+                                    "- [lasting] The user's favourite food is ramen.\n- : The user is leaving now.\n"
+                                    "- They study engineering.")
+        try:
+            notes = memory.write_diary({}, messages, 0, pip())
+        finally:
+            llm.chat = real
+        self.assertEqual([(n["text"], bool(n.get("lasting"))) for n in notes],
+                         [("The user is a student.", False), ("The user has a cat called Miso.", True),
+                          ("The user's favourite food is ramen.", True), ("They study engineering.", False)])
+
     def test_short_replies_keep_only_her_question(self):
         from engine import llm
         messages = [{"role": "user", "content": "hi there, I just got home from work"},

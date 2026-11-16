@@ -142,9 +142,21 @@ If nothing new is worth remembering, write only: NONE"""
 EXAMPLES = ["The user's friend NR complains that everyone at their university uses AI.",  # (never kept: heard_it)
             "The user finished their exam and thinks they did well.",
             "The user's older sister Mei lives in Busan."]
-LASTING_MARK = re.compile(r"^(?:[(\[]\s*lasting\s*[)\]]\s*:?|lasting\s*:)\s*", re.I)  # (Gemma: "(lasting): ...")
+# "(lasting)", "[lasting]", "lasting:", and Gemma's "(lasting): ..." or "**lasting**: ..."
+LASTING_MARK = re.compile(r"^[*_]*[(\[]?\s*lasting\s*[)\]]?[*_]*\s*:?\s*", re.I)
+NOTE_START = re.compile(r"^[\s:;,.*_•–—-]+")  # (Gemma left ": The user is a student." on some notes)
 # a note about the chat itself, not the user's life (Gemma: "They asked 'what do you mean?'", "They said bye, pip.",
 # "The user is leaving now."), though the diary is told not to
+# a note is a sentence about the user ("The user's cat is called Miso.", "They study engineering."). Gemma also wrote
+# bits of the chat as notes: "hello", "you", "my eye has a smudge", "you are feeling better"
+ABOUT_THE_USER = re.compile(r"\b(?:the user|user's|they|their|them)\b", re.I)
+SAID_TO_HER = re.compile(r"\b(?:i|i'm|me|my|you|your|you're)\b", re.I)  # (a note says "the user", never "I" or "you")
+
+def is_a_note(note):
+    """True for a sentence about the user, not a line copied from the chat."""
+    # (3 words: "They study engineering.")
+    return len(re.findall(r"\w+", note)) >= 3 and bool(ABOUT_THE_USER.search(note)) and not SAID_TO_HER.search(note)
+
 _USER = r"^(?:the user|they)\s+"
 ABOUT_THE_CHAT = re.compile("|".join([
     r"\b(?:said|says|saying|told \w+) (?:hi|hello|hey|bye|goodbye|good night)\b",
@@ -204,9 +216,10 @@ def write_diary(save, messages, start, character, slot=0):
     notes = [re.sub(r"^(?:-\s*)+", "", line.strip()).strip() for line in text.splitlines() if line.strip().startswith("-")]
     new = []
     for note in notes[:NOTES_PER_SITTING]:
+        note = NOTE_START.sub("", note)
         lasting = bool(LASTING_MARK.match(note))
-        note = LASTING_MARK.sub("", note)
-        if (not note or "NONE" in note or ABOUT_THE_CHAT.search(note) or not heard_it(note, heard)
+        note = NOTE_START.sub("", LASTING_MARK.sub("", note))
+        if (not note or "NONE" in note or not is_a_note(note) or ABOUT_THE_CHAT.search(note) or not heard_it(note, heard)
                 or names_a_character(note, everyone)
                 or from_her_world(note, user_lines, world)):
             continue
