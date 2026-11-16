@@ -85,7 +85,7 @@ Ok "found: $found"
 
 # --- 4. the model ---
 Step "4/5  The model"
-$model = & $venvPython -c "from engine import config; import json; print(json.dumps({'path': config.MODEL, 'url': config.MODEL_URL, 'sha256': config.MODEL_SHA256}))" | ConvertFrom-Json
+$model = & $venvPython -c "from engine import config; import json; print(json.dumps({'path': config.MODEL, 'url': config.MODEL_URL, 'sha256': config.MODEL_SHA256, 'notice': config.MODEL_NOTICE}))" | ConvertFrom-Json
 if (-not $model) { Fail "Couldn't read MODEL, MODEL_URL and MODEL_SHA256 from config.py." }
 $name = Split-Path $model.path -Leaf
 
@@ -106,6 +106,7 @@ if ((Test-Path $model.path) -and (Test-ModelFile $model.path)) {
     if ($drive.Free -lt 4GB) { Fail ("Not enough free space on {0}: (about 4 GB needed, {1:N1} GB free)." -f $drive.Name, ($drive.Free / 1GB)) }
     $part = $model.path + ".part"
     Note "Downloading $name from $($model.url)"
+    if ($model.notice) { Note $model.notice }  # the model's own terms (config.MODEL_NOTICE), if it has any
     Note "(If it stops, run setup.bat again: it carries on where it left off.)"
     curl.exe --location --fail --continue-at - --progress-bar --output $part $model.url
     if ($LASTEXITCODE -ne 0) { Fail "The download stopped (curl exit code $LASTEXITCODE). Run setup.bat again to carry on." }

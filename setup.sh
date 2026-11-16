@@ -89,6 +89,9 @@ else
     fi
     command -v curl >/dev/null 2>&1 || fail "curl is needed to download the model (for example: sudo apt install curl)."
     note "Downloading $NAME from $MODEL_URL"
+    # the model's own terms (config.MODEL_NOTICE), if it has any
+    MODEL_NOTICE=$("$VENV_PYTHON" -c "from engine import config; print(config.MODEL_NOTICE)" || true)
+    if [ -n "$MODEL_NOTICE" ]; then note "$MODEL_NOTICE"; fi
     note "(If it stops, run ./setup.sh again: it carries on where it left off.)"
     curl --location --fail --continue-at - --progress-bar --output "$MODEL_PATH.part" "$MODEL_URL" ||
         fail "The download stopped (curl exit code $?). Run ./setup.sh again to carry on."

@@ -84,8 +84,11 @@ class DownloadWindow(QWidget):
         buttons.addStretch()
         buttons.addWidget(self.retry)
         buttons.addWidget(self.cancel)
+        self.notice = QLabel(config.MODEL_NOTICE, wordWrap=True)  # the model's own terms, if it has any to show
+        self.notice.setFont(QFont("Segoe UI", 8))
+        self.notice.setVisible(bool(config.MODEL_NOTICE))
         layout = QVBoxLayout(self)
-        for w in (self.title, self.text, self.bar, self.status):
+        for w in (self.title, self.text, self.bar, self.status, self.notice):
             layout.addWidget(w)
         layout.addLayout(buttons)
         self.bridge = _Bridge()

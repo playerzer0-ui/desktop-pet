@@ -3,7 +3,7 @@ a job object on Windows, a small shell watchdog on Linux. Talking to it is llm.p
 """
 import atexit, ctypes, glob, os, shutil, subprocess, sys, threading, time
 from engine import llm
-from engine.config import HERE, LOG_DIR, PORT, N_CTX, MODEL, CACHE_DIR, JUDGE_CTX
+from engine.config import HERE, LOG_DIR, PORT, N_CTX, MODEL, CACHE_DIR, JUDGE_CTX, MODEL_CHECKPOINTS
 
 WINDOWS = os.name == "nt"
 
@@ -111,6 +111,7 @@ def _start(say, slots):
     # work, so after each judge call her whole prompt was read again (25-30 s a reply, "reused 0 tokens")
     command = [find_llama_server(), "-m", MODEL, "-c", str(N_CTX * slots + JUDGE_CTX), "-ngl", "0", "--port", str(PORT),
                "-np", str(slots + 1), "-kvu", "--kv-unified-per-slot", str(N_CTX), "--no-cache-idle-slots",
+               "--ctx-checkpoints", str(MODEL_CHECKPOINTS),  # (the default, 32, grew by GBs: see config.py)
                "--slot-save-path", CACHE_DIR]
     if WINDOWS:
         server = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,

@@ -3704,6 +3704,61 @@ class RepeatTest(unittest.TestCase):
             s.user_says(m)
         self.assertEqual(len(self.notes), 4, "nothing asked again")
 
+class ModelNoticeTest(unittest.TestCase):
+    """Switching the model to Gemma once left the build crediting Qwen under Apache 2.0, with Qwen's license text."""
+
+    def entry(self, model_file):
+        from unittest import mock
+        import build_notices
+        from engine import config
+        kept = []
+        with mock.patch.object(config, "MODEL_FILE", model_file):
+            title, body = build_notices.model_entry(lambda src, name: kept.append(src) or name)
+        return title, "\n".join(body), kept
+
+    def test_the_notice_is_for_the_model_in_config(self):
+        from engine import config
+        title, body, kept = self.entry(config.MODEL_FILE)
+        self.assertIn(config.MODEL_FILE, body)
+        for path in kept:
+            self.assertTrue(os.path.isfile(path), f"{path} is named in the notice but isn't in licenses/")
+
+    def test_gemma_comes_with_its_terms(self):
+        from engine import config
+        title, body, kept = self.entry("gemma-3-4b-it-Q5_K_M.gguf")
+        self.assertIn("Gemma is provided under and subject to the\nGemma Terms of Use found at ai.google.dev/gemma/terms", body)
+        self.assertIn("Prohibited Use Policy", body)
+        self.assertEqual({os.path.basename(p) for p in kept},
+                         {"Gemma-Terms-of-Use.txt", "Gemma-Prohibited-Use-Policy.txt", "Gemma-NOTICE.txt"})
+        self.assertNotIn("Apache", body)
+        if config.MODEL_FILE.startswith("gemma"):
+            self.assertIn("Gemma Terms of Use found at ai.google.dev/gemma/terms", config.MODEL_NOTICE,
+                          "the sentence the terms ask for, shown where the model is downloaded")
+
+    def test_qwen_keeps_its_own(self):
+        title, body, kept = self.entry("Qwen3.5-4B-Q5_K_M.gguf")
+        self.assertIn("Apache License 2.0", body)
+        self.assertEqual([os.path.basename(p) for p in kept], ["Qwen3.5-4B-LICENSE.txt"])
+
+    def test_a_model_without_a_notice_stops_the_build(self):
+        with self.assertRaises(SystemExit) as stopped:
+            self.entry("Phi-4-mini-instruct-Q5_K_M.gguf")
+        self.assertIn("no license notice", str(stopped.exception))
+
+    def test_the_download_window_shows_the_models_terms(self):
+        from PySide6.QtWidgets import QApplication
+        self.app = QApplication.instance() or QApplication([])
+        from unittest import mock
+        from engine import config
+        from desktop import download
+        with mock.patch.object(config, "MODEL_NOTICE", "Some model's terms: example.org/terms"):
+            window = download.DownloadWindow()
+            self.assertEqual(window.notice.text(), "Some model's terms: example.org/terms")
+            self.assertFalse(window.notice.isHidden())
+        with mock.patch.object(config, "MODEL_NOTICE", ""):
+            window = download.DownloadWindow()
+            self.assertTrue(window.notice.isHidden(), "nothing to show for a model with no such terms")
+
 class JudgeTest(unittest.TestCase):
     """How your message felt and whether it finished a quest are asked in a short call of their own (mind/judge.py):
     Gemma tagged 1 kind message in 12 [nice] while in character, and 16 of 16 when asked alone."""

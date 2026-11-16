@@ -6,7 +6,7 @@ build.sh (Linux) run this after PyInstaller.
 writes dist\\DesktopPet\\THIRD_PARTY_NOTICES.txt (who made what, under which license, where its source is) and
 dist\\DesktopPet\\licenses\\ (each license's full text). Versions are read from what's installed, so the notice stays
 right after an update. Texts that don't come with the installed packages are kept in licenses/ in the repo:
-llama.cpp's, the Qwen model's, the LGPL / GPL (PySide6's wheels don't include them), and Python's (Linux Pythons
+llama.cpp's, the model's (model_entry: whichever one engine/config.py names), the LGPL / GPL (PySide6's wheels don't include them), and Python's (Linux Pythons
 often don't ship it).
 """
 import importlib.metadata as md
@@ -18,6 +18,34 @@ WINDOWS = os.name == "nt"
 EXE = "DesktopPet.exe" if WINDOWS else "DesktopPet"
 SERVER = "llama-server.exe" if WINDOWS else "llama-server"
 INSIDE = lambda *parts: os.path.join("_internal", *parts)  # (a path inside the build, as the notice writes it)
+
+def model_entry(keep):
+    """The notice for the model config.py downloads (MODEL_FILE). A model nobody has written a notice for stops the
+    build: switching to Gemma once left the build crediting Qwen, under the wrong license."""
+    from engine import config
+    name = config.MODEL_FILE
+    first = "The characters' minds. Not included in the game: it's downloaded on first launch, as the file"
+    if name.startswith("Qwen3.5-4B"):
+        return ("Qwen3.5-4B (the language model)", [
+            first, f"{name}, a GGUF conversion by Unsloth (https://huggingface.co/unsloth/Qwen3.5-4B-GGUF).",
+            "License: Apache License 2.0, Copyright 2026 Alibaba Cloud", "Source: https://huggingface.co/Qwen/Qwen3.5-4B",
+            "Full text: " + keep(os.path.join(KEPT, "Qwen3.5-4B-LICENSE.txt"), "Qwen3.5-4B-LICENSE.txt")])
+    if name.startswith("gemma-3-4b-it"):
+        return ("Gemma 3 4B (the language model)", [
+            first, f"{name}, a GGUF conversion by Unsloth (https://huggingface.co/unsloth/gemma-3-4b-it-GGUF) of",
+            "Google's gemma-3-4b-it. The conversion changed the file format and reduced the precision of the weights.",
+            "License: Gemma Terms of Use (not an open-source license). Gemma is provided under and subject to the",
+            "Gemma Terms of Use found at ai.google.dev/gemma/terms",
+            "Use restrictions: the model may not be used for anything in the Gemma Prohibited Use Policy",
+            "(ai.google.dev/gemma/prohibited_use_policy), or in violation of applicable laws and regulations.",
+            "By downloading or using the model you agree to those terms.",
+            "Source: https://huggingface.co/google/gemma-3-4b-it",
+            "Full text: " + ", ".join([
+                keep(os.path.join(KEPT, "Gemma-Terms-of-Use.txt"), "Gemma-Terms-of-Use.txt"),
+                keep(os.path.join(KEPT, "Gemma-Prohibited-Use-Policy.txt"), "Gemma-Prohibited-Use-Policy.txt"),
+                keep(os.path.join(KEPT, "Gemma-NOTICE.txt"), "Gemma-NOTICE.txt")])])
+    raise SystemExit(f"build_notices.py has no license notice for the model in engine/config.py ({name}).\n"
+                     "Add one to model_entry, and its license text to licenses/, before shipping a build with it.")
 
 def python_license():
     """Python's own LICENSE.txt if this Python has one (Windows always does), else the copy kept in the repo."""
@@ -98,11 +126,7 @@ def main(dest):
             "that use it be shipped under any terms. Exception: https://www.gnu.org/licenses/gcc-exception-3.1.html",
             "Source: https://gcc.gnu.org/", "Full text: " + keep(os.path.join(KEPT, "GPL-3.0.txt"), "GPL-3.0.txt")]))
 
-    entries.append(("Qwen3.5-4B (the language model)", [
-        "The characters' minds. Not included in the game: it's downloaded on first launch, as the file",
-        "Qwen3.5-4B-Q5_K_M.gguf, a GGUF conversion by Unsloth (https://huggingface.co/unsloth/Qwen3.5-4B-GGUF).",
-        "License: Apache License 2.0, Copyright 2026 Alibaba Cloud", "Source: https://huggingface.co/Qwen/Qwen3.5-4B",
-        "Full text: " + keep(os.path.join(KEPT, "Qwen3.5-4B-LICENSE.txt"), "Qwen3.5-4B-LICENSE.txt")]))
+    entries.append(model_entry(keep))
 
     pyinstaller, files = package_files("pyinstaller", r"COPYING")
     entries.append((f"PyInstaller {pyinstaller} (its bootloader, {EXE})", [
