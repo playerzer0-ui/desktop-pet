@@ -14,11 +14,13 @@ day it runs out she comes on her own, a surprise, and from the day after that sh
     {"arrived": {"ruby": {"started_on": "2026-12-01", "visit_day": "2027-01-01"}}}
 
 For testing, today.json in the data folder (next to saves/, made by hand) decides who comes, every day, while it's
-there: no invites, arrivals, introductions or story lineups. Delete it and the roster takes over again.
+there: no invites, arrivals, introductions or story lineups. Delete it (or leave it empty, or broken: that's
+printed at launch) and the roster takes over again. Only when
+running from source: the built game ignores it, so a test file left in the data folder never decides a player's day.
 
     {"members": ["ruby", "pip"], "note": "optional: why the others aren't here (about the first one)"}
 """
-import datetime, json, os, random, threading, tomllib
+import datetime, json, os, random, sys, threading, tomllib
 from dataclasses import dataclass, field
 from mind import memory
 from progress import story, trust
@@ -30,18 +32,23 @@ RULES = os.path.join(HERE, "character", "roster.toml")
 PATH = os.path.join(SAVES_DIR, "roster.json")
 FORCED = os.path.join(DATA, "today.json")  # (yours, for testing: see forced)
 ON_SCREEN = 2  # most characters on the desktop at once (on_screen in roster.toml)
+TOGETHER = 50  # the percent chance that two come instead of one (together in roster.toml)
 _lock = threading.RLock()  # two minds on their own threads may write roster.json
 
 # --- the rules (roster.toml) ---
 
 def rules(path=None):
-    """roster.toml, checked: {"on_screen", "unlocks", "arrivals", "lineups"}. A mistake fails loudly at launch."""
+    """roster.toml, checked: {"on_screen", "together", "unlocks", "arrivals", "lineups"}. A mistake fails loudly
+    at launch."""
     with open(path or RULES, "rb") as f:
         r = tomllib.load(f)
     unlocks, arrivals, lineups = r.get("unlocks", []), r.get("arrivals", []), r.get("lineups", [])
     on_screen = r.get("on_screen", ON_SCREEN)
     if not isinstance(on_screen, int) or on_screen < 1:
         raise ValueError("roster.toml: on_screen must be a whole number, 1 or more")
+    together = r.get("together", TOGETHER)
+    if not isinstance(together, int) or not 0 <= together <= 100:
+        raise ValueError("roster.toml: together must be a whole number from 0 to 100 (a percent)")
     folders = {f for f in os.listdir(os.path.join(HERE, "character"))
                if os.path.isfile(os.path.join(HERE, "character", f, "character.toml"))}
     known = {DEFAULT}  # in order: someone can only invite once she can come herself
@@ -89,13 +96,14 @@ def rules(path=None):
         for m in members:
             if m not in known:
                 raise ValueError(f"{where}: {m!r} is neither the first character nor in [[unlocks]] or [[arrivals]]")
-        if not isinstance(l.get("weight"), int) or l["weight"] < 0:
-            raise ValueError(f"{where}: weight must be a whole number, 0 or more")
+        if "weight" in l:
+            raise ValueError(f"{where}: lineups have no weight any more (together, at the top, decides)")
         if not isinstance(l.setdefault("note", ""), str):
             raise ValueError(f"{where}: note must be text")
-    if lineups and not sum(l["weight"] for l in lineups):
-        raise ValueError("roster.toml: the lineups' weights are all 0")
-    return {"on_screen": on_screen, "unlocks": unlocks, "arrivals": arrivals, "lineups": lineups}
+        if any(set(m["members"]) == set(members) for m in lineups[:i - 1]):
+            raise ValueError(f"{where}: the same members as a lineup above it")
+    return {"on_screen": on_screen, "together": together, "unlocks": unlocks, "arrivals": arrivals,
+            "lineups": lineups}
 
 def _partner(folder, r, among=None):
     """The one who invited `folder`, else the first one she invited (only from `among`, if given), or None."""
@@ -205,7 +213,10 @@ class Need:
 
 def forced(path=None):
     """today.json (see the top): who you've said comes, as a Today, or None if there's no such file.
-    A mistake in it raises ValueError (desktop/check.py shows it at launch)."""
+    A mistake in it (or an empty file) raises ValueError, and today() falls back to the roster. The built game never
+    reads it."""
+    if getattr(sys, "frozen", False):  # (PyInstaller sets this)
+        return None
     path = path or FORCED
     if not os.path.isfile(path):
         return None
@@ -230,10 +241,15 @@ def forced(path=None):
 
 def today(lead=DEFAULT, day=None, pick=random.choices, need=None):
     """Who comes today. Only the first character runs the roster; any other, opened by name, comes alone.
-    While you have a today.json (forced), it decides instead. pick and need are for the tests."""
+    While you have a today.json (forced), it decides instead, unless it's empty or has a mistake: then it's ignored
+    (and says so). pick and need are for the tests."""
     if lead != DEFAULT:
         return Today([lead])
-    chosen = forced()
+    try:
+        chosen = forced()
+    except (ValueError, OSError) as e:  # empty, broken or wrong: the roster decides, as if it weren't there
+        print(f"today.json: no one, relying on random\n  ({e})")
+        chosen = None
     if chosen:
         print(f"today.json: {', '.join(chosen.members)} (delete it to go back to the roster)")
         return chosen
@@ -280,9 +296,8 @@ def today(lead=DEFAULT, day=None, pick=random.choices, need=None):
             elif needed:
                 picked["members"], picked["story"] = needed.members, needed.owner
             else:
-                open_ = [l for l in r["lineups"] if set(l["members"]) <= set(settled) and l["weight"]]
-                picked["members"] = (pick(open_, weights=[l["weight"] for l in open_])[0]["members"]
-                                     if open_ else [DEFAULT])
+                options, chances = _choices(settled, r)
+                picked["members"] = pick(options, weights=chances)[0]["members"]
             data["today"] = picked
             write_save(data)
         members, owner = picked["members"], picked.get("story")
@@ -294,6 +309,25 @@ def today(lead=DEFAULT, day=None, pick=random.choices, need=None):
             if lineup and lineup["note"]:
                 note = Character(members[0]).fill(lineup["note"]) + "."
         return Today(list(members), note=note, story=owner)
+
+def _choices(settled, r):
+    """Today's possible lineups and the chance of each, for an ordinary day. Two rounds: first one or two
+    (together percent for two), then which ones, evenly, so everyone who can come is as likely to as the others.
+    A lineup in roster.toml with the same members gives the order (who leads) and the note; else the one who
+    invited the other leads."""
+    singles = [[f] for f in settled]
+    pairs = ([_pair(a, b, r) for i, a in enumerate(settled) for b in settled[i + 1:]]
+             if r["on_screen"] >= 2 else [])
+    if not pairs:
+        return [_lineup(singles[0], r)], [1]
+    two = r["together"]
+    options = [_lineup(m, r) for m in singles + pairs]
+    chances = [(100 - two) / len(singles)] * len(singles) + [two / len(pairs)] * len(pairs)
+    return options, chances
+
+def _lineup(members, r):
+    """roster.toml's lineup with these members (in its order, with its note), else a plain one."""
+    return next((l for l in r["lineups"] if set(l["members"]) == set(members)), {"members": members, "note": ""})
 
 def _save_of(folder):
     """A character and her save, ready for story.py (with her gates, and caught up)."""

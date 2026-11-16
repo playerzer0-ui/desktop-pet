@@ -14,16 +14,13 @@ invite = "before she goes, she tells the user CHANGE: that tomorrow NAME will co
 memory = "Pip told the user she would send NAME to the desktop."
 introduce = "today she has brought NAME along, who is standing right beside her on the desktop. She introduces NAME: CHANGE"
 
-# --- who comes on a given day ---
-# Picked once a day from the lineups whose members have all had their first day, by weight (any whole numbers).
-# members: the first one leads. At most on_screen of them (the top of roster.toml). note: in the leader's greeting,
-# why the others aren't here (a stage direction about the leader; optional). Add lineups with her alone, with each
-# friend, or several at once (raise on_screen first).
+# --- how her lineups look ---
+# Once she's had her first day she can come like everyone else (together, at the top of roster.toml, picks who).
+# These only say how a lineup looks. members: the first one leads. note: in the leader's greeting, why the others
+# aren't here (a stage direction about the leader; optional). Without one, the one who invited the other leads.
 [[lineups]]
 members = ["FOLDER", "pip"]
-weight = 20
 
 [[lineups]]
 members = ["FOLDER"]
-weight = 10
 note = "CHANGE: why her friends couldn't come today, so {they} came on {their} own"

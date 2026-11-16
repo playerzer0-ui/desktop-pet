@@ -1134,9 +1134,24 @@ class RosterTest(unittest.TestCase):
         self.assertEqual([(u["by"], u["who"]) for u in r["unlocks"]], [("pip", "mira")])
         self.assertEqual([(a["after"], a["who"], a["at_trust"], a["days"]) for a in r["arrivals"]],
                          [("pip", "ruby", 9, 30)])
-        self.assertEqual({tuple(l["members"]): l["weight"] for l in r["lineups"]},
-                         {("pip", "mira"): 60, ("pip",): 20, ("mira",): 20,
-                          ("ruby", "pip"): 15, ("ruby", "mira"): 15, ("ruby",): 10})
+        self.assertEqual(r["together"], 50)
+        self.assertEqual([l["members"] for l in r["lineups"]],
+                         [["pip", "mira"], ["pip"], ["mira"], ["ruby", "pip"], ["ruby", "mira"], ["ruby"]])
+
+    def test_one_or_two_then_which_evenly(self):
+        from progress import roster
+        r = roster.rules()
+        for settled, each in ((["pip", "mira"], 75), (["pip", "ruby"], 75), (["pip", "mira", "ruby"], 50)):
+            options, chances = roster._choices(settled, r)
+            self.assertAlmostEqual(sum(chances), 100)
+            two = sum(c for l, c in zip(options, chances) if len(l["members"]) == 2)
+            self.assertAlmostEqual(two, 50, msg="round 1: one or two, 50:50")
+            for f in settled:  # (alone: 50 / n; in a pair: 50 * 2 / n)
+                odds = sum(c for l, c in zip(options, chances) if f in l["members"])
+                self.assertAlmostEqual(odds, each, msg=f"{f} among {settled}")
+        options, _ = roster._choices(["pip", "mira", "ruby"], r)
+        self.assertIn(["ruby", "pip"], [l["members"] for l in options], "roster.toml's order: Ruby leads")
+        self.assertEqual(roster._choices(["pip"], r), ([roster._lineup(["pip"], r)], [1]), "just Pip")
 
     def test_mistakes_fail_loudly(self):
         from progress import roster
@@ -1146,12 +1161,14 @@ class RosterTest(unittest.TestCase):
                 ('[[unlocks]]\n' + unlock.replace('"mira"', '"nobody"'), "isn't a character"),
                 ('[[unlocks]]\n' + unlock.replace('by = "pip"', 'by = "mira"'), "nobody has invited"),
                 ('[[unlocks]]\n' + unlock.replace("10", "11"), "at_trust"),
-                ('[[lineups]]\nmembers = ["pip", "mira"]\nweight = 1\n', "neither the first"),
-                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "pip"]\nweight = 1\n', "different"),
-                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip"]\nweight = -1\n', "weight"),
-                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip"]\nweight = 0\n', "all 0"),
+                ('[[lineups]]\nmembers = ["pip", "mira"]\n', "neither the first"),
+                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "pip"]\n', "different"),
+                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip"]\nweight = 1\n', "no weight any more"),
+                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "mira"]\n[[lineups]]\n'
+                 'members = ["mira", "pip"]\n', "same members"),
+                ('together = 101\n', "together"), ('together = 0.5\n', "together"),
                 ('on_screen = 0\n', "on_screen"),
-                ('on_screen = 1\n[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "mira"]\nweight = 1\n',
+                ('on_screen = 1\n[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "mira"]\n',
                  "at most 1")]:
             with self.subTest(problem=problem), self.assertRaisesRegex(ValueError, problem):
                 roster.rules(self.write_rules(text))
@@ -2132,7 +2149,7 @@ class SceneTest(unittest.TestCase):
         self.assertEqual(today(D(2026, 11, 4)).members, ["mira"], "a new day: picked")
         self.assertEqual(today(D(2026, 11, 4)).note, Character("mira").fill(lineup("mira")["note"]) + ".")
         self.assertEqual(today(D(2026, 11, 4)).members, ["mira"], "opened again")
-        self.assertEqual(picks, [{("pip", "mira"): 60, ("pip",): 20, ("mira",): 20}], "picked only once, by weight")
+        self.assertEqual(picks, [{("pip", "mira"): 50, ("pip",): 25, ("mira",): 25}], "picked only once: 50:50, then evenly")
 
     def test_alone_she_says_why_the_other_isnt_here(self):
         mira = Character("mira")
@@ -4126,21 +4143,49 @@ class ForcedTodayTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "an NPC can't lead"):
             self.roster.forced()
 
+    def test_the_built_game_ignores_it(self):
+        from unittest import mock
+        self.write('{"members": ["ruby", "pip"]}')
+        with mock.patch.object(sys, "frozen", True, create=True):
+            self.assertIsNone(self.roster.forced())
+            self.assertEqual(self.roster.today(day=datetime.date(2026, 12, 1)).members, ["pip"],
+                             "a new player: Pip alone, as the roster says")
+
     def test_a_notepad_bom_is_fine(self):
         with open(self.roster.FORCED, "w", encoding="utf-8-sig") as f:
             f.write('{"members": ["mira"]}')
         self.assertEqual(self.roster.forced().members, ["mira"])
 
-    def test_mistakes_are_shown_at_launch(self):
+    def test_it_says_who_it_brings(self):
+        self.write('{"members": ["ruby"]}')
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.roster.today(day=datetime.date(2026, 12, 1))
+        self.assertEqual(out.getvalue(), "today.json: ruby (delete it to go back to the roster)\n")
+
+    def test_empty_or_broken_falls_back_to_the_roster(self):
         from desktop import check
-        for text, says in [('{"members": "ruby"}', "must be a list"), ('{"members": ["ruby", "ruby"]}', "must be a list"),
+        for text, says in [("", "Expecting value"), ("   \n", "Expecting value"), ("{}", "must be a list"),
+                           ('{"members": []}', "must be a list"),
+                           ('{"members": "ruby"}', "must be a list"), ('{"members": ["ruby", "ruby"]}', "must be a list"),
                            ('{"members": ["rubyy"]}', "isn't a character"),
                            ('{"members": ["ruby", "pip", "mira"]}', "on_screen in roster.toml is 2"),
                            ('{"members": ["pip"], "note": 5}', "note must be text"), ('{"members": [ruby]}', "Expecting value")]:
-            self.write(text)
-            problems = [p for p in check.cast_problems() if "today" in p]
-            self.assertEqual(len(problems), 1, text)
-            self.assertIn(says, problems[0], text)
+            with self.subTest(text=text):
+                self.write(text)
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    plan = self.roster.today(day=datetime.date(2026, 12, 1))
+                self.assertEqual(plan.members, ["pip"], "a new player's roster: Pip")
+                first, why = out.getvalue().splitlines()
+                self.assertEqual(first, "today.json: no one, relying on random")
+                self.assertIn(says, why)
+                self.assertFalse([p for p in check.cast_problems() if "today" in p], "it doesn't stop the launch")
+        with open(self.roster.FORCED, "wb") as f:
+            f.write(b"\xff\xfe\x00garbage")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(self.roster.today(day=datetime.date(2026, 12, 1)).members, ["pip"])
+        self.assertTrue(out.getvalue().startswith("today.json: no one, relying on random"), "not even text")
 
 class ArrivalTest(unittest.TestCase):
     """roster.py [[arrivals]]: Ruby turns up on her own, 30 days after Pip reaches trust 9."""
