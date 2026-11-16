@@ -43,7 +43,7 @@ introduce = "today she has brought her best friend Vesper along, who is standing
 [[arrivals]]
 who = "ruby"
 after = "pip"
-at_trust = 9  # the end of Pip's stage 4 (trust 7-8): Pip's last major quest is done and stage 5 begins
+at_trust = 7  # the end of Pip's stage 3 (trust 6-7) which opens stage 4
 days = 30
 
 # --- lineups: how a day's lineup looks ---

@@ -3,7 +3,13 @@ Rules: character/roster.toml. What has happened: the player's saves/roster.json,
 
     {"unlocked": {"mira": {"by": "pip", "invited_on": "2026-10-23", "visit_day": "2026-10-24",
                            "introduced": "2026-10-25"}},
-     "today": {"day": "2026-11-02", "members": ["pip", "mira"], "story": null}}
+     "today": {"day": "2026-11-02", "members": ["pip", "mira"], "story": null, "why": "random"},
+     "together": {"pip-ruby": {"days": 6, "last": "2026-11-02"}}}
+
+"together" counts the days each pair has shared the desktop (shared_day, from launch.py), so strangers like Pip
+and Ruby get to know each other over time (company.py tells them how well).
+
+Each launch prints who comes and why (launch.py), like "today: pip, mira (random)".
 
 At trust 10 Pip invites Vesper on her way out, the next day Vesper comes on her own, and from then on they come
 in roster.toml's lineups (or as a story needs).
@@ -132,6 +138,7 @@ def state():
             data = load_save(PATH, default={})
         data.setdefault("unlocked", {})
         data.setdefault("arrived", {})
+        data.setdefault("together", {})
         return data
 
 def _from_old_saves(r=None):
@@ -196,6 +203,36 @@ def introduce(character, company=(), today=None):
             return character.fill(u["introduce"])
     return None
 
+# --- how well they know each other ---
+
+def _pair_key(a, b):
+    return "-".join(sorted((a, b)))
+
+def knew_before(a, b, r=None):
+    """One invited the other ([[unlocks]]), so they were friends before the desktop (Pip and Vesper)."""
+    return any({u["by"], u["who"]} == {a, b} for u in (r or rules())["unlocks"])
+
+def shared_day(members, today=None):
+    """A day on the desktop together: each pair of them counts it, once a day (roster.json "together")."""
+    iso = (today or datetime.date.today()).isoformat()
+    with _lock:
+        data, changed = state(), False
+        for i, a in enumerate(members):
+            for b in members[i + 1:]:
+                entry = data["together"].setdefault(_pair_key(a, b), {"days": 0, "last": None})
+                if entry["last"] != iso:
+                    entry["days"], entry["last"], changed = entry["days"] + 1, iso, True
+        if changed:
+            write_save(data)
+
+def days_before(a, b, today=None):
+    """How many days a and b had shared the desktop before today (today itself doesn't count)."""
+    entry = state()["together"].get(_pair_key(a, b))
+    if not entry:
+        return 0
+    iso = (today or datetime.date.today()).isoformat()
+    return entry["days"] - (1 if entry["last"] == iso else 0)
+
 # --- at launch: who comes today ---
 
 @dataclass
@@ -204,6 +241,7 @@ class Today:
     note: str | None = None      # for the leader's greeting: why the others aren't here
     invited_today: bool = False  # someone sent an invite today: nobody comes out
     story: str | None = None     # whose story step picked today's lineup
+    why: str = ""                # what decided it, for the launch print (launch.py)
 
 @dataclass
 class Need:
@@ -237,14 +275,15 @@ def forced(path=None):
     note = data.get("note")
     if note is not None and not isinstance(note, str):
         raise ValueError("note must be text")
-    return Today(list(members), note=Character(members[0]).fill(note.rstrip(".")) + "." if note else None)
+    return Today(list(members), note=Character(members[0]).fill(note.rstrip(".")) + "." if note else None,
+                 why="today.json")
 
 def today(lead=DEFAULT, day=None, pick=random.choices, need=None):
     """Who comes today. Only the first character runs the roster; any other, opened by name, comes alone.
     While you have a today.json (forced), it decides instead, unless it's empty or has a mistake: then it's ignored
     (and says so). pick and need are for the tests."""
     if lead != DEFAULT:
-        return Today([lead])
+        return Today([lead], why="opened by name")
     try:
         chosen = forced()
     except (ValueError, OSError) as e:  # empty, broken or wrong: the roster decides, as if it weren't there
@@ -264,9 +303,9 @@ def today(lead=DEFAULT, day=None, pick=random.choices, need=None):
                 entry["visit_day"] = iso
                 write_save(data)
             if entry and entry["visit_day"] == iso:
-                return Today([u["who"]])
+                return Today([u["who"]], why=f"her first day, invited by {Character(u['by']).name}")
         if any(e["visit_day"] is None and e["invited_on"] == iso for e in unlocked.values()):
-            return Today([lead], invited_today=True)  # she went home after inviting them
+            return Today([lead], invited_today=True, why="she invited someone today, so she's home")
         arrived = data["arrived"]
         for a in r["arrivals"]:  # an uninvited arrival: her clock starts when `after` reaches the trust...
             if a["who"] not in arrived and load_save(Character(a["after"]).save_path).get("trust", 1) >= a["at_trust"]:
@@ -278,13 +317,13 @@ def today(lead=DEFAULT, day=None, pick=random.choices, need=None):
                 entry["visit_day"] = iso
                 write_save(data)
             if entry and entry["visit_day"] == iso:
-                return Today([a["who"]])
+                return Today([a["who"]], why="her first day, arrived on her own")
         settled = [DEFAULT] + [u["who"] for u in r["unlocks"]
                                if unlocked.get(u["who"], {}).get("visit_day") and iso > unlocked[u["who"]]["visit_day"]]
         settled += [a["who"] for a in r["arrivals"]
                     if arrived.get(a["who"], {}).get("visit_day") and iso > arrived[a["who"]]["visit_day"]]
         if len(settled) == 1:
-            return Today([DEFAULT])
+            return Today([DEFAULT], why="the only one who can come yet")
         picked = data.get("today")
         if not picked or picked["day"] != iso:
             picked = {"day": iso, "story": None}
@@ -292,12 +331,13 @@ def today(lead=DEFAULT, day=None, pick=random.choices, need=None):
                           and not unlocked[u["who"]].get("introduced")), None)
             needed = None if intro else (need or stories_need)(settled, r, day)
             if intro:  # the first day together: she introduces them
-                picked["members"] = [intro["by"], intro["who"]]
+                picked["members"], picked["why"] = [intro["by"], intro["who"]], "the first day together: an introduction"
             elif needed:
                 picked["members"], picked["story"] = needed.members, needed.owner
+                picked["why"] = f"{Character(needed.owner).name}'s story" if needed.owner else "a private quest"
             else:
                 options, chances = _choices(settled, r)
-                picked["members"] = pick(options, weights=chances)[0]["members"]
+                picked["members"], picked["why"] = pick(options, weights=chances)[0]["members"], "random"
             data["today"] = picked
             write_save(data)
         members, owner = picked["members"], picked.get("story")
@@ -308,7 +348,7 @@ def today(lead=DEFAULT, day=None, pick=random.choices, need=None):
             lineup = next((l for l in r["lineups"] if l["members"] == members), None)
             if lineup and lineup["note"]:
                 note = Character(members[0]).fill(lineup["note"]) + "."
-        return Today(list(members), note=note, story=owner)
+        return Today(list(members), note=note, story=owner, why=picked.get("why", "picked earlier today"))
 
 def _choices(settled, r):
     """Today's possible lineups and the chance of each, for an ordinary day. Two rounds: first one or two

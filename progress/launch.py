@@ -24,10 +24,23 @@ def today(folder):
     away = story.away(save) or plan.invited_today
     resting = not away and visits.resting(lead) and not story.ignores_time_limit(save, lead)
     day = Today(cast, away, resting, plan.note)
+    if plan.why != "today.json":  # (that one says so itself)
+        print(said(plan, day))
     if day.together:
+        if plan.why != "today.json":  # (your test days don't count: set "together" in roster.json by hand instead)
+            roster.shared_day(plan.members)
         for c in cast[1:]:
             c.daily_minutes = None  # they leave together, when her time is up
     return day
+
+def said(plan, day):
+    """The launch line: who comes today and why, like "today: ruby, pip (random)". (Folders, as in today.json.)"""
+    line = f"today: {', '.join(plan.members)} ({plan.why})"
+    if day.resting:
+        return line + ", but her time today is used up: nobody comes out"
+    if day.away and not plan.invited_today:
+        return line + ", but her story has her away: nobody comes out"
+    return line
 
 def story_mood(character, present):
     """The mood her story has her in today, or None. present = folders of everyone on the desktop."""

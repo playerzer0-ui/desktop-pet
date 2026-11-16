@@ -210,7 +210,7 @@ CONTENT
 - Mood after: worried
 - Reaction by stage:
   - Stage 2: acts cheerful / says the cloister is half empty today because the elders went on a long walk to visit some faraway shops, and it's strangely quiet
-  - Stage 3: acts a little puzzled / says the elders are visiting a district full of coins, and wonders whether Pip and Vesper live near there
+  - Stage 3: acts a little puzzled / says the elders are visiting a district full of coins, and wonders whether anyone she has met on the desktop lives near there
   - Stage 4: acts uneasy / admits an attendant was whispering about lists of names, and asked what a list was for
   - Stage 5: acts thoughtful / says she is a little afraid the elders will walk past people she knows, without knowing it
 - Unlocks: none

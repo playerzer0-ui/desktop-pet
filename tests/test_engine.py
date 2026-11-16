@@ -1133,7 +1133,7 @@ class RosterTest(unittest.TestCase):
         r = roster.rules()
         self.assertEqual([(u["by"], u["who"]) for u in r["unlocks"]], [("pip", "mira")])
         self.assertEqual([(a["after"], a["who"], a["at_trust"], a["days"]) for a in r["arrivals"]],
-                         [("pip", "ruby", 9, 30)])
+                         [("pip", "ruby", 7, 30)])
         self.assertEqual(r["together"], 50)
         self.assertEqual([l["members"] for l in r["lineups"]],
                          [["pip", "mira"], ["pip"], ["mira"], ["ruby", "pip"], ["ruby", "mira"], ["ruby"]])
@@ -2118,6 +2118,42 @@ class SceneTest(unittest.TestCase):
         s.company = ["Vesper"]
         self.assertIn("Vesper is on the desktop beside Pip", s.friends.note())
 
+    def test_shared_days_are_counted_once_a_day(self):
+        D = datetime.date
+        roster = use_roster(self)
+        roster.shared_day(["ruby", "pip"], D(2026, 12, 1))
+        roster.shared_day(["pip", "ruby"], D(2026, 12, 1))  # (relaunched, either order)
+        self.assertEqual(roster.state()["together"], {"pip-ruby": {"days": 1, "last": "2026-12-01"}})
+        self.assertEqual(roster.days_before("pip", "ruby", D(2026, 12, 1)), 0, "today is their first")
+        roster.shared_day(["pip", "ruby"], D(2026, 12, 3))
+        self.assertEqual(roster.days_before("ruby", "pip", D(2026, 12, 3)), 1)
+        self.assertEqual(roster.days_before("ruby", "pip", D(2026, 12, 4)), 2, "on a day apart")
+        self.assertEqual(roster.days_before("ruby", "mira", D(2026, 12, 4)), 0, "never together")
+        self.assertTrue(roster.knew_before("mira", "pip"), "Pip invited Vesper")
+        self.assertFalse(roster.knew_before("pip", "ruby"))
+
+    def test_strangers_get_to_know_each_other(self):
+        from progress.company import Company, GET_ALONG
+        roster = use_roster(self)
+        D, today = datetime.date, datetime.date.today()
+        pip_with_ruby = Company(pip(), ["Ruby"])
+        self.assertEqual(pip_with_ruby.greeting(), "Ruby, whom she has never met before (a stranger: they meet for "
+                         "the first time today) is on the desktop with her today too, but this greeting is her own, "
+                         "to the user.")
+        self.assertIn("Pip and Ruby have never met before today: they are strangers", pip_with_ruby.note())
+        for i in range(1, GET_ALONG):
+            roster.shared_day(["pip", "ruby"], today - datetime.timedelta(days=i))
+        self.assertIn("still getting to know", Company(Character("ruby"), ["Pip"]).greeting(), "both ways")
+        self.assertIn("still getting to know each other", pip_with_ruby.note())
+        roster.shared_day(["pip", "ruby"], today - datetime.timedelta(days=GET_ALONG))
+        roster.shared_day(["pip", "ruby"], today)  # (today itself never counts)
+        self.assertIn("gets along well with", pip_with_ruby.greeting())
+        self.assertIn("they get along well now", pip_with_ruby.note())
+        with_vesper = Company(pip(), ["Vesper"])
+        self.assertTrue(with_vesper.greeting().startswith("Her friend Vesper is on the desktop"), "she invited her")
+        self.assertNotIn("strangers", with_vesper.note())
+        self.assertTrue(Company(Character("ruby"), ["Opal"]).greeting().startswith("Her friend Opal"), "her story's NPC")
+
     def test_pips_time_up_sends_both_home(self):
         from mind.session import Turn
         scene, _ = self.scene()
@@ -2150,6 +2186,27 @@ class SceneTest(unittest.TestCase):
         self.assertEqual(today(D(2026, 11, 4)).note, Character("mira").fill(lineup("mira")["note"]) + ".")
         self.assertEqual(today(D(2026, 11, 4)).members, ["mira"], "opened again")
         self.assertEqual(picks, [{("pip", "mira"): 50, ("pip",): 25, ("mira",): 25}], "picked only once: 50:50, then evenly")
+
+    def test_each_day_says_why(self):
+        from progress import launch
+        D = datetime.date
+        roster = use_roster(self, mira_unlock("2026-11-01", visit_day="2026-11-02"))
+        today = lambda day, **kw: roster.today(day=day, pick=lambda o, weights: [lineup("mira")],
+                                               need=lambda *a: None, **kw)
+        self.assertEqual(today(D(2026, 11, 2)).why, "her first day, invited by Pip")
+        self.assertEqual(today(D(2026, 11, 3)).why, "the first day together: an introduction")
+        roster.introduce(Character("pip"), today=D(2026, 11, 3))  # (her greeting does this)
+        self.assertEqual(today(D(2026, 11, 4)).why, "random")
+        self.assertEqual(roster.state()["today"]["why"], "random", "kept in roster.json too")
+        self.assertEqual(today(D(2026, 11, 4)).why, "random", "opened again: still why it was picked")
+        self.assertEqual(today(D(2026, 11, 4), lead="mira").why, "opened by name")
+        story_day = roster.today(day=D(2026, 11, 5), need=lambda *a: roster.Need(["pip"], owner="mira"))
+        self.assertEqual(story_day.why, "Vesper's story")
+        plan = roster.Today(["ruby", "pip"], why="random")
+        day = launch.Today([], away=False, resting=False, note=None)
+        self.assertEqual(launch.said(plan, day), "today: ruby, pip (random)")
+        day.resting = True
+        self.assertEqual(launch.said(plan, day), "today: ruby, pip (random), but her time today is used up: nobody comes out")
 
     def test_alone_she_says_why_the_other_isnt_here(self):
         mira = Character("mira")
@@ -4188,7 +4245,7 @@ class ForcedTodayTest(unittest.TestCase):
         self.assertTrue(out.getvalue().startswith("today.json: no one, relying on random"), "not even text")
 
 class ArrivalTest(unittest.TestCase):
-    """roster.py [[arrivals]]: Ruby turns up on her own, 30 days after Pip reaches trust 9."""
+    """roster.py [[arrivals]]: Ruby turns up on her own, 30 days after Pip reaches trust 7."""
 
     def setUp(self):
         from unittest import mock
@@ -4215,14 +4272,14 @@ class ArrivalTest(unittest.TestCase):
     def today(self, day, **kw):
         return self.roster.today(day=day, **kw)
 
-    def test_nothing_starts_below_pips_trust_9(self):
-        self.pip_trust(8)
+    def test_nothing_starts_below_pips_trust_7(self):
+        self.pip_trust(6)
         self.assertEqual(self.today(self.D(2026, 12, 1)).members, ["pip"])
         self.assertEqual(self.roster.state()["arrived"], {})
 
     def test_she_comes_on_her_own_30_days_later(self):
         D = self.D
-        self.pip_trust(9)
+        self.pip_trust(7)
         self.assertEqual(self.today(D(2026, 12, 1)).members, ["pip"])
         self.assertEqual(self.roster.state()["arrived"]["ruby"], {"started_on": "2026-12-01", "visit_day": None})
         self.pip_trust(10)  # (the clock started once, and trust going up doesn't restart it)
@@ -4232,13 +4289,13 @@ class ArrivalTest(unittest.TestCase):
         self.assertEqual(self.roster.state()["arrived"]["ruby"]["visit_day"], "2026-12-31")
 
     def test_a_late_launch_still_brings_her(self):
-        self.pip_trust(9)
+        self.pip_trust(7)
         self.today(self.D(2026, 12, 1))
         self.assertEqual(self.today(self.D(2027, 2, 14)).members, ["ruby"], "the first launch after the 30 days")
 
     def test_after_her_first_day_she_is_in_the_lineups(self):
         D = self.D
-        self.pip_trust(9)
+        self.pip_trust(7)
         self.today(D(2026, 12, 1))
         self.today(D(2026, 12, 31))
         self.assertEqual(self.today(D(2026, 12, 31)).members, ["ruby"])
