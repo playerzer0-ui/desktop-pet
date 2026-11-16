@@ -1665,8 +1665,46 @@ class DesktopTest(unittest.TestCase):
         self.assertTrue(a.leaving and a.going_home)
         self.assertIn("close", a.brain.calls)  # her diary, then she fades away
         a.on_closed([])
-        self.assertIn("See you tomorrow", a.bubble.label.text())
+        self.assertEqual(a.bubble.label.text().strip(), "", "only her wave (an action is played as a move)")
+        self.assertNotIn("See you tomorrow", a.bubble.label.text(), "her own goodbye already said it")
         self.assertIn("resting back home until tomorrow", a.bubble.note.text())
+
+    def test_a_wave_with_nothing_to_say_shows_no_empty_bubble(self):
+        """"*waves goodbye*" alone is played as a move, not printed: with no note it was an empty bubble (Vesper)."""
+        a = self.app()
+        a.leave(going_home=True)
+        a.going_home = False  # (as if it had nothing to say: no diary note and no "resting back home")
+        a.on_closed([])
+        self.assertFalse(a.bubble.isVisible() and not a.bubble.label.text().strip() and not a.bubble.note.text())
+
+    def test_say_goodbye_she_answers_in_her_own_words(self):
+        """It used to be a fixed "*waves goodbye* See you soon!" for everyone, every time."""
+        from mind.session import Turn
+        a = self.app()
+        a.snap = {"summary": {"talks_on_goodbye": False}}
+        a.leave()
+        self.assertEqual(a.brain.calls[-2:], ["farewell", "close"], "her goodbye first, then her diary")
+        a.on_speaking("farewell")
+        a.bubble.add("May your ramen stay spicy and your evening dry!")
+        a.on_closed([{"text": "The user likes spicy ramen."}])  # (the diary may finish while you still read)
+        self.assertFalse(a.body.state == "vanishing", "not before her goodbye has been read")
+        a.on_spoke(Turn("May your ramen stay spicy and your evening dry!", "farewell", None, "happy", 1.0, {},
+                        3, 3, 50, 50))
+        a.on_done()
+        self.assertNotIn("See you soon", a.bubble.label.text())
+        self.assertIn("remember 1 new thing", a.bubble.note.text())
+        self.assertIsNone(a.farewell)
+        # the other way round: her goodbye read first, while the diary is still being written
+        a = self.app()
+        a.snap = {"summary": {"talks_on_goodbye": False}}
+        a.leave()
+        a.on_speaking("farewell")
+        a.on_spoke(Turn("Everlily keep you!", "farewell", None, "happy", 1.0, {}, 3, 3, 50, 50))
+        a.on_done()
+        self.assertIn("saying goodbye", a.bubble.note.text())
+        a.on_done()  # (that bubble closing doesn't start the diary again)
+        a.on_closed([])
+        self.assertIsNone(a.farewell)
 
     def test_time_up_she_fades_away_and_the_app_closes(self):
         """The whole way out, on real timers: her goodbye, the diary, the wave, the fade, and the app quitting."""
@@ -1882,6 +1920,9 @@ class SceneTest(unittest.TestCase):
         self.assertTrue(pip_.leaving and ves.leaving)
         self.assertIn("close", pip_.brain.calls)
         self.assertIn("close", ves.brain.calls)
+        # (each says her own goodbye: the one who only followed used to get an empty bubble)
+        self.assertIn("farewell", pip_.brain.calls)
+        self.assertIn("farewell", ves.brain.calls)
         scene.vanished(ves)
         self.assertEqual(self.quits, [], "the app closed before Pip had gone")
         scene.vanished(pip_)

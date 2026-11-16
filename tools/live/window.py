@@ -19,8 +19,9 @@ POLL_MS = 50
 
 class Probe:
     """Watches one App and sends the next message once she has finished, and you could type again."""
-    def __init__(self, pet, messages, shots, quit):
+    def __init__(self, pet, messages, shots, quit, goodbye=False):
         self.pet, self.messages, self.shots, self.quit = pet, list(messages), shots, quit
+        self.goodbye, self.left = goodbye, None  # left = when you said goodbye
         self.t0 = time.time()
         self.awake = None
         self.replies, self.reply = [], None
@@ -67,7 +68,8 @@ class Probe:
             self.replies.append(self.reply)
             self.show(self.reply)
             self.reply = None
-            self.waiting_since = self.now()
+            if not self.left:  # (after her goodbye, poll waits for her to fade)
+                self.waiting_since = self.now()
 
     def on_failed(self, error):
         self.failed = error
@@ -76,6 +78,11 @@ class Probe:
 
     def poll(self):
         r = self.reply
+        if self.left and self.pet.body.state in ("vanishing", "gone"):
+            print(f"she faded out {self.now() - self.left:.1f}s after you said goodbye · bubble: "
+                  f"{self.pet.bubble.label.text().strip()!r} · note: {self.pet.bubble.note.text()!r}", flush=True)
+            self.quit()
+            return
         if r and r.get("spoke") is not None and r["free"] is None and not self.pet.brain.working:
             r["free"] = self.now()
             self.picture(len(self.replies) + 1)
@@ -86,6 +93,12 @@ class Probe:
         if self.waiting_since is None:
             return
         if not self.messages:
+            if self.goodbye and not self.left:  # "Say goodbye" from her menu: her goodbye, her diary, then she fades
+                self.left = self.now()
+                self.waiting_since = None
+                print("\n(you say goodbye)", flush=True)
+                self.pet.leave()
+                return
             self.quit()
             return
         self.pet.talk()
@@ -133,6 +146,7 @@ def main():
     parser.add_argument("--model", choices=sorted(common.MODELS), help="default: the one engine/config.py ships")
     parser.add_argument("--port", type=int, default=common.PORT)
     parser.add_argument("--offscreen", action="store_true")
+    parser.add_argument("--goodbye", action="store_true", help='end with "Say goodbye" from her menu')
     parser.add_argument("--shots", default="window-shots", help="folder for the pictures ('' for none)")
     parser.add_argument("--timeout", type=int, default=900, help="seconds before it gives up")
     args = parser.parse_args()
@@ -152,7 +166,7 @@ def main():
     character.daily_minutes = None
     common.seed_save(character, None)  # (a fresh data folder: her very first visit)
     pet = App(character)
-    probe = Probe(pet, args.say, args.shots, qt.quit)
+    probe = Probe(pet, args.say, args.shots, qt.quit, goodbye=args.goodbye)
     poller = QTimer(timeout=probe.poll)
     poller.start(POLL_MS)
     QTimer.singleShot(args.timeout * 1000, lambda: (print(f"FAILED: still going after {args.timeout}s"), qt.quit()))

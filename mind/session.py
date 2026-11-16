@@ -35,7 +35,7 @@ from engine.save import write_save
 @dataclass
 class Turn:
     reply: str
-    kind: str              # "opening", "user", "idle", "quest", "major" (raised her major quest) or "duet"
+    kind: str              # "opening", "user", "idle", "quest", "major" (raised her major quest), "duet" or "farewell"
     feeling: str | None    # how your message felt to her (only for kind="user")
     mood: str
     seconds: float
@@ -133,6 +133,14 @@ class Session:
         text, self._leaving_after = said
         self.idle.pip_spoke()
         return self._says(text), "goodbye"
+
+    def farewell(self, on_text=None, on_mood=None):
+        """Her goodbye in her own words, when you say goodbye from the menu (it used to be a fixed "See you soon!")."""
+        self.idle.pip_spoke()
+        return self._turn(direction(self.character.fill(
+            "The user has chosen to say goodbye and is leaving now. {name} says goodbye in {their} own words, warmly "
+            "and in {their} own way, fitting what they talked about today and how {they} feels. {They} doesn't ask "
+            "a question, since the user is going.")), "farewell", on_text, on_mood)
 
     def user_says(self, text, on_text=None, on_mood=None):
         self.idle.user_spoke()

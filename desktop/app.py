@@ -52,6 +52,7 @@ class App:
         self.going_home = False   # leaving because her time is up
         self.saying_goodbye = False  # her time-up goodbye has started: no more talking
         self.story_leaving = False   # her story sends her home (no "see you tomorrow")
+        self.farewell = None  # while she says goodbye in her own words: {"said": her words read, "notes": her diary's}
 
         self.body.moved.connect(self.follow)
         self.body.clicked.connect(self.talk)
@@ -184,8 +185,14 @@ class App:
             else:
                 QApplication.quit()
             return
-        self.bubble.say(self.character.fill("*writes in {their} little diary*"),
-                        note=self._note("saying goodbye…", GRAY))
+        # you said goodbye (to her, or to whoever she's with): she answers in her own words, then writes her diary.
+        # (her time up, she's already said goodbye in her own words)
+        if not going_home:
+            self.farewell = {"said": False, "notes": None}
+            self.brain.farewell()
+        else:
+            self.bubble.say(self.character.fill("*writes in {their} little diary*"),
+                            note=self._note("saying goodbye…", GRAY))
         self.brain.close()
 
     # --- her ---
@@ -254,6 +261,15 @@ class App:
 
     def on_done(self):
         """Her whole reply has been read: she can wander again, and her mood slowly settles."""
+        if self.farewell is not None:  # her goodbye has been read: on with the diary, then she fades
+            if self.farewell["said"]:
+                return  # (the "writes in her diary" bubble closing)
+            self.farewell["said"] = True
+            if self.farewell["notes"] is None:
+                self.bubble.say(self.character.fill("*writes in {their} little diary*"),
+                                note=self._note("saying goodbye…", GRAY))
+            self.fade_out()
+            return
         self.release()
         if self.restaging:
             self.body.think(True)
@@ -318,10 +334,31 @@ class App:
                 self.bubble.hide()
             QTimer.singleShot(1800, self.body.vanish)
             return
+        if self.farewell is not None:  # she's said goodbye in her own words: once they're read, just the diary's note
+            self.farewell["notes"] = said
+            self.fade_out()
+            return
         if self.going_home:
             said = "<br>".join(filter(None, [said, self.character.fill("{They}'s resting back home until tomorrow")]))
-        self.bubble.say("*waves goodbye* See you tomorrow!" if self.going_home else "*waves goodbye* See you soon!",
-                        note=self._note(said, GRAY), stay=2.5)
+        # (her time-up goodbye was already in her own words: just a wave now. An action alone is played, not printed,
+        #  so with no note there'd be an empty bubble: then only the wave)
+        if said:
+            self.bubble.say("*waves goodbye*", note=self._note(said, GRAY), stay=2.5)
+        else:
+            self.bubble.hide()
+            self.on_acted("waves goodbye")
+        self.body.squish(1.0)
+        QTimer.singleShot(1800, self.body.vanish)
+
+    def fade_out(self):
+        """After her own goodbye: once it's been read and her diary is written, the diary's note, a wave, and away."""
+        if not self.farewell["said"] or self.farewell["notes"] is None:
+            return
+        if self.farewell["notes"]:
+            self.bubble.say("", note=self._note(self.farewell["notes"], GRAY), stay=2.5)
+        else:
+            self.bubble.hide()
+        self.farewell = None
         self.body.squish(1.0)
         QTimer.singleShot(1800, self.body.vanish)
 
