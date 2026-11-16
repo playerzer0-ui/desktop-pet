@@ -157,13 +157,41 @@ def is_a_note(note):
     # (3 words: "They study engineering.")
     return len(re.findall(r"\w+", note)) >= 3 and bool(ABOUT_THE_USER.search(note)) and not SAID_TO_HER.search(note)
 
+def worth_keeping(note, character, slot=0):
+    """Whether a diary note is worth remembering, asked on its own with the answer held to yes or no (like the judge,
+    mind/judge.py). Writing the diary, Gemma made a note of nearly every line ("The user is sorry.", "They don't know
+    anything.", "They are having fun.", "They think Heaven is a nice place.") though told to skip small talk. True if
+    it couldn't be asked: the other checks still stand."""
+    question = character.fill(
+        "{name} keeps a diary of facts about the user, to remember on later visits. One note is:\n\n"
+        f'"{note}"\n\n'
+        "Answer yes only if it is a real fact about the user's own life that will still matter a week from now: their "
+        "name, people or pets in their life, where they live, their work or studies, a plan or event, something they "
+        "love or can't stand, or how they feel about something that happened to them and why.\n"
+        "Answer no if it is small talk, a greeting, an apology, a joke, a bare mood with no reason (\"they are happy\", "
+        "\"they are having fun\"), something they only want or feel like right now (\"they want pie\", \"they would "
+        "like a nap\"), something vague (\"they don't know anything\"), or about {name}, {their} world or the "
+        "conversation itself.")
+    try:
+        answer = llm.pick([{"role": "system", "content": "You check whether a diary note is worth keeping. Answer yes "
+                                                         "or no."},
+                           {"role": "user", "content": question}], ("yes", "no"), slot)
+    except (llm.ServerGone, KeyError, ValueError):
+        return True
+    return answer != "no"
+
 _USER = r"^(?:the user|they)\s+"
 ABOUT_THE_CHAT = re.compile("|".join([
     r"\b(?:said|says|saying|told \w+) (?:hi|hello|hey|bye|goodbye|good night)\b",
-    _USER + r"(?:asked|asks|wondered|wanted to know|wants to know)\b(?! (?:for|to) )",
+    _USER + r"(?:asked|asks|(?:is|was) asking|wondered|wanted to know|wants to know)\b(?! (?:for|to) )",
     _USER + r"(?:is|was) leaving\b", _USER + r"(?:has|had) to go\b", _USER + r"(?:greeted|said goodbye)\b"]), re.I)
 CALENDAR = set("monday tuesday wednesday thursday friday saturday sunday january february march april may june july "
                "august september october november december".split())
+
+# the end of the diary's request. Without it, after a short sitting Gemma answered with bits of the chat ("- Jerry",
+# "- My name is Jerry", "- Heaven is truly messed up") and no note was kept, the user's name included
+NOW_THE_NOTES = '\n\nNow the notes about the user, each one a full sentence starting with "- The user" (or only NONE):'
+THEIR_NAME = re.compile(r"\buser(?:'s name is| is (?:named|called)| goes by)\b", re.I)  # always lasting
 
 def heard_it(note, heard):
     """True if a note comes from what the user said. The model sometimes invents one, even copying DIARY's
@@ -211,19 +239,23 @@ def write_diary(save, messages, start, character, slot=0):
     text = llm.chat([{"role": "system", "content": prompt},
                      {"role": "user", "content": f"Today is {today}.\n\nAlready remembered:\n"
                                                  + ("\n".join("- " + k for k in shown) or "(nothing yet)")
-                                                 + "\n\nWhat the user said this time:\n" + "\n".join(lines[-80:])}],
+                                                 + "\n\nWhat the user said this time:\n" + "\n".join(lines[-80:])
+                                                 + NOW_THE_NOTES}],
                     slot=slot, max_tokens=250, temperature=0.3)
     notes = [re.sub(r"^(?:-\s*)+", "", line.strip()).strip() for line in text.splitlines() if line.strip().startswith("-")]
     new = []
     for note in notes[:NOTES_PER_SITTING]:
-        note = NOTE_START.sub("", note)
+        note = NOTE_START.sub("", note.replace("’", "'"))
         lasting = bool(LASTING_MARK.match(note))
         note = NOTE_START.sub("", LASTING_MARK.sub("", note))
-        if (not note or "NONE" in note or not is_a_note(note) or ABOUT_THE_CHAT.search(note) or not heard_it(note, heard)
+        if (not note or "NONE" in note or not is_a_note(note) or ABOUT_THE_CHAT.search(note) or BARE_MOOD.match(note)
+                or PASSING_WANT.match(note)
+                or not heard_it(note, heard)
                 or names_a_character(note, everyone)
-                or from_her_world(note, user_lines, world)):
+                or from_her_world(note, user_lines, world) or not worth_keeping(note, character, slot)):
             continue
         lasting = lasting and not PASSING.search(note)  # ("The user is resting" was marked lasting)
+        lasting = lasting or bool(THEIR_NAME.search(note))  # (Gemma left "The user's name is Jerry." unmarked)
         repeats = [m for m in save.get("memories", []) if same_fact(note, m["text"])]
         if not repeats:
             new.append(remember(save, "note", note, lasting))
@@ -241,12 +273,24 @@ def world_names(character):
     text = " ".join(character.text(f) for f in ("lore.md", "persona.md", "events.md"))
     return {w.lower() for w in re.findall(r"\b[A-Z][a-z]+\b", text)} - CALENDAR
 
+SENTENCE_WORDS = {"the", "a", "an", "she", "he", "they", "her", "his", "their", "it", "when", "if", "and", "but", "i"}
+
 def from_her_world(note, user_lines, world):
-    """True if a note names something from her world (like "the Republic") that the user didn't say."""
-    names = [w.lower() for w in re.findall(r"[A-Za-z][\w'-]*", note)[1:] if w[0].isupper()]
-    said = user_lines.lower()
-    return any(re.sub(r"'s$", "", n) in world and not re.search(rf"\b{re.escape(re.sub(chr(39) + 's$', '', n))}", said)
-               for n in names)
+    """True if a note names something from her world (like "the Republic" or "Heaven"), even one the user said:
+    the diary is about the user's life ("They think Heaven is a nice place." was kept with Gemma)."""
+    names = [re.sub(r"'s$", "", w.lower()) for w in re.findall(r"[A-Za-z][\w'-]*", note)[1:] if w[0].isupper()]
+    return any(n in world and n not in SENTENCE_WORDS for n in names)
+
+# just a mood, with nothing about why ("They are having fun.", "The user is tired."): "The user is a student." and
+# "The user is nervous about their exam on Friday." are more than that
+BARE_MOOD = re.compile(r"^(?:the user|they)\s+(?:is|are|was|were|feels?|felt|seems?)\s+(?!(?:a|an|the|from|in|at|on|named|called)\b)"
+                       r"\w+(?:\s+\w+)?\s*[.!]?$", re.I)
+
+# just a want, with nothing about when or why ("The user wants pie.", kept in Ruby's save; "The user needs to
+# sleep."): "The user wants to study medicine." and "They want a dog for their birthday." are more than that
+PASSING_WANT = re.compile(r"^(?:the user|they)\s+(?:(?:wants?|would (?:like|love)|(?:is|are) craving|craves?|"
+                          r"feels? like|could go for)\s+(?!to\b)(?:(?:a|an|some|the|more)\s+)?\w+(?:\s+\w+)?|"
+                          r"needs?\s+to\s+\w+(?:\s+\w+)?)\s*[.!]?$", re.I)
 
 def names_a_character(note, everyone):
     """True if a note names a character: the model sometimes takes the user for one ("The user's friend Pip")."""

@@ -12,6 +12,8 @@ os.environ["PET_DATA_DIR"] = tempfile.mkdtemp(prefix="pet-tests-data-")  # (neve
 from mind import judge, memory, pet
 REAL_JUDGE = judge.feeling, judge.done
 judge.feeling = judge.done = lambda *a, **k: None  # (no server here: her own tags decide, except in JudgeTest)
+REAL_WORTH_KEEPING = memory.worth_keeping
+memory.worth_keeping = lambda *a, **k: True  # (no server to ask: the diary's other checks decide, except below)
 from progress import quests, trust
 from engine.character import Character, for_stage
 from engine.save import Save, stage_of
@@ -225,6 +227,28 @@ class DiaryTest(unittest.TestCase):
                                  "- The user is going to the cinema with their sister Mei tonight.")
         self.assertEqual(notes, ["The user is going to the cinema with their sister Mei tonight."])
 
+    def test_each_note_is_asked_whether_it_is_worth_keeping(self):
+        """Gemma kept "The user is sorry.", "They don't know anything.", "They are having fun." (Ruby's save)."""
+        from unittest import mock
+        from engine import llm
+        asked = []
+        def pick(messages, words, slot=0):
+            asked.append((messages[-1]["content"], tuple(words)))
+            return "yes" if "Tom" in messages[-1]["content"] else "no"
+        said = ["sorry", "I'm having fun today, honestly", "I don't know anything about heaven",
+                "my brother Tom works at a bakery in Leeds"]
+        with mock.patch.object(memory, "worth_keeping", REAL_WORTH_KEEPING), mock.patch.object(llm, "pick", pick):
+            notes = self.diary(said, "- The user is sorry.\n- They are having fun.\n- They don't know anything.\n"
+                                     "- The user's brother Tom works at a bakery in Leeds.")
+        self.assertEqual(notes, ["The user's brother Tom works at a bakery in Leeds."])
+        self.assertEqual(len(asked), 2, "a bare mood is dropped before asking (BARE_MOOD): only the rest are asked")
+        self.assertEqual(asked[0][1], ("yes", "no"))
+        self.assertIn("small talk", asked[0][0])
+        def gone(*a, **k):
+            raise llm.ServerGone("no server")
+        with mock.patch.object(llm, "pick", gone):
+            self.assertTrue(REAL_WORTH_KEEPING("The user's brother Tom works at a bakery.", pip()), "unsure: keep it")
+
     def test_gemmas_marks_are_cleaned_off(self):
         """Live, Gemma left ": The user is a student." and kept ": The user is leaving now." (the colon hid it)."""
         from engine import llm
@@ -300,8 +324,50 @@ class DiaryTest(unittest.TestCase):
         world, user = memory.world_names(vesper), "User: what faction are you on?\nUser: I live in Osaka"
         self.assertTrue(memory.from_her_world("The user lives in the Republic district.", user, world))
         self.assertFalse(memory.from_her_world("The user lives in Osaka.", user, world))
-        self.assertFalse(memory.from_her_world("The user thinks the Republic is unfair.",
-                                               user + "\nUser: the Republic sounds unfair", world), "they said it")
+        # (once kept because the user said it: "They think Heaven is a nice place." filled Ruby's diary with Gemma)
+        self.assertTrue(memory.from_her_world("The user thinks the Republic is unfair.",
+                                              user + "\nUser: the Republic sounds unfair", world), "even if they said it")
+        self.assertFalse(memory.from_her_world("The user lives in Osaka. The cat is named Sora.", user, world))
+
+    def test_a_bare_mood_is_not_a_note(self):
+        for note in ("They are having fun.", "The user is tired.", "The user is sorry", "They feel happy."):
+            self.assertTrue(memory.BARE_MOOD.match(note), note)
+        for note in ("The user is a student.", "They study engineering.", "The user is nervous about their exam.",
+                     "The user is from Osaka.", "They are moving to Leeds next month."):
+            self.assertFalse(memory.BARE_MOOD.match(note), note)
+
+    def test_a_passing_want_is_not_a_note(self):
+        """ "The user wants pie." was kept in Ruby's save."""
+        for note in ("The user wants pie.", "They want some tea.", "The user would like a nap", "They are craving pizza.",
+                     "The user wants strawberry pie.", "The user needs to sleep."):
+            self.assertTrue(memory.PASSING_WANT.match(note), note)
+        for note in ("The user wants to study medicine.", "They want a dog for their birthday.",
+                     "The user likes strawberry pie.", "The user's sister wants pie."):
+            self.assertFalse(memory.PASSING_WANT.match(note), note)
+        notes = self.diary(["I want pie", "strawberry pie is the best", "ok bye for now"],
+                           "- The user wants pie.\n- The user likes strawberry pie.")
+        self.assertEqual(notes, ["The user likes strawberry pie."])
+
+    def test_the_users_name_is_kept_and_lasting(self):
+        """Ruby's save: after "My name is Jerry By the way" she kept nothing. Gemma wrote "- Jerry" until the request
+        ended by asking for sentences, and then "The user is named Jerry." was dropped as a bare mood, unmarked."""
+        from unittest import mock
+        from engine import llm
+        said = ["are u feeling well?", "what is happening now? because heaven is truly messed up",
+                "My name is Jerry By the way"]
+        messages = []
+        for line in said:
+            messages += [{"role": "user", "content": line}, {"role": "assistant", "content": "…Sorry."}]
+        for reply in ("- The user is named Jerry.", "- The user’s name is Jerry.", "- The user is called Jerry."):
+            asked = []
+            def chat(msgs, **settings):
+                asked.append(msgs[-1]["content"])
+                return reply + "\n- The user is asking if they are feeling well.\n- Jerry"
+            with mock.patch.object(llm, "chat", chat):
+                notes = memory.write_diary({}, messages, 0, pip())
+            self.assertEqual([(n["text"], bool(n.get("lasting"))) for n in notes],
+                             [(reply[2:].replace("’", "'"), True)])
+            self.assertTrue(asked[0].endswith(memory.NOW_THE_NOTES))
 
     def test_heard_it(self):
         heard = "User: I went hiking this weekend with my brother"
