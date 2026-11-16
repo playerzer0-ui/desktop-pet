@@ -12,6 +12,7 @@ with the checkpoint count measured for it.
 | tool | what it answers |
 |---|---|
 | `python -m tools.live.chat <scene>` | one scene on one model: her replies, the judge's verdicts, mood, trust, timings |
+| `python -m tools.live.judge` | the judge alone on fixed lines (`scenes/judge-lines.json`): repeatable, about a minute |
 | `python -m tools.live.compare <scenes...>` | the same scenes on every model, side by side in a Markdown report |
 | `python -m tools.live.memory --who pip ruby` | the server's memory over a long sitting, stalls, and when she starts forgetting |
 | `python -m tools.live.window` | the real window: wake-up, first words, and how long you can't type after she's done |
@@ -30,7 +31,10 @@ A scene (`scenes/*.json`) is who, an optional save to start from, and what you s
 `felt` and `done` are what the judge should decide; a run that disagrees is marked MISS. `diary: true` has her
 write her diary at the end (it's printed). `greet: false` skips her greeting.
 
-- `judge-cases.json`: messages the judge has got wrong, or must keep getting right
+- `judge-cases.json`: the judge inside a real sitting
+- `judge-lines.json`: not a scene but the judge's cases for `tools.live.judge`: her line, your message, and what
+  it should decide. The judge reads her line before your message, so the right answer often depends on it, and
+  in a sitting her line changes every run: a case whose answer depends on her goes here
 - `pip-hello.json`: a first sitting, ending with her diary
 - `ruby-breakdown.json`: day 4 of Ruby's story, the-yield
 

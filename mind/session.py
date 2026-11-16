@@ -25,7 +25,8 @@ from mind.pet import new_conversation, ask, context_used, warm_up, LEADING_TAGS
 
 REPEAT_RATIO = 0.8    # a reply this similar to one of her last few is a copy (_copies), and asked again
 REPEAT_LOOKBACK = 3   # how many of her last replies it's compared with
-REPEAT_MIN = 25       # letters: short replies ("Thank you!") may well be the same again
+REPEAT_MIN = 25       # letters: short replies ("Thank you!") may well be the same again...
+REPEAT_SHORT_RUN = 3  # ...but this many word for word in a row is a copy
 LEADING_ACTION = re.compile(r"^(?:\*[^*]*\*\s*)+")  # "*tilts her head* What do friends do?" -> the question
 from mind.lore import Lore
 from mind.sentences import ends as sentence_ends
@@ -343,14 +344,24 @@ class Session:
         on its own, it is far more reliable than the tags she wrote while in character. Her own tags are kept only
         where the judge couldn't be asked. Returns (feeling, judged)."""
         judge_slot = self.slots  # the slot after the characters'
-        felt = judge.feeling(self.character, text, judge_slot)
+        said = self._said_before()
+        felt = judge.feeling(self.character, text, judge_slot, said=said)
         if felt and felt != feeling:
             self.log(f"judge: felt {felt} (her own tag said {feeling})")
-        verdict = judge.done(self.character, *self._asking, text, judge_slot) if judging and self._asking else None
+        verdict = (judge.done(self.character, *self._asking, text, judge_slot, said=said)
+                   if judging and self._asking else None)
         if verdict is not None and verdict != judged:
             was = {True: "yes", False: "no", None: "no tag"}
             self.log(f"judge: {judging} {was[verdict]} (her own tag said {was[judged]})")
         return felt or feeling, judged if verdict is None else verdict
+
+    def _said_before(self):
+        """Her line just before your message (her new reply and your message are the last two), without her hidden
+        tags. None if she hadn't spoken yet this sitting."""
+        for m in reversed(self.messages[self.keep:-2]):
+            if m["role"] == "assistant":
+                return LEADING_TAGS.sub("", m["content"]).strip() or None
+        return None
 
     def _ask_retrying(self, text, on_text, note, on_mood):
         """Ask the model. If the server went away, start it again and retry once. If her reply copies one of her
@@ -398,9 +409,15 @@ class Session:
 
     def _copies(self, reply):
         """One of her last few replies this sitting that `reply` nearly copies (its words), or None."""
-        if len(reply) < REPEAT_MIN:
-            return None
         said = [LEADING_TAGS.sub("", m["content"]) for m in self.messages[self.keep:-2] if m["role"] == "assistant"]
+        if len(reply) < REPEAT_MIN:
+            # a short one may come again ("Thank you!"), but not word for word a third time running: "It's… Opal."
+            # came five times in a row
+            same = lambda a: " ".join(re.findall(r"\w+", LEADING_ACTION.sub("", a.strip()).lower()))
+            last = said[-(REPEAT_SHORT_RUN - 1):]
+            if same(reply) and len(last) == REPEAT_SHORT_RUN - 1 and all(same(e) == same(reply) for e in last):
+                return reply.strip()
+            return None
         for earlier in reversed(said[-REPEAT_LOOKBACK:]):
             if difflib.SequenceMatcher(None, earlier.lower(), reply.lower()).ratio() >= REPEAT_RATIO:
                 return earlier

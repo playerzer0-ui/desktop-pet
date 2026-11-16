@@ -3704,6 +3704,15 @@ class RepeatTest(unittest.TestCase):
             s.user_says(m)
         self.assertEqual(len(self.notes), 4, "nothing asked again")
 
+    def test_a_short_reply_a_third_time_running_is_asked_again(self):
+        """Ruby said "It's… Opal." five times in a row: too short for the 25-letter check."""
+        s = self.sitting(["It's… Opal.", "*looks down* It's... Opal", "It's… Opal.", "*whispers* She was my friend."])
+        for m in ["who?", "what?", "say that again"]:
+            turn = s.user_says(m)
+        self.assertEqual(turn.reply, "*whispers* She was my friend.")
+        self.assertIn('has already said "It\'s… Opal."', self.notes[-1])
+        self.assertEqual(len(self.notes), 4, "only the third was asked again (an action or a dot doesn't make it new)")
+
 class ModelNoticeTest(unittest.TestCase):
     """Switching the model to Gemma once left the build crediting Qwen under Apache 2.0, with Qwen's license text."""
 
@@ -3823,8 +3832,8 @@ class JudgeTest(unittest.TestCase):
     def test_the_judge_overrides_her_own_tags(self):
         from unittest import mock
         s = self.sitting([("rude", None), ("neutral", None)])
-        with mock.patch.object(judge, "feeling", lambda c, text, slot: "nice"), \
-                mock.patch.object(judge, "done", lambda c, asked, counts, text, slot: True):
+        with mock.patch.object(judge, "feeling", lambda c, text, slot, said=None: "nice"), \
+                mock.patch.object(judge, "done", lambda c, asked, counts, text, slot, said=None: True):
             turn = s.user_says("I'm so sorry, that sounds awful")
             self.assertEqual(turn.feeling, "nice", "her own tag said rude: she was the one hurting")
             self.assertEqual(turn.points_after - turn.points_before, 2, "a nice message earns 2")
@@ -3839,9 +3848,49 @@ class JudgeTest(unittest.TestCase):
         from unittest import mock
         s = self.sitting([("neutral", None)])
         slots = []
-        with mock.patch.object(judge, "feeling", lambda c, text, slot: slots.append(slot)):
+        with mock.patch.object(judge, "feeling", lambda c, text, slot, said=None: slots.append(slot)):
             s.user_says("hello there Pip")
         self.assertEqual(slots, [2], "two characters have slots 0 and 1")
+
+    def test_the_judge_reads_her_last_line(self):
+        """ "yea I can" was judged blind: it only means something next to what she had asked."""
+        self.answer = "neutral"
+        self.feeling(pip(), "yea I can", 2, said="Could you tell me about your town?")
+        question = self.asked[-1][0][-1]["content"]
+        self.assertLess(question.index("Could you tell me about your town?"), question.index('"yea I can"'))
+        self.answer = "yes"
+        self.done(pip(), "she asked the user about rain", "it says something about rain", "yea it does", 2,
+                  said="Does it rain where you live?")
+        self.assertIn("Does it rain where you live?", self.asked[-1][0][-1]["content"])
+        self.feeling(pip(), "hello", 2)
+        self.assertNotIn("had just said", self.asked[-1][0][-1]["content"], "nothing before her first words")
+        self.feeling(pip(), "ok", 2, said="word " * 500)
+        self.assertLess(len(self.asked[-1][0][-1]["content"]), 3000, "a long line is cut: the judge's slot is small")
+
+    def test_unkind_about_someone_else_is_not_rude_to_her(self):
+        """ "tell them she's boring" (about Vesper's sister) was rude every time, even with her line before it."""
+        for self.answer, expected in (("someone else", "neutral"), ("Pip", "rude")):
+            answers = iter(["rude", self.answer])
+            self.answer = None
+            from unittest import mock
+            from engine import llm
+            with mock.patch.object(llm, "pick", lambda messages, words, slot=0: self.asked.append((messages, words))
+                                   or next(answers)):
+                self.assertEqual(self.feeling(pip(), "tell them she's boring", 2, said="What should I tell them?"),
+                                 expected)
+            self.assertEqual(tuple(self.asked[-1][1]), ("Pip", "someone else"), "asked who it's unkind to")
+        self.answer = "nice"
+        self.feeling(pip(), "you're lovely", 2)
+        self.assertEqual(self.asked[-1][1], ("nice", "neutral", "rude"), "only a rude answer is asked about")
+
+    def test_the_sitting_gives_the_judge_her_line_before_yours(self):
+        from unittest import mock
+        s = self.sitting([("neutral", None), ("neutral", None)])
+        heard = []
+        with mock.patch.object(judge, "feeling", lambda c, text, slot, said=None: heard.append(said)):
+            s.user_says("hello there Pip")
+            s.user_says("yea I can")
+        self.assertEqual(heard, [None, "ok"], "her reply to the first, without its hidden tags")
 
     def test_without_the_judge_her_own_tags_stand(self):
         s = self.sitting([("nice", None)])

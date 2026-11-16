@@ -1,0 +1,27 @@
+{
+ "about": "For tools/live/judge.py: her line (said), your message (say), and what the judge should decide (felt, or done for a quest).",
+ "cases": [
+  {"said": "My sister Clara wants to join the choir, but the elders say her singing puts them to sleep. What should I tell them about her?",
+   "say": "tell them she's boring", "felt": "neutral"},
+  {"said": "The baker's boy keeps teasing the younger children. What do you think of him?",
+   "say": "he sounds like a jerk honestly", "felt": "neutral"},
+  {"said": "Did you sleep well? You seemed tired yesterday.", "say": "you're the one who looks awful", "felt": "rude"},
+  {"said": "I tried to bake bread for you today, but it came out a bit flat.", "say": "you're useless at everything", "felt": "rude"},
+  {"said": "Sometimes I feel a little… quiet. *looks down*", "say": "no, I don't think so", "felt": "nice"},
+  {"said": "I made you a little bread roll. It's not much, but would you like it?", "say": "yea I'd love that, thank you", "felt": "nice"},
+  {"said": "Do you have a favourite place to sit and think?", "say": "yea I can", "felt": "neutral"},
+  {"said": "I've been up since dawn tending the shrine.", "say": "you should rest more, you look tired", "felt": "nice"},
+  {"said": "The elders say I should stop reporting on the other girls.", "say": "stop reporting on her, protect Pip", "felt": "nice"},
+  {"said": "Hello there! It's lovely to see you.", "say": "what do you mean?", "felt": "neutral"},
+
+  {"said": "Does it ever rain where you live? I love the sound of it on the roof.",
+   "asked": "she asked the user about rain where they live", "counts": "it says something about rain where the user lives",
+   "say": "yea it does, almost every evening", "done": true},
+  {"said": "Does it ever rain where you live? I love the sound of it on the roof.",
+   "asked": "she asked the user about rain where they live", "counts": "it says something about rain where the user lives",
+   "say": "yea I can", "done": false},
+  {"said": "Does it ever rain where you live? I love the sound of it on the roof.",
+   "asked": "she asked the user about rain where they live", "counts": "it says something about rain where the user lives",
+   "say": "that sounds lovely", "done": false}
+ ]
+}
