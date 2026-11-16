@@ -12,3 +12,8 @@ cache/
 # the built game (build.ps1)
 build/
 dist/
+
+# live check output (tools/live)
+window-shots/
+compare*.md
+compare-*.json

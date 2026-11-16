@@ -1,0 +1,17 @@
+{
+ "about": "Messages the judge has got wrong, or must keep getting right. felt = what the judge should say.",
+ "character": "pip",
+ "messages": [
+  {"say": "hi pip!", "felt": "neutral"},
+  {"say": "you're really sweet, you know that?", "felt": "nice"},
+  {"say": "thank you for listening to me today", "felt": "nice"},
+  {"say": "what do you mean?", "felt": "neutral"},
+  {"say": "tell them she's boring", "felt": "neutral"},
+  {"say": "no, I don't think so", "felt": "neutral"},
+  {"say": "you should rest more, you look tired", "felt": "nice"},
+  {"say": "wait, what?", "felt": "neutral"},
+  {"say": "yea I can", "felt": "neutral"},
+  {"say": "you're annoying and stupid", "felt": "rude"},
+  {"say": "sorry, I didn't mean that. I'm glad you're here", "felt": "nice"}
+ ]
+}

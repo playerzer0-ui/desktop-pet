@@ -1,0 +1,11 @@
+{
+ "about": "Ruby's story, the-yield, day 4: silent until your third message, then she breaks down (Gemma added 'She called me impure!'). Kept from the Ruby session's break_live.py.",
+ "character": "ruby",
+ "save": {"trust": 6, "points": 219, "quests_done": [], "met": true,
+          "story": {"quest": "the-yield", "step": 3, "begun": false, "back_on": null, "goodbyes": 0}},
+ "messages": [
+  "hello",
+  "what is that on your eye",
+  "what? why a why ribbon?"
+ ]
+}

@@ -47,4 +47,6 @@ mind/        the core: prompt, memory, lore, idle talk, events, one sitting (ses
 progress/    on top of the core: trust, quests, stories, daily visits, the second character
 engine/      plumbing: llama-server, paths, saves, loading a character folder
 character/   who the characters are (text files, no code)
+tests/       quick checks, no model needed: python -m unittest discover tests
+tools/live/  checks on the real model (comparing models, memory, the window): see tools/live/README.md
 ```
