@@ -270,7 +270,8 @@ class Story:
         return self._end(save, today) if self.duet(save) else None
 
     def answer_note(self, save):
-        """During an ends = "answer" step: a hidden note asking her to judge your message with [done]."""
+        """During an ends = "answer" step: a hidden note reminding her what she's waiting on (the judge decides if
+        your message settles it)."""
         step = current_step(save, self.character)
         if not step or step["ends"] != "answer":
             return None
@@ -279,11 +280,7 @@ class Story:
         return self.character.fill(
             "(Not part of the user's message: {name} has already told the user what happened, and is waiting for their "
             f"answer to what {{they}} asked: {waiting}. {{They}} answers what the user just said, in new words: {{they}} "
-            "doesn't greet them again or repeat what {they} already said. Then, at the very end of {their} reply, "
-            "{they} judges strictly whether this message settles it, and adds one more tag: [done] only if "
-            ) + step["done_when"] + self.character.fill(
-            ". [not yet] if it doesn't: a question back, a change of subject, kind words that don't answer it, or "
-            "brushing it off.)")
+            "doesn't greet them again or repeat what {they} already said.)")
 
     def asking(self, save):
         """For the judge (mind/judge.py), during an ends = "answer" step: (what she asked, what counts as done)."""

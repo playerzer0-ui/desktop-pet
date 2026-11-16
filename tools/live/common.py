@@ -44,6 +44,8 @@ def load_scene(path):
     with open(path, encoding="utf-8") as f:
         scene = json.load(f)
     scene["messages"] = [m if isinstance(m, dict) else {"say": m} for m in scene.get("messages", [])]
+    if any("heard" in m for m in scene["messages"]) and "duet_with" not in scene:
+        raise SystemExit(f"{path}: a \"heard\" line needs \"duet_with\" (who says it)")
     return scene
 
 def seed_save(character, save):

@@ -1,0 +1,13 @@
+{
+ "about": "Ruby answering Opal on the desktop, day 1 of the-yield: she should talk TO Opal ('Opal, you...'), not about her (Gemma: 'Opal's tea is so sweet! Her footsteps are light').",
+ "character": "ruby",
+ "duet_with": "opal",
+ "greet": false,
+ "save": {"trust": 6, "points": 219, "quests_done": [], "met": true,
+          "story": {"quest": "the-yield", "step": 0, "begun": true, "back_on": null, "goodbyes": 0}},
+ "messages": [
+  {"heard": "So this is the spirit you keep talking about! It's so bright in here. Do you come every day?"},
+  {"heard": "You knocked on my wall three times last night. Were you scared of the storm, Saint?"},
+  {"heard": "I saved you half my honey cake, you know. Don't tell the attendants."}
+ ]
+}

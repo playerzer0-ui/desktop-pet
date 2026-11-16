@@ -208,6 +208,15 @@ class DiaryTest(unittest.TestCase):
                                  "- The user went hiking with Sam.\n- The user's friend Leo loves football.")
         self.assertEqual(notes, ["The user adopted a cat named Mochi.", "The user has an exam on Friday 2026-10-23."])
 
+    def test_gemmas_notes_about_the_chat_are_dropped(self):
+        """Gemma wrote "(lasting): ..." (a colon left over on every note), and notes about the chat itself."""
+        said = ["I'm a student, I study engineering", "what do you mean?", "my boss asked me to work on saturday",
+                "I have to go now, bye pip"]
+        notes = self.diary(said, "- (lasting): The user is a student.\n- They asked 'what do you mean?'\n"
+                                 "- The user's boss asked them to work on Saturday.\n- They said bye, pip.\n"
+                                 "- The user is leaving now.")
+        self.assertEqual(notes, ["The user is a student.", "The user's boss asked them to work on Saturday."])
+
     def test_short_replies_keep_only_her_question(self):
         from engine import llm
         messages = [{"role": "user", "content": "hi there, I just got home from work"},
@@ -303,8 +312,7 @@ class QuestTest(unittest.TestCase):
         q.next = 0; q.due(s)
         note = q.answer_note()
         self.assertIn(q.topic(q.pending[0]), note)
-        self.assertIn("[answered]", note)
-        self.assertIn("[not answered]", note)
+        self.assertNotIn("[answered]", note, "the judge decides now: she isn't asked for a tag")
         self.assertTrue(note.startswith("(Not part of the user's message"))
 
 class AnswerCheckTest(unittest.TestCase):
@@ -455,10 +463,8 @@ class MajorQuestTest(unittest.TestCase):
         self.major.due(self.save)
         notes = [self.major.answer_note(self.save) for _ in range(quests.LISTEN_FOR + 1)]
         self.assertTrue(all(notes[:-1]) and notes[-1] is None, "she judges LISTEN_FOR messages, then stops")
-        self.assertIn("[done]", notes[0])
-        self.assertIn(self.pip.major_quests[1]["done_when"], notes[0])
-        # (Ruby judged "red means danger" [not yet] three times over, because she wanted to hear more)
-        self.assertIn("even if she would love to hear more", notes[0])
+        self.assertIn(self.pip.major_quests[1]["starts"], notes[0])
+        self.assertNotIn("[done]", notes[0], "the judge decides now: she isn't asked for a tag")
 
     def test_only_her_done_finishes_it(self):
         self.major.due(self.save)
@@ -512,7 +518,7 @@ class SessionMajorQuestTest(unittest.TestCase):
         self.judged = [False]
         turn = s.user_says("oh, that's a nice gesture I guess")
         self.assertFalse(turn.major_done)
-        self.assertIn("[done]", self.notes[-1])
+        self.assertIn("had just brought up something important", self.notes[-1])
         self.judged = [True]
         turn = s.user_says("thank you Pip, that really means a lot to me")
         self.assertTrue(turn.major_done and turn.stage_up)
@@ -1226,6 +1232,20 @@ class AskTest(unittest.TestCase):
         reply, *_, shown = self.ask("Hello! [neutral] [happy]")
         self.assertEqual((reply, shown), ("Hello!", "Hello!"))
 
+    def test_you_is_never_a_name(self):
+        """Gemma, live: "It's lovely to see you, you!" (told not to, it still did). Streamed in pieces, the ", you"
+        never reaches the screen, and isn't kept in her chat to copy."""
+        reply, _, _, shown = self.ask("[mood: happy] It’s lovely to see you", ",", " yo", "u! Vesper", " tells me, you",
+                                      " know, that you’re here.")
+        self.assertEqual((reply, shown), ("It’s lovely to see you! Vesper tells me, you know, that you’re here.",) * 2)
+        self.assertNotIn("you, you", self.messages[-1]["content"])
+        for said, kept in (("Goodbye, you.", "Goodbye."), ("Hello, You!", "Hello!"), ("Farewell, you", "Farewell"),
+                           ("Rest now, you *smiles*", "Rest now *smiles*"), ("Thank you, you know?", "Thank you, you know?"),
+                           ("You, of all people!", "You, of all people!")):
+            with self.subTest(said):
+                reply, *_, shown = self.ask(said)
+                self.assertEqual((reply, shown), (kept, kept))
+
     def test_tags_first_and_mood_before_her_words(self):
         """Her tags come first now (persona.md): hidden while they stream, and her mood is told before any words."""
         events = []
@@ -1242,7 +1262,8 @@ class AskTest(unittest.TestCase):
         self.assertEqual(shown, "*smiles* Hello! [a book] ok")
         self.assertNotIn("[", "".join(t for kind, t in events[:3] if kind == "text"), "no tag ever reaches the screen")
         self.assertEqual((reply, feeling, mood), ("*smiles* Hello! [a book] ok", "nice", "happy"))
-        self.assertEqual(messages[-1]["content"], "[nice] [mood: happy] *smiles* Hello! [a book] ok", "stored tags-first")
+        self.assertEqual(messages[-1]["content"], "[mood: happy] *smiles* Hello! [a book] ok",
+                         "stored with her mood tag first (not the feeling: the judge's now)")
 
     def test_mood_not_told_if_not_hers(self):
         moods = []
@@ -2399,7 +2420,8 @@ class SummonsTest(unittest.TestCase):
         self.judged = True
         turn = s.user_says("idk")  # (a dodge never settles it, whatever she tagged)
         self.assertFalse(turn.story_done)
-        self.assertIn("[done] only if the user tells her to protect Pip", self.notes[-1])
+        self.assertIn("waiting for their answer to what she asked: whether she should keep reporting on Pip",
+                      self.notes[-1])
         turn = s.user_says("please protect Pip, don't tell them anything about her")
         self.assertTrue(turn.story_done and turn.stage_up, "your answer completes it: the stage-up comes here")
         saved = self.saved()
@@ -2613,7 +2635,7 @@ class RealNameTest(unittest.TestCase):
             return "loaded", 2000
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "[nice] [mood: happy] Oh!"}]
-            return "Oh!", {}, "nice", "happy", True if note and "[done]" in note else None
+            return "Oh!", {}, "nice", "happy", True if note and "brought up something important" in note else None
         session.start_server, session.warm_up, session.ask = (lambda say, slots=1: None), warm, ask
         self.path = gated_save(points=trust.TRUST_POINTS[8] - 1, trust_level=8)  # the top of stage 4
         trust.start(self.path, self.vesper().gates)  # (gates 1-3, behind her, done)
@@ -2666,7 +2688,7 @@ class RealNameTest(unittest.TestCase):
         note = major.answer_note(self.saved())
         self.assertTrue(note.startswith("(Not part of the message: Mira is Vesper's own real name"))
         self.assertIn("never calls the user Mira", note)
-        self.assertIn("[done] only if", note, "the judging part still follows")
+        self.assertIn("had just brought up something important", note, "what she brought up still follows")
         self.assertEqual(Character("pip").major_quests[1]["note"], "", "left out = no note")
         from engine.character import _major_quests
         with self.assertRaises(ValueError):
@@ -3879,6 +3901,7 @@ class JudgeTest(unittest.TestCase):
                 self.assertEqual(self.feeling(pip(), "tell them she's boring", 2, said="What should I tell them?"),
                                  expected)
             self.assertEqual(tuple(self.asked[-1][1]), ("Pip", "someone else"), "asked who it's unkind to")
+            self.assertIn("only tells Pip what to do", self.asked[-1][0][-1]["content"], "an order isn't an insult")
         self.answer = "nice"
         self.feeling(pip(), "you're lovely", 2)
         self.assertEqual(self.asked[-1][1], ("nice", "neutral", "rude"), "only a rude answer is asked about")

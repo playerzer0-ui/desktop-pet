@@ -1,6 +1,6 @@
 """Quests. Minor ones: now and then she asks about your world; answer her well and she trusts you more.
 Major ones (MajorQuests): one per stage 1-4, a gate trust can't pass until it's done.
-She judges your answer herself with a hidden tag, and the code also turns down dodges and keyboard mashing.
+The judge (mind/judge.py) decides whether you answered, and the code also turns down dodges and keyboard mashing.
 """
 import random, re, time
 from progress import trust
@@ -72,7 +72,7 @@ class Quests:
                                              "{They} asks the user about ") + f"{topic}.")
 
     def answer_note(self):
-        """While she waits: a hidden note asking her to judge your next message with [answered]. Else None."""
+        """While she waits: a hidden note reminding her what she asked (the judge decides if it's answered). Else None."""
         if not self.pending:
             return None
         topic = self.topic(self.pending[0])
@@ -80,11 +80,7 @@ class Quests:
             "(Not part of the user's message: {name} had just asked the user about ") + topic + self.character.fill(
             # (waiting, Ruby asked her question again in the same words after every message)
             ". {They} answers what the user just said, in new words: {they} doesn't repeat {their} question word for "
-            "word, and doesn't apologise for asking. Then, at the very end of {their} reply, {they} judges strictly whether this message "
-            "tells {them} something about that, and adds one more tag: [answered] only if it gives at least part of "
-            "an answer about ") + topic + self.character.fill(
-            ". [not answered] if it's about something else, asks {them} the question back, says they don't know, "
-            "or is nonsense. A friendly message on another subject is still [not answered].)")
+            "word, and doesn't apologise for asking.)")
 
     def asking(self):
         """For the judge (mind/judge.py), while she waits: (what she asked, what counts as an answer)."""
@@ -145,7 +141,8 @@ class MajorQuests:
                                    "and in {their} own words: ") + quest["starts"] + "."
 
     def answer_note(self, save):
-        """While she's listening: a hidden note asking her to judge your message with [done]. Else None."""
+        """While she's listening: a hidden note reminding her what she brought up (the judge decides if it's done).
+        Else None."""
         quest = self._moment(save)
         if not quest or self.listening <= 0:
             return None
@@ -155,13 +152,7 @@ class MajorQuests:
             "(Not part of the user's message: {name} had just brought up something important to {them}: ") + \
             quest["starts"] + self.character.fill(
             ". {They} answers what the user just said, in new words: {they} doesn't repeat what {they} already said "
-            "word for word, and doesn't apologise for bringing it up. Then, at the very end of {their} reply, {they} judges whether it's done, and adds one "
-            "more tag: [done] only if ") + quest["done_when"] + self.character.fill(
-            # (Ruby asked what a colour is like, was told "red means danger", "red harms you", and judged [not yet]
-            #  every time, because she wanted to hear more: wanting more is not the same as no answer)
-            ". A real try counts, even a short or silly one, and even if {they} would love to hear more: {they} can "
-            "keep asking about it after [done]. [not yet] only if the user changes the subject, brushes it off, or "
-            "doesn't really respond to it.)")
+            "word for word, and doesn't apologise for bringing it up.)")
 
     def asking(self, save):
         """For the judge (mind/judge.py): (what she brought up, what counts as done)."""

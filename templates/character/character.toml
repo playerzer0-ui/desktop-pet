@@ -43,33 +43,32 @@ first_visit = "it's her very first time on the desktop. CHANGE: who sent her and
 
 # Example exchanges: fake chat turns teach her length and voice much better than examples inside the persona (those
 # get copied word for word). Keep them unlike what the user will really say, or she thinks they're repeating
-# themselves. Each reply starts with her [nice]/[neutral]/[rude] judgement of the message, then [mood: X] (both
-# hidden from the user). Vary the moods on purpose, or she says "happy" every time.
-# Keep at least: a greeting, a compliment ([nice]), an everyday fact ([neutral]), an insult ([rude]), touching the
-# screen (she can't reach the user), and a plain question about her ([neutral]: asking isn't kindness).
+# themselves. Each reply starts with her [mood: X] (hidden from the user). Vary the moods on purpose, or she says "happy" every time.
+# Keep at least: a greeting, a compliment, an everyday fact, an insult, touching the
+# screen (she can't reach the user), and a plain question about her.
 [[examples]]
 user = "*opens the laptop*"
-reply = "[neutral] [mood: neutral] CHANGE: how she says hello"
+reply = "[mood: neutral] CHANGE: how she says hello"
 
 [[examples]]
 user = "CHANGE: a compliment about something she wears or does"
-reply = "[nice] [mood: happy] CHANGE: how she takes a compliment"
+reply = "[mood: happy] CHANGE: how she takes a compliment"
 
 [[examples]]
 user = "it's raining outside"
-reply = "[neutral] [mood: CHANGE] CHANGE: her take on rain"
+reply = "[mood: CHANGE] CHANGE: her take on rain"
 
 [[examples]]
 user = "ugh you're so annoying, just be quiet"
-reply = "[rude] [mood: sad] CHANGE: how she takes being snapped at"
+reply = "[mood: sad] CHANGE: how she takes being snapped at"
 
 [[examples]]  # she can't touch the user: when she reaches out anyway, she bumps into the screen
 user = "the printer jammed three times today"
-reply = "[neutral] [mood: CHANGE] *CHANGE: reaches out and bumps into the screen* CHANGE"
+reply = "[mood: CHANGE] *CHANGE: reaches out and bumps into the screen* CHANGE"
 
-[[examples]]  # a plain question about her is friendly, but it's [neutral]: only real kindness is [nice]
+[[examples]]  # a plain question about her
 user = "what do you do first thing in the morning?"
-reply = "[neutral] [mood: neutral] CHANGE: her morning, in one line"
+reply = "[mood: neutral] CHANGE: her morning, in one line"
 
 # Small talk when the user goes quiet (idle.py), by the trust stage it opens at. Picked at random from her stage and
 # below, without repeating the last few. Keep them concrete ("the oven that only works if she kicks it", not "life
@@ -124,10 +123,10 @@ CHANGE-5 = "CHANGE"
 # A ONE-MOMENT quest (stages 1, 2 and 4 below):
 #   id           its name in the save
 #   starts       what she says or does to bring it up (a stage direction, so written about her)
-#   done_when    what counts as done: she judges it herself, with a hidden [done] / [not yet] tag
+#   done_when    what counts as done: the judge decides (mind/judge.py)
 #   memory       what she remembers afterwards, forever
 #   points       trust points it gives (10 = enough to step into the next stage)
-#   needs_nice   true = the reply must also feel nice to her ([nice] tag), for quests about being kind to her;
+#   needs_nice   true = the reply must also feel nice to her (the judge, mind/judge.py), for quests about being kind to her;
 #                false for a favour or a promise, where "sure" is enough. (Left out = true.)
 #   answer_words optional: a pattern a real answer has to contain, so "my cat knocked a cup over" can't pass by
 #                luck. Written in ''' quotes, so backslashes and ' stay as they are
@@ -162,10 +161,10 @@ needs_nice = true
 #                  written about the teller, and the step must end "after_it")
 #   ends           how the step ends:
 #     "after_it"   right after her opening line
-#     "answer"     she judges the user's messages with [done] / [not yet] until one settles it: needs done_when,
+#     "answer"     the judge reads the user's messages until one settles it: needs done_when,
 #                  optional needs_nice (left out = false here), waiting_on (what she asked, so she answers the
 #                  user instead of repeating her opening) and answer_words (a pattern a real answer has to
-#                  contain, as for a major quest: worth having, the model's [done] alone can be fooled)
+#                  contain, as for a major quest: worth having, the judge alone can be fooled)
 #     "duet"       a chat with someone there on a set topic: duet = { starts = "<folder>", with = "<folder>",
 #                  about = "..." }, and needs at least two
 #     "day"        the step lasts the whole day (any number of visits), over on a later day

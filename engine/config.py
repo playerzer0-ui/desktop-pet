@@ -29,7 +29,7 @@ N_CTX = 12288  # context per character (at 8192 she forgot the chat after ~10 ex
 FORGET_AT = 0.75  # this full, she forgets the oldest chat lines
 JUDGE_CTX = 1024  # extra context for the judge's own slot (mind/judge.py): its questions are a few hundred tokens
 
-# change all six together to switch models (and give build_notices.py the new model's license: it stops the build
+# change all seven together to switch models (and give build_notices.py the new model's license: it stops the build
 # for a model it has no notice for)
 MODEL_FILE = "gemma-3-4b-it-Q5_K_M.gguf"
 # (pinned to one commit of the repo, not "main": if the file there is ever replaced, the checksum below would fail
@@ -46,6 +46,9 @@ MODEL_SIZE = 2_829_698_176  # bytes
 #   Qwen3.5-4B   2: levels off about 1.7 GB above the start. (0 or 1: she reads her whole prompt again on most
 #                messages, 20 s a reply: this model can't go back without a snapshot)
 MODEL_CHECKPOINTS = 4
+# how she writes (mind/pet.py). Qwen: its own chat settings (temperature 0.7, top_p 0.8, top_k 20, min_p 0.05) and a
+# light presence_penalty (0.5: at 1.5 she reached for odd words)
+SAMPLING = {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "min_p": 0.05, "presence_penalty": 0.5}
 # shown wherever the model is downloaded (the first-launch window, setup.ps1 / setup.sh) and in the build's notices.
 # Gemma's terms ask for exactly this sentence, and for whoever receives the model to be told its use is restricted
 # (licenses/Gemma-Terms-of-Use.txt, section 3.1). "" for a model with no such condition (Qwen: Apache 2.0)

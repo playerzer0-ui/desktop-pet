@@ -1,11 +1,11 @@
 """The judge: how your message felt, and whether it finished a quest, asked in a short call of its own.
 
-A character also writes these as hidden tags in her reply ([nice], [done]...), but a small model judges badly while
+A character used to write these as hidden tags in her reply ([nice], [done]...), but a small model judges badly while
 it's busy being someone: Gemma tagged the character's own mood instead of your message (a kind "I'm so sorry" came
 out [rude] on a day she was hurt, and 1 kind message in 12 [nice]), and dropped the [done] tag on a real answer.
 Asked alone, with no persona, and with the answer held to one of a few words by a grammar, the same model got 16 of
-16 kind messages and 20 of 20 real answers. So the judge's answer is used, and her own tag only if the judge can't
-be reached.
+16 kind messages and 20 of 20 real answers. So she is no longer asked for those tags (only her [mood: X]), and if
+the judge can't be reached a message counts as neutral and answers nothing, unless she wrote a tag anyway.
 
 The judge reads her line just before your message too: an answer like "yea I can" means nothing alone.
 
@@ -58,11 +58,14 @@ def _at_her(character, message, before, slot):
     """Whether a message judged rude is unkind to her, not to someone else. Asked apart, since the line in the
     question wasn't enough: "tell them she's boring" (about Vesper's sister) and "he sounds like a jerk" (about a
     boy who teases children) were rude every time, with or without her line before them. True if unsure."""
+    # ("stop reporting on her, protect Pip, tell them nothing" came out {name}, since it's said to her: an order isn't
+    #  an insult. Asked "does it insult {name}?" yes/no instead, it called harshness about others rude again)
     other = "someone else"
     question = character.fill(
         before + 'The user sent {name} this message:\n\n' + f'"{message}"\n\n'
-        "Who is the unkind part of the message about? Answer {name} if it insults, mocks or hurts {name} {them}self, "
-        f'or "{other}" if it is about another person (someone {{name}} talked about, or anyone else).')
+        "Who is the unkind part of the message about? Answer {name} only if it insults, mocks or puts down {name} "
+        f'{{them}}self. Answer "{other}" if it is about another person (someone {{name}} talked about, or anyone '
+        "else), or if it only tells {name} what to do.")
     who = _ask("You find out who a chat message is unkind to. Answer with one of the words given.", question,
                (character.name, other), slot)
     return who != other

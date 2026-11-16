@@ -24,8 +24,9 @@ def misses(record, wanted):
     wrong = []
     if "felt" in wanted and record["felt"] != wanted["felt"]:
         wrong.append(f"felt {record['felt']}, wanted {wanted['felt']}")
-    if "done" in wanted and record["quest_done"] != wanted["done"]:
-        wrong.append(f"done {record['quest_done']}, wanted {wanted['done']}")
+    done = record["quest_done"] or record["major_done"] or record["story_done"]  # (any quest or story step)
+    if "done" in wanted and done != wanted["done"]:
+        wrong.append(f"done {done}, wanted {wanted['done']}")
     return wrong
 
 def show(record, wrong):
@@ -58,12 +59,19 @@ def run(scene, runs=1):
                 turns.append(turn_record("(greeting)", s.open()))
                 show(turns[-1], [])
         for wanted in scene["messages"]:
+            if "heard" in wanted:  # a duet line from the other character (scene["duet_with"]), not from you
+                from engine.character import Character as Other
+                from progress import duets
+                turn = s.duet(duets.reply(character, Other(scene["duet_with"]), wanted["heard"]))
+                turns.append(turn_record(f"({scene['duet_with']}: {wanted['heard']})", turn))
+                show(turns[-1], [])
+                continue
             record = turn_record(wanted["say"], s.user_says(wanted["say"]))
             record["miss"] = misses(record, wanted)
             turns.append(record)
             show(record, record["miss"])
         if scene.get("diary"):
-            notes = s.close()
+            notes = [n["text"] for n in s.close()]
             print("  diary: " + (" | ".join(notes) if notes else "(nothing)") + "\n", flush=True)
             turns.append({"diary": notes})
         results.append(turns)
@@ -76,8 +84,12 @@ def main():
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--port", type=int, default=common.PORT)
     parser.add_argument("--out", help="write the results here as JSON")
+    parser.add_argument("--sampling", help='JSON merged into her sampling settings, like \'{"temperature": 1.0}\'')
     args = parser.parse_args()
     config = common.use(args.model, args.port)
+    if args.sampling:
+        config.SAMPLING = {**config.SAMPLING, **json.loads(args.sampling)}
+        print(f"sampling: {config.SAMPLING}", flush=True)
     scene = common.load_scene(args.scene)
     t0 = time.time()
     results = run(scene, args.runs)

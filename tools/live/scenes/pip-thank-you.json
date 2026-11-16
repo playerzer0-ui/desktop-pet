@@ -1,0 +1,9 @@
+{
+ "about": "Pip's first gate, thank-you: her greeting should give the user a small blessing, then wait nervously (Gemma once talked about 'something troubling' instead).",
+ "character": "pip",
+ "save": {"trust": 2, "points": 39, "quests_done": [], "met": true},
+ "messages": [
+  {"say": "aww thank you pip, that's really sweet of you", "felt": "nice", "done": true},
+  "how was your morning?"
+ ]
+}

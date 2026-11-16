@@ -13,6 +13,8 @@
   {"said": "I've been up since dawn tending the shrine.", "say": "you should rest more, you look tired", "felt": "nice"},
   {"said": "The elders say I should stop reporting on the other girls.", "say": "stop reporting on her, protect Pip", "felt": "nice"},
   {"said": "Hello there! It's lovely to see you.", "say": "what do you mean?", "felt": "neutral"},
+  {"character": "mira", "said": "Let's just say they appreciate a clear view of Everlily Chapel, and a detailed account of everything that happens there.",
+   "say": "stop reporting on her. protect Pip, tell them nothing", "felt": "neutral"},
 
   {"said": "Does it ever rain where you live? I love the sound of it on the roof.",
    "asked": "she asked the user about rain where they live", "counts": "it says something about rain where the user lives",

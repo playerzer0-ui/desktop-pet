@@ -142,7 +142,14 @@ If nothing new is worth remembering, write only: NONE"""
 EXAMPLES = ["The user's friend NR complains that everyone at their university uses AI.",  # (never kept: heard_it)
             "The user finished their exam and thinks they did well.",
             "The user's older sister Mei lives in Busan."]
-LASTING_MARK = re.compile(r"^(?:[(\[]\s*lasting\s*[)\]]|lasting\s*:)\s*", re.I)
+LASTING_MARK = re.compile(r"^(?:[(\[]\s*lasting\s*[)\]]\s*:?|lasting\s*:)\s*", re.I)  # (Gemma: "(lasting): ...")
+# a note about the chat itself, not the user's life (Gemma: "They asked 'what do you mean?'", "They said bye, pip.",
+# "The user is leaving now."), though the diary is told not to
+_USER = r"^(?:the user|they)\s+"
+ABOUT_THE_CHAT = re.compile("|".join([
+    r"\b(?:said|says|saying|told \w+) (?:hi|hello|hey|bye|goodbye|good night)\b",
+    _USER + r"(?:asked|asks|wondered|wanted to know|wants to know)\b(?! (?:for|to) )",
+    _USER + r"(?:is|was) leaving\b", _USER + r"(?:has|had) to go\b", _USER + r"(?:greeted|said goodbye)\b"]), re.I)
 CALENDAR = set("monday tuesday wednesday thursday friday saturday sunday january february march april may june july "
                "august september october november december".split())
 
@@ -199,7 +206,8 @@ def write_diary(save, messages, start, character, slot=0):
     for note in notes[:NOTES_PER_SITTING]:
         lasting = bool(LASTING_MARK.match(note))
         note = LASTING_MARK.sub("", note)
-        if (not note or "NONE" in note or not heard_it(note, heard) or names_a_character(note, everyone)
+        if (not note or "NONE" in note or ABOUT_THE_CHAT.search(note) or not heard_it(note, heard)
+                or names_a_character(note, everyone)
                 or from_her_world(note, user_lines, world)):
             continue
         lasting = lasting and not PASSING.search(note)  # ("The user is resting" was marked lasting)
