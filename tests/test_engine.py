@@ -2211,13 +2211,55 @@ class SceneTest(unittest.TestCase):
         self.assertTrue(pip_.leaving and pip_.going_home)
         self.assertFalse(ves.leaving, "Vesper went home on Pip's time")
 
-    def test_an_npc_goes_with_the_last_one(self):
+    def npc_scene(self):
         scene, _ = self.scene([Character("ruby"), Character("opal")])
-        ruby, opal = scene.pets
         for p in scene.pets:
             p.ready = True
+            p.farewells = []
+            p.brain.farewell = lambda after=None, p=p: p.farewells.append(after)
+        return scene
+
+    def test_when_ruby_leaves_opal_follows_after_her(self):
+        scene = self.npc_scene()
+        ruby, opal = scene.pets
         ruby.leave()
+        self.assertEqual(ruby.farewells, [None])
+        self.assertFalse(opal.leaving, "Opal left at the same time as Ruby")
+        self.assertTrue(opal.saying_goodbye, "Opal can still be talked to while Ruby says goodbye")
+        opal.tick()
+        self.assertNotIn("tick", opal.brain.calls, "Opal spoke up while Ruby was saying goodbye")
+        scene.vanished(ruby)
         self.assertTrue(opal.leaving, "Opal stayed on the desktop without Ruby")
+        self.assertEqual(opal.farewells, ["Ruby"], "her goodbye should know Ruby has just gone")
+        self.assertEqual(self.quits, [])
+        scene.vanished(opal)
+        self.assertEqual(self.quits, [True])
+
+    def test_when_opal_leaves_ruby_follows_after_her(self):
+        scene = self.npc_scene()
+        ruby, opal = scene.pets
+        opal.leave()
+        self.assertEqual(opal.farewells, [None], "Opal's own goodbye is a plain one")
+        self.assertFalse(ruby.leaving)
+        scene.vanished(opal)
+        self.assertTrue(ruby.leaving)
+        self.assertEqual(ruby.farewells, ["Opal"])
+
+    def test_opal_is_sad_to_be_left_behind(self):
+        from mind import session
+        real = session.start_server, session.warm_up
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
+        try:
+            s = session.Session(Character("opal"), say=lambda *_: None, slot=1, slots=2, company=["Ruby"])
+        finally:
+            session.start_server, session.warm_up = real
+        cues = []
+        s._turn = lambda text, kind, on_text, on_mood=None: cues.append(text)
+        s.farewell(after="Ruby")
+        self.assertIn("Ruby has just gone home, so Opal is going home now too", cues[0])
+        self.assertIn("regretful", cues[0])
+        self.assertIsNone(Character("ruby").left_behind, "a plain goodbye for Ruby after Opal")
 
     def test_who_comes_is_picked_once_a_day(self):
         D = datetime.date

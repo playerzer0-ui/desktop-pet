@@ -37,6 +37,7 @@ class Scene:
         self.duet = None     # while two chat: speaker, listener, lines left, the last line heard...
         self.quiet_since = time.time()
         self.story_duets_had = set()    # story chat topics had this sitting
+        self.following = []  # with an NPC here: who goes home once the one leaving now has gone (left)
         self._next_chat(rng)
         self.turn = 0  # who goes first on the next tick
         self.ticker = QTimer(timeout=self.tick)
@@ -220,14 +221,17 @@ class Scene:
                 pet.body.part()
 
     def left(self, pet):
-        """`pet` is going home on her own: the others stay, and from now on know she's gone (their company). An NPC
-        only came along with someone, so once none of the others is left, she goes too."""
+        """`pet` is going home on her own: the others stay, and from now on know she's gone (their company).
+        With an NPC here it's different: she and the one whose story brought her came together and go together,
+        one after the other. Whoever leaves first, the other says no more until she has gone, then says her own
+        goodbye and follows (vanished)."""
         if self.duet and pet in (self.duet["speaker"], self.duet["listener"]):
             self.end_duet()
         staying = self.staying()
-        if staying and all(p.character.npc for p in staying):
+        if staying and any(p.character.npc for p in self.pets):
+            self.following = staying
             for other in staying:
-                other.leave(going_home=pet.going_home, following=True)
+                other.goodbye_started()  # (no talking, typing or speaking up while the first one says goodbye)
             return
         for other in staying:
             other.brain.set_company([p.character.name for p in staying if p is not other])
@@ -239,5 +243,7 @@ class Scene:
         self.gone.add(id(pet))
         for window in (pet.body, pet.bubble, pet.input):
             window.hide()
+        if self.following:  # the next one she came with goes now (her leaving sets up whoever is after her)
+            self.following.pop(0).leave(following=pet.character.name)
         if len(self.gone) == len(self.pets):
             QApplication.quit()

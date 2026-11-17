@@ -163,10 +163,11 @@ class App:
         self.bubble.say(f"*smiles* I remember {len(entries)} things about you.", stay=12,
                         note=self._note(recent, GRAY))
 
-    def leave(self, going_home=False, following=False):
+    def leave(self, going_home=False, following=None):
         """Say goodbye: she writes in her diary, waves and fades away. going_home = her time is up.
         While her story wants goodbyes, she begs to stay instead. In a scene only she leaves: the others stay
-        (each has her own daily time). following = she goes because the one she came along with left (an NPC)."""
+        (each has her own daily time). following = the name of the one she came along with, who has just gone: she
+        follows (an NPC and the one whose story brought her, scene.left)."""
         if self.leaving:
             return
         if (not going_home and not following and self.ready and self.snap
@@ -186,11 +187,11 @@ class App:
             else:
                 QApplication.quit()
             return
-        # you said goodbye (to her, or to whoever she's with): she answers in her own words, then writes her diary.
+        # you said goodbye (to her, or to the one she came with): she answers in her own words, then writes her diary.
         # (her time up, she's already said goodbye in her own words)
         if not going_home:
             self.farewell = {"said": False, "notes": None}
-            self.brain.farewell()
+            self.brain.farewell(following)
         else:
             self.bubble.say(self.character.fill("*writes in {their} little diary*"),
                             note=self._note("saying goodbye…", GRAY))
@@ -387,7 +388,7 @@ class App:
         if self.wants_open:
             self.try_open()
             return
-        if (self.ready and not self.leaving and not self.input.isVisible() and not self.bubble.active
+        if (self.ready and not self.leaving and not self.saying_goodbye and not self.input.isVisible() and not self.bubble.active
                 and not self.others_talking()):
             self.brain.tick()
 

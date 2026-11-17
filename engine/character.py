@@ -73,6 +73,10 @@ class Character:
         self.quests = [(quest_id, int(stage), about) for stage, asks in quests.items() for quest_id, about in asks.items()]
         self.major_quests = _major_quests(c.get("major_quests", {}), self.moods | self.story_moods, folder)
         self.first_visit = c.get("first_visit")  # what her very first greeting is about
+        # her goodbye when the one she came with goes home first and she follows (an NPC: Opal after Ruby)
+        self.left_behind = c.get("left_behind")
+        if self.left_behind is not None and not isinstance(self.left_behind, str):
+            raise ValueError("left_behind must be text (how her goodbye goes when the one she came with left first)")
         self.sprites = os.path.join(self.dir, "sprites")
         self.portal = PORTAL
         # (an NPC's save only lasts a sitting: Session starts it fresh every time)

@@ -39,6 +39,10 @@ daily_minutes = 60
 # (character/roster.toml), so her first day explains how she got here.
 first_visit = "it's her very first time on the desktop. CHANGE: who sent her and why, and how she introduces herself"
 
+# (optional, mostly for an NPC) her goodbye when the one she came with goes home first and she follows: how she
+# feels about it, a stage direction written about her. Left out: a plain warm goodbye
+# left_behind = "she watches her friend go, a little lonely, then says goodbye to the user"
+
 # ---------------------------------------------------------------------------------------------------- [tables]
 
 # Example exchanges: fake chat turns teach her length and voice much better than examples inside the persona (those

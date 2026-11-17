@@ -48,9 +48,10 @@ class Brain(QObject):
     def goodbye(self):
         self.jobs.put(("goodbye",))
 
-    def farewell(self):
-        """Her goodbye in her own words (then close() for her diary)."""
-        self.jobs.put(("farewell",))
+    def farewell(self, after=None):
+        """Her goodbye in her own words (then close() for her diary). after = the name of the one she came with,
+        who has just gone home: she goes too."""
+        self.jobs.put(("farewell", after))
 
     def duet(self, direction):
         self.jobs.put(("duet", direction))
@@ -107,7 +108,7 @@ class Brain(QObject):
         elif what == "settle":
             self.session.settle_mood(args[0])
         elif what == "farewell":
-            self._speak("farewell", self.session.farewell)
+            self._speak("farewell", self.session.farewell, *args)
         elif what == "goodbye":
             wanted = self.session.goodbye()
             if wanted:
