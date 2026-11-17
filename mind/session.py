@@ -150,8 +150,12 @@ class Session:
             text = ("The user has said goodbye to {name}, so {they} is going home now, while " + others + " "
                     + ("stays" if len(self.company) == 1 else "stay") + " on the desktop with the user. {name} says "
                     "goodbye to the user in {their} own words, warmly and in {their} own way, fitting what they talked "
-                    "about today and how {they} feels, and can say a quick goodbye to " + others + " too. {They} "
+                    "about today and how {they} feels, and can say a quick goodbye to " + others + " too, said "
+                    'straight to ' + others + ' ("Bye, ' + self.company[0] + '!"), who '
+                    + ("is" if len(self.company) == 1 else "are") + " standing right there. {They} speaks only for "
+                    "{them}self: never for " + others + ", and never a message to pass on to " + others + ". {They} "
                     "doesn't ask a question, since {they} is going.")
+            # (Gemma: "tell Vesper I hope her bread rises", and "Vesper says goodbye too", with Vesper beside her)
         else:
             text = ("The user has chosen to say goodbye and is leaving now. {name} says goodbye in {their} own words, "
                     "warmly and in {their} own way, fitting what they talked about today and how {they} feels. {They} "
@@ -318,7 +322,9 @@ class Session:
                     quest_done=bool(done), number=self.replies,
                     stage_name=self.character.stage_names[trust.stage(self.save)],
                     major_raised=raising, major_done=bool(major_done),
-                    time_up=self.minutes_left is not None and self.minutes_left <= 0,
+                    # (only once she has said her time-up goodbye: when time ran out while she answered you, she
+                    #  vanished after an ordinary reply, with no goodbye, and Pip's invitation was never given)
+                    time_up=self.said_goodbye and self.minutes_left is not None and self.minutes_left <= 0,
                     leaving=leaving, story_done=outcome == "done")
         if turn.context_used:
             self.context_tokens = turn.context_used

@@ -55,7 +55,11 @@ class Idle:
         if time.time() - self.last >= wait * 60:
             quiet = (time.time() - self.user_last) / 60
             self.nudges += 1
-            topic = random.choice([t for s, t in self.character.idle_topics if s <= stage and t not in self.recent])
+            topics = [t for s, t in self.character.idle_topics if s <= stage]
+            # (Opal has only five: after five nudges every one was recent and the sixth crashed. Then the one used
+            #  longest ago comes back)
+            fresh = [t for t in topics if t not in self.recent] or [t for t in self.recent if t in topics][:1]
+            topic = random.choice(fresh)
             self.recent = (self.recent + [topic])[-5:]
             return self._spoke(direction(
                 f"The user has been quiet for {quiet:.0f} minutes. "

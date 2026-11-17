@@ -369,6 +369,17 @@ class DiaryTest(unittest.TestCase):
                              [(reply[2:].replace("’", "'"), True)])
             self.assertTrue(asked[0].endswith(memory.NOW_THE_NOTES))
 
+    def test_called_a_student_is_not_a_name(self):
+        """Pip's diary on day one (the real model): "The user is called a student." was kept as their name."""
+        from unittest import mock
+        from engine import llm
+        messages = []
+        for line in ["hi! who are you?", "I'm a student, I study engineering", "it's raining here today, kind of cozy"]:
+            messages += [{"role": "user", "content": line}, {"role": "assistant", "content": "Oh!"}]
+        with mock.patch.object(llm, "chat", lambda msgs, **settings: "- The user is called a student."):
+            notes = memory.write_diary({}, messages, 0, pip())
+        self.assertEqual([(n["text"], bool(n.get("lasting"))) for n in notes], [("The user is a student.", False)])
+
     def test_heard_it(self):
         heard = "User: I went hiking this weekend with my brother"
         self.assertTrue(memory.heard_it("The user went hiking with their brother.", heard))
@@ -752,6 +763,17 @@ class SessionTimeLimitTest(unittest.TestCase):
         self.assertTrue(s.speak(cue, kind).time_up)
         self.assertIsNone(s.wants_to_speak(), "nothing else once she's said goodbye")
         self.assertTrue(s.user_says("wait, one more thing before you go").time_up, "she still answers, then goes")
+
+    def test_time_running_out_while_she_answers_you_still_gets_her_goodbye(self):
+        """Her time ran out while she answered you: she doesn't vanish after that reply, the next tick has her say
+        goodbye (she used to go with only a wave, and Pip never gave her invitation)."""
+        s = self.sitting(235)
+        s.warned = True
+        self.spend(s, 6)  # past the limit, with no tick since
+        self.assertFalse(s.user_says("so anyway, what were we talking about").time_up)
+        cue, kind = s.wants_to_speak()
+        self.assertEqual(kind, "time_up")
+        self.assertTrue(s.speak(cue, kind).time_up)
 
     def test_one_minute_left_reads_right(self):
         s = self.sitting(239.2)
@@ -1417,6 +1439,19 @@ class SentencesTest(unittest.TestCase):
     def test_trim_cut_off_reply(self):
         self.assertEqual(pet.trim_to_sentence("I met Mr. Haloway. He took me to St."), "I met Mr. Haloway.")
         self.assertEqual(pet.trim_to_sentence("no end here"), "no end here")
+
+class IdleTopicsTest(unittest.TestCase):
+    def test_few_topics_never_run_out(self):
+        """Opal has five idle topics and the last five aren't repeated: the sixth nudge crashed."""
+        from mind import idle
+        nudges = idle.Idle(Character("opal"))
+        nudges.fired = {(datetime.date.today().isoformat(), h, m) for h, m, _ in idle.CLOCK}  # (no clock moment)
+        said = []
+        for _ in range(12):
+            nudges.last -= 20 * 60
+            said.append(nudges.due(1))
+        self.assertTrue(all(said))
+        self.assertEqual(len(set(said[:5])), 5, "all five come before any comes again")
 
 class MovesTest(unittest.TestCase):
     def test_actions(self):

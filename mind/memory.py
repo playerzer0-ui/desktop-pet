@@ -191,7 +191,9 @@ CALENDAR = set("monday tuesday wednesday thursday friday saturday sunday january
 # the end of the diary's request. Without it, after a short sitting Gemma answered with bits of the chat ("- Jerry",
 # "- My name is Jerry", "- Heaven is truly messed up") and no note was kept, the user's name included
 NOW_THE_NOTES = '\n\nNow the notes about the user, each one a full sentence starting with "- The user" (or only NONE):'
-THEIR_NAME = re.compile(r"\buser(?:'s name is| is (?:named|called)| goes by)\b", re.I)  # always lasting
+# always lasting. A name starts with a capital: "The user is called a student." (Gemma, day one) isn't one
+THEIR_NAME = re.compile(r"\b[Uu]ser(?:'s name is| is (?:named|called)| goes by)\s+[\"']?[A-Z]")
+CALLED_A = re.compile(r"\b(user|they) (is|are) (?:called|named) (an?) ", re.I)  # -> "The user is a student."
 
 def heard_it(note, heard):
     """True if a note comes from what the user said. The model sometimes invents one, even copying DIARY's
@@ -247,7 +249,7 @@ def write_diary(save, messages, start, character, slot=0):
     for note in notes[:NOTES_PER_SITTING]:
         note = NOTE_START.sub("", note.replace("’", "'"))
         lasting = bool(LASTING_MARK.match(note))
-        note = NOTE_START.sub("", LASTING_MARK.sub("", note))
+        note = CALLED_A.sub(r"\1 \2 \3 ", NOTE_START.sub("", LASTING_MARK.sub("", note)))
         if (not note or "NONE" in note or not is_a_note(note) or ABOUT_THE_CHAT.search(note) or BARE_MOOD.match(note)
                 or PASSING_WANT.match(note)
                 or not heard_it(note, heard)
