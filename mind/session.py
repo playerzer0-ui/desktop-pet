@@ -137,10 +137,18 @@ class Session:
     def farewell(self, on_text=None, on_mood=None):
         """Her goodbye in her own words, when you say goodbye from the menu (it used to be a fixed "See you soon!")."""
         self.idle.pip_spoke()
-        return self._turn(direction(self.character.fill(
-            "The user has chosen to say goodbye and is leaving now. {name} says goodbye in {their} own words, warmly "
-            "and in {their} own way, fitting what they talked about today and how {they} feels. {They} doesn't ask "
-            "a question, since the user is going.")), "farewell", on_text, on_mood)
+        if self.company:  # (only she goes: the user stays with the others)
+            others = " and ".join(self.company)
+            text = ("The user has said goodbye to {name}, so {they} is going home now, while " + others + " "
+                    + ("stays" if len(self.company) == 1 else "stay") + " on the desktop with the user. {name} says "
+                    "goodbye to the user in {their} own words, warmly and in {their} own way, fitting what they talked "
+                    "about today and how {they} feels, and can say a quick goodbye to " + others + " too. {They} "
+                    "doesn't ask a question, since {they} is going.")
+        else:
+            text = ("The user has chosen to say goodbye and is leaving now. {name} says goodbye in {their} own words, "
+                    "warmly and in {their} own way, fitting what they talked about today and how {they} feels. {They} "
+                    "doesn't ask a question, since the user is going.")
+        return self._turn(direction(self.character.fill(text)), "farewell", on_text, on_mood)
 
     def user_says(self, text, on_text=None, on_mood=None):
         self.idle.user_spoke()

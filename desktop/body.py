@@ -6,7 +6,7 @@ import math, os, random, time
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
-from desktop import moves
+from desktop import moves, painting
 
 SCALE = 2                    # 64px sprites drawn at SCALE times their size, crisp (no smoothing)
 SIZE = 64 * SCALE
@@ -308,17 +308,18 @@ class Body(QWidget):
         return sx, sy, rot, dx, dy
 
     def paintEvent(self, _):
-        painter = QPainter(self)
+        with painting.painter(self, f"a body ({self.state}, mood {self.mood})") as painter:
+            self._paint(painter)
+
+    def _paint(self, painter):
         now = time.time()
         if self.state in ("vanishing", "gone"):
             self._draw_motes(painter, now)
-            painter.end()
             return
         if self.state != "here":
             self._draw_portal(painter, now)
         arrival = self._arrival(now)
         if arrival is None:  # still in the portal
-            painter.end()
             return
         sx, sy, rot, dx, dy = self._shape()
         asx, asy, ady = arrival
@@ -333,7 +334,6 @@ class Body(QWidget):
         painter.drawPixmap(QPointF(-SIZE / 2, -SIZE), sprite)
         painter.restore()
         self._draw_emote(painter, dx, dy)
-        painter.end()
 
     # --- the portal she arrives through ---
 

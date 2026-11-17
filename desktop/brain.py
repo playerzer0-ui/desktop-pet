@@ -61,6 +61,11 @@ class Brain(QObject):
     def close(self):
         self.jobs.put(("close",))
 
+    def set_company(self, names):
+        """Who else is on the desktop now (someone went home): her prompt and notes follow."""
+        self.company = list(names)  # (for a session not started yet)
+        self.jobs.put(("company", list(names)))
+
     def _work(self):
         while True:
             job = self.jobs.get()
@@ -97,6 +102,8 @@ class Brain(QObject):
             self._speak("duet", self.session.duet, args[0])
         elif what == "story_duet_done":
             self.session.story_duet_done()
+        elif what == "company":
+            self.session.company = args[0]
         elif what == "settle":
             self.session.settle_mood(args[0])
         elif what == "farewell":

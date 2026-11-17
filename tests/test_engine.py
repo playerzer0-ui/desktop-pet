@@ -1440,6 +1440,26 @@ class DesktopTest(unittest.TestCase):
         from PySide6.QtWidgets import QApplication
         cls.qapp = QApplication.instance() or QApplication([])
 
+    def test_a_failed_paint_is_written_down_and_still_ended(self):
+        from PySide6.QtGui import QPixmap
+        from desktop import painting
+        real = painting.PATH
+        painting.PATH = temp_path("paint")
+        self.addCleanup(lambda: setattr(painting, "PATH", real))
+        picture = QPixmap(10, 10)
+        for _ in range(3):  # (a broken paint fails every frame)
+            with contextlib.redirect_stderr(io.StringIO()), painting.painter(picture, "a test") as p:
+                held = p
+                {}["nope"]
+            self.assertFalse(held.isActive(), "ended anyway")
+        with open(painting.PATH, encoding="utf-8") as f:
+            text = f.read()
+        self.assertEqual(text.count("painting a test"), 1, "once per run, not every frame")
+        self.assertIn("KeyError: 'nope'", text)
+        with painting.painter(picture, "a test") as p:
+            held = p
+        self.assertFalse(held.isActive())
+
     def pump(self, seconds):
         end = time.time() + seconds
         while time.time() < end:
@@ -2022,22 +2042,45 @@ class SceneTest(unittest.TestCase):
         self.assertNotIn("tick", ves.brain.calls, "Vesper spoke up while you were typing to Pip")
         pip_.input.hide()
 
-    def test_they_leave_together(self):
+    def test_each_leaves_on_her_own(self):
         scene, _ = self.scene()
         pip_, ves = scene.pets
         for p in scene.pets:
             p.ready = True
-        ves.leave()  # Say goodbye to Vesper: Pip goes too
-        self.assertTrue(pip_.leaving and ves.leaving)
-        self.assertIn("close", pip_.brain.calls)
-        self.assertIn("close", ves.brain.calls)
-        # (each says her own goodbye: the one who only followed used to get an empty bubble)
-        self.assertIn("farewell", pip_.brain.calls)
+        companies = []
+        pip_.brain.set_company = companies.append
+        ves.leave()  # Say goodbye to Vesper: Pip stays
+        self.assertTrue(ves.leaving)
+        self.assertFalse(pip_.leaving, "Pip went home with Vesper")
         self.assertIn("farewell", ves.brain.calls)
+        self.assertIn("close", ves.brain.calls)
+        self.assertNotIn("close", pip_.brain.calls)
+        self.assertEqual(companies, [[]], "Pip should know she's alone now")
+        self.assertIsNone(scene.next_pair, "no chat with someone who's gone")
         scene.vanished(ves)
-        self.assertEqual(self.quits, [], "the app closed before Pip had gone")
+        self.assertEqual(self.quits, [], "the app closed while Pip was still here")
+        self.assertFalse(ves.body.isVisible())
+        pip_.leave(going_home=True)  # her own time is up later
+        self.assertIn("close", pip_.brain.calls)
         scene.vanished(pip_)
         self.assertEqual(self.quits, [True])
+
+    def test_the_others_still_chat_after_one_leaves(self):
+        scene = self.chatty_scene([pip(), Character("mira"), nova()])
+        pip_, ves, nov = scene.pets
+        nov.leave()
+        scene.vanished(nov)
+        self.assertEqual(scene.next_pair.folders, {"pip", "mira"})
+        scene.quiet_since -= scene.duet_gap + 1
+        scene.tick()
+        self.assertIsNotNone(scene.duet, "Pip and Vesper stopped chatting once Nova went home")
+
+    def test_a_chat_ends_when_one_of_the_two_leaves(self):
+        scene = self.chatty_scene()
+        scene.tick()
+        self.assertIsNotNone(scene.duet)
+        scene.pets[1].leave()
+        self.assertIsNone(scene.duet)
 
     # --- three on the desktop (a stand-in third character: Vesper's files under another name) ---
 
@@ -2154,7 +2197,8 @@ class SceneTest(unittest.TestCase):
         self.assertNotIn("strangers", with_vesper.note())
         self.assertTrue(Company(Character("ruby"), ["Opal"]).greeting().startswith("Her friend Opal"), "her story's NPC")
 
-    def test_pips_time_up_sends_both_home(self):
+    def test_pips_time_up_sends_only_her_home(self):
+        """Each has her own daily time: Pip's running out doesn't send Vesper home."""
         from mind.session import Turn
         scene, _ = self.scene()
         pip_, ves = scene.pets
@@ -2164,7 +2208,16 @@ class SceneTest(unittest.TestCase):
         pip_.on_spoke(Turn("I have to go home now...", "time_up", None, "sad", 1.0, {}, 10, 10, 460, 460,
                            time_up=True))
         pip_.on_done()
-        self.assertTrue(ves.leaving and ves.going_home)
+        self.assertTrue(pip_.leaving and pip_.going_home)
+        self.assertFalse(ves.leaving, "Vesper went home on Pip's time")
+
+    def test_an_npc_goes_with_the_last_one(self):
+        scene, _ = self.scene([Character("ruby"), Character("opal")])
+        ruby, opal = scene.pets
+        for p in scene.pets:
+            p.ready = True
+        ruby.leave()
+        self.assertTrue(opal.leaving, "Opal stayed on the desktop without Ruby")
 
     def test_who_comes_is_picked_once_a_day(self):
         D = datetime.date
@@ -2206,7 +2259,9 @@ class SceneTest(unittest.TestCase):
         day = launch.Today([], away=False, resting=False, note=None)
         self.assertEqual(launch.said(plan, day), "today: ruby, pip (random)")
         day.resting = True
-        self.assertEqual(launch.said(plan, day), "today: ruby, pip (random), but her time today is used up: nobody comes out")
+        self.assertEqual(launch.said(plan, day), "today: ruby, pip (random), but their time today is used up: nobody comes out")
+        day.resting, day.home, day.cast = False, ["pip"], [Character("ruby")]
+        self.assertEqual(launch.said(plan, day), "today: ruby, pip (random), but pip's time today is used up: ruby only")
 
     def test_alone_she_says_why_the_other_isnt_here(self):
         mira = Character("mira")

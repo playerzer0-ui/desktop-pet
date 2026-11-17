@@ -1,8 +1,9 @@
 """Several characters on the desktop at once, each a whole App with her own mind and server slot.
 The scene makes them get along: one talks at a time, they arrive side by side and greet in order,
-they leave together, and after a few quiet minutes two of them sometimes chat with each other (duets.py).
+and after a few quiet minutes two of them sometimes chat with each other (duets.py). Each leaves on her own
+(you say goodbye to her, or her own daily time runs out), and the others stay; the app closes once all have gone.
 
-    scene = Scene([pip, vesper])    # the first one leads: her time counts for everyone
+    scene = Scene([pip, vesper])    # the first one greets first
 """
 import itertools, random, time
 from progress import duets
@@ -56,7 +57,11 @@ class Scene:
 
     def _taken(self, pet):
         """Where everyone else stands and is headed, so `pet` doesn't wander onto them."""
-        return [x for p in self.pets if p is not pet for x in (p.body.foot_x, p.body.target)]
+        return [x for p in self.pets if p is not pet and id(p) not in self.gone for x in (p.body.foot_x, p.body.target)]
+
+    def staying(self):
+        """The ones still here, not leaving."""
+        return [p for p in self.pets if not p.leaving]
 
     def _pet(self, folder):
         return next((p for p in self.pets if p.character.folder == folder), None)
@@ -104,13 +109,18 @@ class Scene:
         self.quiet_since = time.time()
 
     def free(self):
-        """Everyone has greeted you, and nobody's talking, typing or leaving."""
-        return all(p.ready and p.body.here and not p.wants_open and not p.leaving and not p.saying_goodbye
-                   and not p.talking and not p.input.isVisible() for p in self.pets)
+        """Everyone still here has greeted you, nobody's talking, typing or saying goodbye, and no one who left is
+        still on screen (her goodbye being read)."""
+        staying = self.staying()
+        return (len(staying) > 1 and all(p.leaving and id(p) in self.gone for p in self.pets if p not in staying)
+                and all(p.ready and p.body.here and not p.wants_open and not p.saying_goodbye
+                        and not p.talking and not p.input.isVisible() for p in staying))
 
     def _next_chat(self, rng=random):
-        """Pick which two chat next, and after how much quiet."""
-        self.next_pair = rng.choice(list(self.pairs.values())) if self.pairs else None
+        """Pick which two chat next (both still here), and after how much quiet."""
+        here = {p.character.folder for p in self.staying()}
+        pairs = [pair for pair in self.pairs.values() if pair.folders <= here]
+        self.next_pair = rng.choice(pairs) if pairs else None
         self.duet_gap = self.next_pair.gap(rng) if self.next_pair else None
 
     def duet_due(self):
@@ -118,9 +128,10 @@ class Scene:
 
     def story_duet(self):
         """(pet, {starts, about}) if one's story step wants a chat not had yet this sitting, else None."""
-        for pet in self.pets:
+        for pet in self.staying():
             wanted = pet.snap and pet.snap["summary"].get("story_duet")
-            if wanted and wanted["about"] not in self.story_duets_had and self._pet(wanted["starts"]):
+            starter = self._pet(wanted["starts"]) if wanted else None
+            if wanted and wanted["about"] not in self.story_duets_had and starter and not starter.leaving:
                 return pet, wanted
         return None
 
@@ -139,7 +150,7 @@ class Scene:
         speaker = self._pet(topic["starts"])
         listener = self._pet(topic["with"]) if topic.get("with") else None
         if listener is None:  # a story's chat: with whoever's story it is, else the next one here
-            listener = owner if owner is not None and owner is not speaker else next(p for p in self.pets
+            listener = owner if owner is not None and owner is not speaker else next(p for p in self.staying()
                                                                                        if p is not speaker)
         if pair is None:
             pair = self.pairs.get(frozenset((speaker.character.folder, listener.character.folder)))
@@ -166,12 +177,18 @@ class Scene:
         """The first line, once they've met. Called off if you started typing or someone is leaving."""
         if self.duet is not duet or duet["opener"] is None:
             return  # already begun, or over
-        if any(p.leaving or p.saying_goodbye or p.input.isVisible() for p in self.pets):
+        if self._interrupted(duet):
             self.end_duet()
             return
         duet["walking"].clear()
         duet["speaker"].brain.duet(duet["opener"])
         duet["opener"] = None
+
+    def _interrupted(self, duet):
+        """You started typing to anyone, or one of the two is leaving: the chat is called off. (Someone else who
+        left earlier doesn't stop it.)"""
+        return (any(p.input.isVisible() for p in self.pets)
+                or any(p.leaving or p.saying_goodbye for p in (duet["speaker"], duet["listener"])))
 
     def duet_said(self, pet, words):
         if self.duet and pet is self.duet["speaker"]:
@@ -182,7 +199,7 @@ class Scene:
         if not self.duet or pet is not self.duet["speaker"]:
             return
         self.duet["left"] -= 1
-        stop = any(p.leaving or p.saying_goodbye or p.input.isVisible() for p in self.pets)
+        stop = self._interrupted(self.duet)
         if self.duet["left"] <= 0 or stop or not self.duet["heard"]:
             self.end_duet(finished=self.duet["left"] <= 0 and bool(self.duet["heard"]))
             return
@@ -202,14 +219,25 @@ class Scene:
             for pet in (duet["speaker"], duet["listener"]):
                 pet.body.part()
 
-    def leave_with(self, pet, going_home):
-        """`pet` is going home: so is everyone else."""
-        self.ticker.stop()
-        for other in self.pets:
-            if other is not pet:
-                other.leave(going_home=going_home, following=True)
+    def left(self, pet):
+        """`pet` is going home on her own: the others stay, and from now on know she's gone (their company). An NPC
+        only came along with someone, so once none of the others is left, she goes too."""
+        if self.duet and pet in (self.duet["speaker"], self.duet["listener"]):
+            self.end_duet()
+        staying = self.staying()
+        if staying and all(p.character.npc for p in staying):
+            for other in staying:
+                other.leave(going_home=pet.going_home, following=True)
+            return
+        for other in staying:
+            other.brain.set_company([p.character.name for p in staying if p is not other])
+        self._next_chat()
+        if not staying:
+            self.ticker.stop()
 
     def vanished(self, pet):
         self.gone.add(id(pet))
+        for window in (pet.body, pet.bubble, pet.input):
+            window.hide()
         if len(self.gone) == len(self.pets):
             QApplication.quit()

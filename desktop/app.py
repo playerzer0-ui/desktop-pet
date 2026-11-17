@@ -140,7 +140,7 @@ class App:
         for label, action in (("Status", self.status), (say("What {they} remembers"), self.memories)):
             menu.addAction(label, action).setEnabled(not talking)
         menu.addSeparator()
-        menu.addAction("Say goodbye", self.leave)
+        menu.addAction(say("Say goodbye to {name}") if self.scene else "Say goodbye", self.leave)
         return menu
 
     def on_snapshot(self, snap):
@@ -165,7 +165,8 @@ class App:
 
     def leave(self, going_home=False, following=False):
         """Say goodbye: she writes in her diary, waves and fades away. going_home = her time is up.
-        While her story wants goodbyes, she begs to stay instead. following = someone else in the scene left."""
+        While her story wants goodbyes, she begs to stay instead. In a scene only she leaves: the others stay
+        (each has her own daily time). following = she goes because the one she came along with left (an NPC)."""
         if self.leaving:
             return
         if (not going_home and not following and self.ready and self.snap
@@ -176,8 +177,8 @@ class App:
         self.ticker.stop()
         self.input.hide()
         self.body.hold(True)
-        if self.scene and not following:
-            self.scene.leave_with(self, going_home)
+        if self.scene:
+            self.scene.left(self)
         if not self.ready:
             if self.scene:  # still in the portal: she just doesn't come out
                 self.body.hide()
