@@ -9,6 +9,7 @@ import os
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen, QPixmap
 from engine.config import HERE, FORGET_AT
+from desktop import painting
 from desktop.bubble import CREAM, GRAY, GOLD, INK, ROSE
 
 ART = os.path.join(HERE, "character")
@@ -22,7 +23,11 @@ def card(summary):
     picture = QPixmap(int(WIDTH * ratio), int(HEIGHT * ratio))
     picture.setDevicePixelRatio(ratio)
     picture.fill(Qt.transparent)
-    p = QPainter(picture)
+    with painting.painter(picture, "the Status card") as p:
+        _draw(p, summary)
+    return picture
+
+def _draw(p, summary):
     p.setRenderHint(QPainter.Antialiasing)
     p.setRenderHint(QPainter.TextAntialiasing)
 
@@ -76,8 +81,6 @@ def card(summary):
     p.setPen(QPen(QColor(INK), 1))  # where she starts forgetting
     tick = bar.left() + bar.width() * FORGET_AT
     p.drawLine(QPointF(tick, bar.top() - 2), QPointF(tick, bar.bottom() + 2))
-    p.end()
-    return picture
 
 def clock_text(summary):
     """"139/240 min", or "139 min" with no daily limit."""

@@ -9,6 +9,7 @@ import html, re
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QLabel, QLineEdit, QVBoxLayout, QWidget
+from desktop import painting
 from mind.sentences import first_end
 
 CREAM, INK, GOLD, ROSE, GRAY = "#FFF8EC", "#3B3049", "#C8902E", "#B76E79", "#8A8296"
@@ -324,21 +325,20 @@ class Bubble(QWidget):
         self.follow(self.anchor)
 
     def paintEvent(self, _):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        box = QRectF(1, 1, self.width() - 2, self.height() - TAIL - 2)
-        path = QPainterPath()
-        path.addRoundedRect(box, 10, 10)
-        tail = QPainterPath()
-        mid = self.tail_x
-        tail.moveTo(mid - 8, box.bottom() - 1)
-        tail.lineTo(mid, self.height() - 1)
-        tail.lineTo(mid + 8, box.bottom() - 1)
-        path = path.united(tail)
-        painter.setPen(QPen(QColor(GOLD), 2))
-        painter.setBrush(QColor(CREAM))
-        painter.drawPath(path)
-        painter.end()
+        with painting.painter(self, "a speech bubble") as painter:
+            painter.setRenderHint(QPainter.Antialiasing)
+            box = QRectF(1, 1, self.width() - 2, self.height() - TAIL - 2)
+            path = QPainterPath()
+            path.addRoundedRect(box, 10, 10)
+            tail = QPainterPath()
+            mid = self.tail_x
+            tail.moveTo(mid - 8, box.bottom() - 1)
+            tail.lineTo(mid, self.height() - 1)
+            tail.lineTo(mid + 8, box.bottom() - 1)
+            path = path.united(tail)
+            painter.setPen(QPen(QColor(GOLD), 2))
+            painter.setBrush(QColor(CREAM))
+            painter.drawPath(path)
 
 class InputBox(QWidget):
     """A small box above the character for typing to them. Enter sends, Esc closes."""

@@ -3,7 +3,7 @@ a job object on Windows, a small shell watchdog on Linux. Talking to it is llm.p
 """
 import atexit, ctypes, glob, os, shutil, subprocess, sys, threading, time
 from engine import llm
-from engine.config import HERE, LOG_DIR, PORT, N_CTX, MODEL, CACHE_DIR
+from engine.config import HERE, LOG_DIR, PORT, N_CTX, MODEL, CACHE_DIR, JUDGE_CTX, MODEL_CHECKPOINTS
 
 WINDOWS = os.name == "nt"
 
@@ -97,7 +97,7 @@ def _start(say, slots):
             raise SystemExit(
                 f"A llama-server with a different model ({model}) is already running on port {PORT}.\n"
                 f"Close it (or its start-server.bat window) and run this again.")
-        if llm.slots() < slots:  # ...and enough slots for everyone on the desktop
+        if llm.slots() < slots + 1:  # ...and enough slots for everyone on the desktop, plus the judge's
             raise SystemExit(
                 f"The llama-server already running on port {PORT} has {llm.slots()} slot(s), and {slots} characters "
                 f"need {slots}.\nClose it (or its start-server.bat window) and run this again.")
@@ -105,8 +105,13 @@ def _start(say, slots):
     os.makedirs(CACHE_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
     log = open(os.path.join(LOG_DIR, "server.log"), "w")
-    command = [find_llama_server(), "-m", MODEL, "-c", str(N_CTX * slots), "-ngl", "0", "--port", str(PORT),
-               "-np", str(slots),  # one slot per character, each with N_CTX
+    # one slot per character, each with N_CTX, and one more for the judge (mind/judge.py). The slots share one
+    # pool of context (-kvu), so the judge's slot only costs the JUDGE_CTX it uses, not another N_CTX.
+    # --no-cache-idle-slots: with a shared pool the server otherwise empties every idle slot when another one starts
+    # work, so after each judge call her whole prompt was read again (25-30 s a reply, "reused 0 tokens")
+    command = [find_llama_server(), "-m", MODEL, "-c", str(N_CTX * slots + JUDGE_CTX), "-ngl", "0", "--port", str(PORT),
+               "-np", str(slots + 1), "-kvu", "--kv-unified-per-slot", str(N_CTX), "--no-cache-idle-slots",
+               "--ctx-checkpoints", str(MODEL_CHECKPOINTS),  # (the default, 32, grew by GBs: see config.py)
                "--slot-save-path", CACHE_DIR]
     if WINDOWS:
         server = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,

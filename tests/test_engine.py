@@ -9,7 +9,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # no windows pop up
 os.environ["PET_DATA_DIR"] = tempfile.mkdtemp(prefix="pet-tests-data-")  # (never the player's real saves/logs)
 
-from mind import memory, pet
+from mind import judge, memory, pet
+REAL_JUDGE = judge.feeling, judge.done
+judge.feeling = judge.done = lambda *a, **k: None  # (no server here: her own tags decide, except in JudgeTest)
+REAL_WORTH_KEEPING = memory.worth_keeping
+memory.worth_keeping = lambda *a, **k: True  # (no server to ask: the diary's other checks decide, except below)
 from progress import quests, trust
 from engine.character import Character, for_stage
 from engine.save import Save, stage_of
@@ -206,6 +210,65 @@ class DiaryTest(unittest.TestCase):
                                  "- The user went hiking with Sam.\n- The user's friend Leo loves football.")
         self.assertEqual(notes, ["The user adopted a cat named Mochi.", "The user has an exam on Friday 2026-10-23."])
 
+    def test_gemmas_notes_about_the_chat_are_dropped(self):
+        """Gemma wrote "(lasting): ..." (a colon left over on every note), and notes about the chat itself."""
+        said = ["I'm a student, I study engineering", "what do you mean?", "my boss asked me to work on saturday",
+                "I have to go now, bye pip"]
+        notes = self.diary(said, "- (lasting): The user is a student.\n- They asked 'what do you mean?'\n"
+                                 "- The user's boss asked them to work on Saturday.\n- They said bye, pip.\n"
+                                 "- The user is leaving now.")
+        self.assertEqual(notes, ["The user is a student.", "The user's boss asked them to work on Saturday."])
+
+    def test_bits_of_the_chat_are_not_notes(self):
+        """Ruby's save, with Gemma: "my eye has a smudge", "hello", "you", "you are feeling better" were kept."""
+        said = ["hello", "what is that on your eye", "you are feeling better I hope", "my eye has a smudge too lol",
+                "I'm going to the cinema with my sister Mei tonight"]
+        notes = self.diary(said, "- my eye has a smudge\n- hello\n- you\n- you are feeling better\n"
+                                 "- The user is going to the cinema with their sister Mei tonight.")
+        self.assertEqual(notes, ["The user is going to the cinema with their sister Mei tonight."])
+
+    def test_each_note_is_asked_whether_it_is_worth_keeping(self):
+        """Gemma kept "The user is sorry.", "They don't know anything.", "They are having fun." (Ruby's save)."""
+        from unittest import mock
+        from engine import llm
+        asked = []
+        def pick(messages, words, slot=0):
+            asked.append((messages[-1]["content"], tuple(words)))
+            return "yes" if "Tom" in messages[-1]["content"] else "no"
+        said = ["sorry", "I'm having fun today, honestly", "I don't know anything about heaven",
+                "my brother Tom works at a bakery in Leeds"]
+        with mock.patch.object(memory, "worth_keeping", REAL_WORTH_KEEPING), mock.patch.object(llm, "pick", pick):
+            notes = self.diary(said, "- The user is sorry.\n- They are having fun.\n- They don't know anything.\n"
+                                     "- The user's brother Tom works at a bakery in Leeds.")
+        self.assertEqual(notes, ["The user's brother Tom works at a bakery in Leeds."])
+        self.assertEqual(len(asked), 2, "a bare mood is dropped before asking (BARE_MOOD): only the rest are asked")
+        self.assertEqual(asked[0][1], ("yes", "no"))
+        self.assertIn("small talk", asked[0][0])
+        def gone(*a, **k):
+            raise llm.ServerGone("no server")
+        with mock.patch.object(llm, "pick", gone):
+            self.assertTrue(REAL_WORTH_KEEPING("The user's brother Tom works at a bakery.", pip()), "unsure: keep it")
+
+    def test_gemmas_marks_are_cleaned_off(self):
+        """Live, Gemma left ": The user is a student." and kept ": The user is leaving now." (the colon hid it)."""
+        from engine import llm
+        said = ["I'm a student, I study engineering", "I have a cat called Miso", "my favourite food is ramen",
+                "I have to go now, bye pip"]
+        messages = []
+        for line in said:
+            messages += [{"role": "user", "content": line}, {"role": "assistant", "content": "[mood: happy] Oh!"}]
+        real = llm.chat
+        llm.chat = lambda *a, **k: ("- : The user is a student.\n- **(lasting)**: The user has a cat called Miso.\n"
+                                    "- [lasting] The user's favourite food is ramen.\n- : The user is leaving now.\n"
+                                    "- They study engineering.")
+        try:
+            notes = memory.write_diary({}, messages, 0, pip())
+        finally:
+            llm.chat = real
+        self.assertEqual([(n["text"], bool(n.get("lasting"))) for n in notes],
+                         [("The user is a student.", False), ("The user has a cat called Miso.", True),
+                          ("The user's favourite food is ramen.", True), ("They study engineering.", False)])
+
     def test_short_replies_keep_only_her_question(self):
         from engine import llm
         messages = [{"role": "user", "content": "hi there, I just got home from work"},
@@ -261,8 +324,61 @@ class DiaryTest(unittest.TestCase):
         world, user = memory.world_names(vesper), "User: what faction are you on?\nUser: I live in Osaka"
         self.assertTrue(memory.from_her_world("The user lives in the Republic district.", user, world))
         self.assertFalse(memory.from_her_world("The user lives in Osaka.", user, world))
-        self.assertFalse(memory.from_her_world("The user thinks the Republic is unfair.",
-                                               user + "\nUser: the Republic sounds unfair", world), "they said it")
+        # (once kept because the user said it: "They think Heaven is a nice place." filled Ruby's diary with Gemma)
+        self.assertTrue(memory.from_her_world("The user thinks the Republic is unfair.",
+                                              user + "\nUser: the Republic sounds unfair", world), "even if they said it")
+        self.assertFalse(memory.from_her_world("The user lives in Osaka. The cat is named Sora.", user, world))
+
+    def test_a_bare_mood_is_not_a_note(self):
+        for note in ("They are having fun.", "The user is tired.", "The user is sorry", "They feel happy."):
+            self.assertTrue(memory.BARE_MOOD.match(note), note)
+        for note in ("The user is a student.", "They study engineering.", "The user is nervous about their exam.",
+                     "The user is from Osaka.", "They are moving to Leeds next month."):
+            self.assertFalse(memory.BARE_MOOD.match(note), note)
+
+    def test_a_passing_want_is_not_a_note(self):
+        """ "The user wants pie." was kept in Ruby's save."""
+        for note in ("The user wants pie.", "They want some tea.", "The user would like a nap", "They are craving pizza.",
+                     "The user wants strawberry pie.", "The user needs to sleep."):
+            self.assertTrue(memory.PASSING_WANT.match(note), note)
+        for note in ("The user wants to study medicine.", "They want a dog for their birthday.",
+                     "The user likes strawberry pie.", "The user's sister wants pie."):
+            self.assertFalse(memory.PASSING_WANT.match(note), note)
+        notes = self.diary(["I want pie", "strawberry pie is the best", "ok bye for now"],
+                           "- The user wants pie.\n- The user likes strawberry pie.")
+        self.assertEqual(notes, ["The user likes strawberry pie."])
+
+    def test_the_users_name_is_kept_and_lasting(self):
+        """Ruby's save: after "My name is Jerry By the way" she kept nothing. Gemma wrote "- Jerry" until the request
+        ended by asking for sentences, and then "The user is named Jerry." was dropped as a bare mood, unmarked."""
+        from unittest import mock
+        from engine import llm
+        said = ["are u feeling well?", "what is happening now? because heaven is truly messed up",
+                "My name is Jerry By the way"]
+        messages = []
+        for line in said:
+            messages += [{"role": "user", "content": line}, {"role": "assistant", "content": "…Sorry."}]
+        for reply in ("- The user is named Jerry.", "- The user’s name is Jerry.", "- The user is called Jerry."):
+            asked = []
+            def chat(msgs, **settings):
+                asked.append(msgs[-1]["content"])
+                return reply + "\n- The user is asking if they are feeling well.\n- Jerry"
+            with mock.patch.object(llm, "chat", chat):
+                notes = memory.write_diary({}, messages, 0, pip())
+            self.assertEqual([(n["text"], bool(n.get("lasting"))) for n in notes],
+                             [(reply[2:].replace("’", "'"), True)])
+            self.assertTrue(asked[0].endswith(memory.NOW_THE_NOTES))
+
+    def test_called_a_student_is_not_a_name(self):
+        """Pip's diary on day one (the real model): "The user is called a student." was kept as their name."""
+        from unittest import mock
+        from engine import llm
+        messages = []
+        for line in ["hi! who are you?", "I'm a student, I study engineering", "it's raining here today, kind of cozy"]:
+            messages += [{"role": "user", "content": line}, {"role": "assistant", "content": "Oh!"}]
+        with mock.patch.object(llm, "chat", lambda msgs, **settings: "- The user is called a student."):
+            notes = memory.write_diary({}, messages, 0, pip())
+        self.assertEqual([(n["text"], bool(n.get("lasting"))) for n in notes], [("The user is a student.", False)])
 
     def test_heard_it(self):
         heard = "User: I went hiking this weekend with my brother"
@@ -301,8 +417,7 @@ class QuestTest(unittest.TestCase):
         q.next = 0; q.due(s)
         note = q.answer_note()
         self.assertIn(q.topic(q.pending[0]), note)
-        self.assertIn("[answered]", note)
-        self.assertIn("[not answered]", note)
+        self.assertNotIn("[answered]", note, "the judge decides now: she isn't asked for a tag")
         self.assertTrue(note.startswith("(Not part of the user's message"))
 
 class AnswerCheckTest(unittest.TestCase):
@@ -453,10 +568,8 @@ class MajorQuestTest(unittest.TestCase):
         self.major.due(self.save)
         notes = [self.major.answer_note(self.save) for _ in range(quests.LISTEN_FOR + 1)]
         self.assertTrue(all(notes[:-1]) and notes[-1] is None, "she judges LISTEN_FOR messages, then stops")
-        self.assertIn("[done]", notes[0])
-        self.assertIn(self.pip.major_quests[1]["done_when"], notes[0])
-        # (Ruby judged "red means danger" [not yet] three times over, because she wanted to hear more)
-        self.assertIn("even if she would love to hear more", notes[0])
+        self.assertIn(self.pip.major_quests[1]["starts"], notes[0])
+        self.assertNotIn("[done]", notes[0], "the judge decides now: she isn't asked for a tag")
 
     def test_only_her_done_finishes_it(self):
         self.major.due(self.save)
@@ -510,7 +623,7 @@ class SessionMajorQuestTest(unittest.TestCase):
         self.judged = [False]
         turn = s.user_says("oh, that's a nice gesture I guess")
         self.assertFalse(turn.major_done)
-        self.assertIn("[done]", self.notes[-1])
+        self.assertIn("had just brought up something important", self.notes[-1])
         self.judged = [True]
         turn = s.user_says("thank you Pip, that really means a lot to me")
         self.assertTrue(turn.major_done and turn.stage_up)
@@ -650,6 +763,17 @@ class SessionTimeLimitTest(unittest.TestCase):
         self.assertTrue(s.speak(cue, kind).time_up)
         self.assertIsNone(s.wants_to_speak(), "nothing else once she's said goodbye")
         self.assertTrue(s.user_says("wait, one more thing before you go").time_up, "she still answers, then goes")
+
+    def test_time_running_out_while_she_answers_you_still_gets_her_goodbye(self):
+        """Her time ran out while she answered you: she doesn't vanish after that reply, the next tick has her say
+        goodbye (she used to go with only a wave, and Pip never gave her invitation)."""
+        s = self.sitting(235)
+        s.warned = True
+        self.spend(s, 6)  # past the limit, with no tick since
+        self.assertFalse(s.user_says("so anyway, what were we talking about").time_up)
+        cue, kind = s.wants_to_speak()
+        self.assertEqual(kind, "time_up")
+        self.assertTrue(s.speak(cue, kind).time_up)
 
     def test_one_minute_left_reads_right(self):
         s = self.sitting(239.2)
@@ -1031,10 +1155,25 @@ class RosterTest(unittest.TestCase):
         r = roster.rules()
         self.assertEqual([(u["by"], u["who"]) for u in r["unlocks"]], [("pip", "mira")])
         self.assertEqual([(a["after"], a["who"], a["at_trust"], a["days"]) for a in r["arrivals"]],
-                         [("pip", "ruby", 9, 30)])
-        self.assertEqual({tuple(l["members"]): l["weight"] for l in r["lineups"]},
-                         {("pip", "mira"): 60, ("pip",): 20, ("mira",): 20,
-                          ("ruby", "pip"): 15, ("ruby", "mira"): 15, ("ruby",): 10})
+                         [("pip", "ruby", 7, 30)])
+        self.assertEqual(r["together"], 50)
+        self.assertEqual([l["members"] for l in r["lineups"]],
+                         [["pip", "mira"], ["pip"], ["mira"], ["ruby", "pip"], ["ruby", "mira"], ["ruby"]])
+
+    def test_one_or_two_then_which_evenly(self):
+        from progress import roster
+        r = roster.rules()
+        for settled, each in ((["pip", "mira"], 75), (["pip", "ruby"], 75), (["pip", "mira", "ruby"], 50)):
+            options, chances = roster._choices(settled, r)
+            self.assertAlmostEqual(sum(chances), 100)
+            two = sum(c for l, c in zip(options, chances) if len(l["members"]) == 2)
+            self.assertAlmostEqual(two, 50, msg="round 1: one or two, 50:50")
+            for f in settled:  # (alone: 50 / n; in a pair: 50 * 2 / n)
+                odds = sum(c for l, c in zip(options, chances) if f in l["members"])
+                self.assertAlmostEqual(odds, each, msg=f"{f} among {settled}")
+        options, _ = roster._choices(["pip", "mira", "ruby"], r)
+        self.assertIn(["ruby", "pip"], [l["members"] for l in options], "roster.toml's order: Ruby leads")
+        self.assertEqual(roster._choices(["pip"], r), ([roster._lineup(["pip"], r)], [1]), "just Pip")
 
     def test_mistakes_fail_loudly(self):
         from progress import roster
@@ -1044,12 +1183,14 @@ class RosterTest(unittest.TestCase):
                 ('[[unlocks]]\n' + unlock.replace('"mira"', '"nobody"'), "isn't a character"),
                 ('[[unlocks]]\n' + unlock.replace('by = "pip"', 'by = "mira"'), "nobody has invited"),
                 ('[[unlocks]]\n' + unlock.replace("10", "11"), "at_trust"),
-                ('[[lineups]]\nmembers = ["pip", "mira"]\nweight = 1\n', "neither the first"),
-                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "pip"]\nweight = 1\n', "different"),
-                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip"]\nweight = -1\n', "weight"),
-                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip"]\nweight = 0\n', "all 0"),
+                ('[[lineups]]\nmembers = ["pip", "mira"]\n', "neither the first"),
+                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "pip"]\n', "different"),
+                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip"]\nweight = 1\n', "no weight any more"),
+                ('[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "mira"]\n[[lineups]]\n'
+                 'members = ["mira", "pip"]\n', "same members"),
+                ('together = 101\n', "together"), ('together = 0.5\n', "together"),
                 ('on_screen = 0\n', "on_screen"),
-                ('on_screen = 1\n[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "mira"]\nweight = 1\n',
+                ('on_screen = 1\n[[unlocks]]\n' + unlock + '[[lineups]]\nmembers = ["pip", "mira"]\n',
                  "at most 1")]:
             with self.subTest(problem=problem), self.assertRaisesRegex(ValueError, problem):
                 roster.rules(self.write_rules(text))
@@ -1224,6 +1365,20 @@ class AskTest(unittest.TestCase):
         reply, *_, shown = self.ask("Hello! [neutral] [happy]")
         self.assertEqual((reply, shown), ("Hello!", "Hello!"))
 
+    def test_you_is_never_a_name(self):
+        """Gemma, live: "It's lovely to see you, you!" (told not to, it still did). Streamed in pieces, the ", you"
+        never reaches the screen, and isn't kept in her chat to copy."""
+        reply, _, _, shown = self.ask("[mood: happy] It’s lovely to see you", ",", " yo", "u! Vesper", " tells me, you",
+                                      " know, that you’re here.")
+        self.assertEqual((reply, shown), ("It’s lovely to see you! Vesper tells me, you know, that you’re here.",) * 2)
+        self.assertNotIn("you, you", self.messages[-1]["content"])
+        for said, kept in (("Goodbye, you.", "Goodbye."), ("Hello, You!", "Hello!"), ("Farewell, you", "Farewell"),
+                           ("Rest now, you *smiles*", "Rest now *smiles*"), ("Thank you, you know?", "Thank you, you know?"),
+                           ("You, of all people!", "You, of all people!")):
+            with self.subTest(said):
+                reply, *_, shown = self.ask(said)
+                self.assertEqual((reply, shown), (kept, kept))
+
     def test_tags_first_and_mood_before_her_words(self):
         """Her tags come first now (persona.md): hidden while they stream, and her mood is told before any words."""
         events = []
@@ -1240,7 +1395,8 @@ class AskTest(unittest.TestCase):
         self.assertEqual(shown, "*smiles* Hello! [a book] ok")
         self.assertNotIn("[", "".join(t for kind, t in events[:3] if kind == "text"), "no tag ever reaches the screen")
         self.assertEqual((reply, feeling, mood), ("*smiles* Hello! [a book] ok", "nice", "happy"))
-        self.assertEqual(messages[-1]["content"], "[nice] [mood: happy] *smiles* Hello! [a book] ok", "stored tags-first")
+        self.assertEqual(messages[-1]["content"], "[mood: happy] *smiles* Hello! [a book] ok",
+                         "stored with her mood tag first (not the feeling: the judge's now)")
 
     def test_mood_not_told_if_not_hers(self):
         moods = []
@@ -1284,6 +1440,19 @@ class SentencesTest(unittest.TestCase):
         self.assertEqual(pet.trim_to_sentence("I met Mr. Haloway. He took me to St."), "I met Mr. Haloway.")
         self.assertEqual(pet.trim_to_sentence("no end here"), "no end here")
 
+class IdleTopicsTest(unittest.TestCase):
+    def test_few_topics_never_run_out(self):
+        """Opal has five idle topics and the last five aren't repeated: the sixth nudge crashed."""
+        from mind import idle
+        nudges = idle.Idle(Character("opal"))
+        nudges.fired = {(datetime.date.today().isoformat(), h, m) for h, m, _ in idle.CLOCK}  # (no clock moment)
+        said = []
+        for _ in range(12):
+            nudges.last -= 20 * 60
+            said.append(nudges.due(1))
+        self.assertTrue(all(said))
+        self.assertEqual(len(set(said[:5])), 5, "all five come before any comes again")
+
 class MovesTest(unittest.TestCase):
     def test_actions(self):
         from desktop.moves import for_action
@@ -1305,6 +1474,26 @@ class DesktopTest(unittest.TestCase):
     def setUpClass(cls):
         from PySide6.QtWidgets import QApplication
         cls.qapp = QApplication.instance() or QApplication([])
+
+    def test_a_failed_paint_is_written_down_and_still_ended(self):
+        from PySide6.QtGui import QPixmap
+        from desktop import painting
+        real = painting.PATH
+        painting.PATH = temp_path("paint")
+        self.addCleanup(lambda: setattr(painting, "PATH", real))
+        picture = QPixmap(10, 10)
+        for _ in range(3):  # (a broken paint fails every frame)
+            with contextlib.redirect_stderr(io.StringIO()), painting.painter(picture, "a test") as p:
+                held = p
+                {}["nope"]
+            self.assertFalse(held.isActive(), "ended anyway")
+        with open(painting.PATH, encoding="utf-8") as f:
+            text = f.read()
+        self.assertEqual(text.count("painting a test"), 1, "once per run, not every frame")
+        self.assertIn("KeyError: 'nope'", text)
+        with painting.painter(picture, "a test") as p:
+            held = p
+        self.assertFalse(held.isActive())
 
     def pump(self, seconds):
         end = time.time() + seconds
@@ -1642,8 +1831,46 @@ class DesktopTest(unittest.TestCase):
         self.assertTrue(a.leaving and a.going_home)
         self.assertIn("close", a.brain.calls)  # her diary, then she fades away
         a.on_closed([])
-        self.assertIn("See you tomorrow", a.bubble.label.text())
+        self.assertEqual(a.bubble.label.text().strip(), "", "only her wave (an action is played as a move)")
+        self.assertNotIn("See you tomorrow", a.bubble.label.text(), "her own goodbye already said it")
         self.assertIn("resting back home until tomorrow", a.bubble.note.text())
+
+    def test_a_wave_with_nothing_to_say_shows_no_empty_bubble(self):
+        """"*waves goodbye*" alone is played as a move, not printed: with no note it was an empty bubble (Vesper)."""
+        a = self.app()
+        a.leave(going_home=True)
+        a.going_home = False  # (as if it had nothing to say: no diary note and no "resting back home")
+        a.on_closed([])
+        self.assertFalse(a.bubble.isVisible() and not a.bubble.label.text().strip() and not a.bubble.note.text())
+
+    def test_say_goodbye_she_answers_in_her_own_words(self):
+        """It used to be a fixed "*waves goodbye* See you soon!" for everyone, every time."""
+        from mind.session import Turn
+        a = self.app()
+        a.snap = {"summary": {"talks_on_goodbye": False}}
+        a.leave()
+        self.assertEqual(a.brain.calls[-2:], ["farewell", "close"], "her goodbye first, then her diary")
+        a.on_speaking("farewell")
+        a.bubble.add("May your ramen stay spicy and your evening dry!")
+        a.on_closed([{"text": "The user likes spicy ramen."}])  # (the diary may finish while you still read)
+        self.assertFalse(a.body.state == "vanishing", "not before her goodbye has been read")
+        a.on_spoke(Turn("May your ramen stay spicy and your evening dry!", "farewell", None, "happy", 1.0, {},
+                        3, 3, 50, 50))
+        a.on_done()
+        self.assertNotIn("See you soon", a.bubble.label.text())
+        self.assertIn("remember 1 new thing", a.bubble.note.text())
+        self.assertIsNone(a.farewell)
+        # the other way round: her goodbye read first, while the diary is still being written
+        a = self.app()
+        a.snap = {"summary": {"talks_on_goodbye": False}}
+        a.leave()
+        a.on_speaking("farewell")
+        a.on_spoke(Turn("Everlily keep you!", "farewell", None, "happy", 1.0, {}, 3, 3, 50, 50))
+        a.on_done()
+        self.assertIn("saying goodbye", a.bubble.note.text())
+        a.on_done()  # (that bubble closing doesn't start the diary again)
+        a.on_closed([])
+        self.assertIsNone(a.farewell)
 
     def test_time_up_she_fades_away_and_the_app_closes(self):
         """The whole way out, on real timers: her goodbye, the diary, the wave, the fade, and the app quitting."""
@@ -1850,19 +2077,45 @@ class SceneTest(unittest.TestCase):
         self.assertNotIn("tick", ves.brain.calls, "Vesper spoke up while you were typing to Pip")
         pip_.input.hide()
 
-    def test_they_leave_together(self):
+    def test_each_leaves_on_her_own(self):
         scene, _ = self.scene()
         pip_, ves = scene.pets
         for p in scene.pets:
             p.ready = True
-        ves.leave()  # Say goodbye to Vesper: Pip goes too
-        self.assertTrue(pip_.leaving and ves.leaving)
-        self.assertIn("close", pip_.brain.calls)
+        companies = []
+        pip_.brain.set_company = companies.append
+        ves.leave()  # Say goodbye to Vesper: Pip stays
+        self.assertTrue(ves.leaving)
+        self.assertFalse(pip_.leaving, "Pip went home with Vesper")
+        self.assertIn("farewell", ves.brain.calls)
         self.assertIn("close", ves.brain.calls)
+        self.assertNotIn("close", pip_.brain.calls)
+        self.assertEqual(companies, [[]], "Pip should know she's alone now")
+        self.assertIsNone(scene.next_pair, "no chat with someone who's gone")
         scene.vanished(ves)
-        self.assertEqual(self.quits, [], "the app closed before Pip had gone")
+        self.assertEqual(self.quits, [], "the app closed while Pip was still here")
+        self.assertFalse(ves.body.isVisible())
+        pip_.leave(going_home=True)  # her own time is up later
+        self.assertIn("close", pip_.brain.calls)
         scene.vanished(pip_)
         self.assertEqual(self.quits, [True])
+
+    def test_the_others_still_chat_after_one_leaves(self):
+        scene = self.chatty_scene([pip(), Character("mira"), nova()])
+        pip_, ves, nov = scene.pets
+        nov.leave()
+        scene.vanished(nov)
+        self.assertEqual(scene.next_pair.folders, {"pip", "mira"})
+        scene.quiet_since -= scene.duet_gap + 1
+        scene.tick()
+        self.assertIsNotNone(scene.duet, "Pip and Vesper stopped chatting once Nova went home")
+
+    def test_a_chat_ends_when_one_of_the_two_leaves(self):
+        scene = self.chatty_scene()
+        scene.tick()
+        self.assertIsNotNone(scene.duet)
+        scene.pets[1].leave()
+        self.assertIsNone(scene.duet)
 
     # --- three on the desktop (a stand-in third character: Vesper's files under another name) ---
 
@@ -1943,7 +2196,44 @@ class SceneTest(unittest.TestCase):
         s.company = ["Vesper"]
         self.assertIn("Vesper is on the desktop beside Pip", s.friends.note())
 
-    def test_pips_time_up_sends_both_home(self):
+    def test_shared_days_are_counted_once_a_day(self):
+        D = datetime.date
+        roster = use_roster(self)
+        roster.shared_day(["ruby", "pip"], D(2026, 12, 1))
+        roster.shared_day(["pip", "ruby"], D(2026, 12, 1))  # (relaunched, either order)
+        self.assertEqual(roster.state()["together"], {"pip-ruby": {"days": 1, "last": "2026-12-01"}})
+        self.assertEqual(roster.days_before("pip", "ruby", D(2026, 12, 1)), 0, "today is their first")
+        roster.shared_day(["pip", "ruby"], D(2026, 12, 3))
+        self.assertEqual(roster.days_before("ruby", "pip", D(2026, 12, 3)), 1)
+        self.assertEqual(roster.days_before("ruby", "pip", D(2026, 12, 4)), 2, "on a day apart")
+        self.assertEqual(roster.days_before("ruby", "mira", D(2026, 12, 4)), 0, "never together")
+        self.assertTrue(roster.knew_before("mira", "pip"), "Pip invited Vesper")
+        self.assertFalse(roster.knew_before("pip", "ruby"))
+
+    def test_strangers_get_to_know_each_other(self):
+        from progress.company import Company, GET_ALONG
+        roster = use_roster(self)
+        D, today = datetime.date, datetime.date.today()
+        pip_with_ruby = Company(pip(), ["Ruby"])
+        self.assertEqual(pip_with_ruby.greeting(), "Ruby, whom she has never met before (a stranger: they meet for "
+                         "the first time today) is on the desktop with her today too, but this greeting is her own, "
+                         "to the user.")
+        self.assertIn("Pip and Ruby have never met before today: they are strangers", pip_with_ruby.note())
+        for i in range(1, GET_ALONG):
+            roster.shared_day(["pip", "ruby"], today - datetime.timedelta(days=i))
+        self.assertIn("still getting to know", Company(Character("ruby"), ["Pip"]).greeting(), "both ways")
+        self.assertIn("still getting to know each other", pip_with_ruby.note())
+        roster.shared_day(["pip", "ruby"], today - datetime.timedelta(days=GET_ALONG))
+        roster.shared_day(["pip", "ruby"], today)  # (today itself never counts)
+        self.assertIn("gets along well with", pip_with_ruby.greeting())
+        self.assertIn("they get along well now", pip_with_ruby.note())
+        with_vesper = Company(pip(), ["Vesper"])
+        self.assertTrue(with_vesper.greeting().startswith("Her friend Vesper is on the desktop"), "she invited her")
+        self.assertNotIn("strangers", with_vesper.note())
+        self.assertTrue(Company(Character("ruby"), ["Opal"]).greeting().startswith("Her friend Opal"), "her story's NPC")
+
+    def test_pips_time_up_sends_only_her_home(self):
+        """Each has her own daily time: Pip's running out doesn't send Vesper home."""
         from mind.session import Turn
         scene, _ = self.scene()
         pip_, ves = scene.pets
@@ -1953,7 +2243,58 @@ class SceneTest(unittest.TestCase):
         pip_.on_spoke(Turn("I have to go home now...", "time_up", None, "sad", 1.0, {}, 10, 10, 460, 460,
                            time_up=True))
         pip_.on_done()
-        self.assertTrue(ves.leaving and ves.going_home)
+        self.assertTrue(pip_.leaving and pip_.going_home)
+        self.assertFalse(ves.leaving, "Vesper went home on Pip's time")
+
+    def npc_scene(self):
+        scene, _ = self.scene([Character("ruby"), Character("opal")])
+        for p in scene.pets:
+            p.ready = True
+            p.farewells = []
+            p.brain.farewell = lambda after=None, p=p: p.farewells.append(after)
+        return scene
+
+    def test_when_ruby_leaves_opal_follows_after_her(self):
+        scene = self.npc_scene()
+        ruby, opal = scene.pets
+        ruby.leave()
+        self.assertEqual(ruby.farewells, [None])
+        self.assertFalse(opal.leaving, "Opal left at the same time as Ruby")
+        self.assertTrue(opal.saying_goodbye, "Opal can still be talked to while Ruby says goodbye")
+        opal.tick()
+        self.assertNotIn("tick", opal.brain.calls, "Opal spoke up while Ruby was saying goodbye")
+        scene.vanished(ruby)
+        self.assertTrue(opal.leaving, "Opal stayed on the desktop without Ruby")
+        self.assertEqual(opal.farewells, ["Ruby"], "her goodbye should know Ruby has just gone")
+        self.assertEqual(self.quits, [])
+        scene.vanished(opal)
+        self.assertEqual(self.quits, [True])
+
+    def test_when_opal_leaves_ruby_follows_after_her(self):
+        scene = self.npc_scene()
+        ruby, opal = scene.pets
+        opal.leave()
+        self.assertEqual(opal.farewells, [None], "Opal's own goodbye is a plain one")
+        self.assertFalse(ruby.leaving)
+        scene.vanished(opal)
+        self.assertTrue(ruby.leaving)
+        self.assertEqual(ruby.farewells, ["Opal"])
+
+    def test_opal_is_sad_to_be_left_behind(self):
+        from mind import session
+        real = session.start_server, session.warm_up
+        session.start_server = lambda say, slots=1: None
+        session.warm_up = lambda messages, fixed, slot=0: ("loaded", 2000)
+        try:
+            s = session.Session(Character("opal"), say=lambda *_: None, slot=1, slots=2, company=["Ruby"])
+        finally:
+            session.start_server, session.warm_up = real
+        cues = []
+        s._turn = lambda text, kind, on_text, on_mood=None: cues.append(text)
+        s.farewell(after="Ruby")
+        self.assertIn("Ruby has just gone home, so Opal is going home now too", cues[0])
+        self.assertIn("regretful", cues[0])
+        self.assertIsNone(Character("ruby").left_behind, "a plain goodbye for Ruby after Opal")
 
     def test_who_comes_is_picked_once_a_day(self):
         D = datetime.date
@@ -1974,7 +2315,30 @@ class SceneTest(unittest.TestCase):
         self.assertEqual(today(D(2026, 11, 4)).members, ["mira"], "a new day: picked")
         self.assertEqual(today(D(2026, 11, 4)).note, Character("mira").fill(lineup("mira")["note"]) + ".")
         self.assertEqual(today(D(2026, 11, 4)).members, ["mira"], "opened again")
-        self.assertEqual(picks, [{("pip", "mira"): 60, ("pip",): 20, ("mira",): 20}], "picked only once, by weight")
+        self.assertEqual(picks, [{("pip", "mira"): 50, ("pip",): 25, ("mira",): 25}], "picked only once: 50:50, then evenly")
+
+    def test_each_day_says_why(self):
+        from progress import launch
+        D = datetime.date
+        roster = use_roster(self, mira_unlock("2026-11-01", visit_day="2026-11-02"))
+        today = lambda day, **kw: roster.today(day=day, pick=lambda o, weights: [lineup("mira")],
+                                               need=lambda *a: None, **kw)
+        self.assertEqual(today(D(2026, 11, 2)).why, "her first day, invited by Pip")
+        self.assertEqual(today(D(2026, 11, 3)).why, "the first day together: an introduction")
+        roster.introduce(Character("pip"), today=D(2026, 11, 3))  # (her greeting does this)
+        self.assertEqual(today(D(2026, 11, 4)).why, "random")
+        self.assertEqual(roster.state()["today"]["why"], "random", "kept in roster.json too")
+        self.assertEqual(today(D(2026, 11, 4)).why, "random", "opened again: still why it was picked")
+        self.assertEqual(today(D(2026, 11, 4), lead="mira").why, "opened by name")
+        story_day = roster.today(day=D(2026, 11, 5), need=lambda *a: roster.Need(["pip"], owner="mira"))
+        self.assertEqual(story_day.why, "Vesper's story")
+        plan = roster.Today(["ruby", "pip"], why="random")
+        day = launch.Today([], away=False, resting=False, note=None)
+        self.assertEqual(launch.said(plan, day), "today: ruby, pip (random)")
+        day.resting = True
+        self.assertEqual(launch.said(plan, day), "today: ruby, pip (random), but their time today is used up: nobody comes out")
+        day.resting, day.home, day.cast = False, ["pip"], [Character("ruby")]
+        self.assertEqual(launch.said(plan, day), "today: ruby, pip (random), but pip's time today is used up: ruby only")
 
     def test_alone_she_says_why_the_other_isnt_here(self):
         mira = Character("mira")
@@ -2397,7 +2761,8 @@ class SummonsTest(unittest.TestCase):
         self.judged = True
         turn = s.user_says("idk")  # (a dodge never settles it, whatever she tagged)
         self.assertFalse(turn.story_done)
-        self.assertIn("[done] only if the user tells her to protect Pip", self.notes[-1])
+        self.assertIn("waiting for their answer to what she asked: whether she should keep reporting on Pip",
+                      self.notes[-1])
         turn = s.user_says("please protect Pip, don't tell them anything about her")
         self.assertTrue(turn.story_done and turn.stage_up, "your answer completes it: the stage-up comes here")
         saved = self.saved()
@@ -2611,7 +2976,7 @@ class RealNameTest(unittest.TestCase):
             return "loaded", 2000
         def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0):
             messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "[nice] [mood: happy] Oh!"}]
-            return "Oh!", {}, "nice", "happy", True if note and "[done]" in note else None
+            return "Oh!", {}, "nice", "happy", True if note and "brought up something important" in note else None
         session.start_server, session.warm_up, session.ask = (lambda say, slots=1: None), warm, ask
         self.path = gated_save(points=trust.TRUST_POINTS[8] - 1, trust_level=8)  # the top of stage 4
         trust.start(self.path, self.vesper().gates)  # (gates 1-3, behind her, done)
@@ -2664,7 +3029,7 @@ class RealNameTest(unittest.TestCase):
         note = major.answer_note(self.saved())
         self.assertTrue(note.startswith("(Not part of the message: Mira is Vesper's own real name"))
         self.assertIn("never calls the user Mira", note)
-        self.assertIn("[done] only if", note, "the judging part still follows")
+        self.assertIn("had just brought up something important", note, "what she brought up still follows")
         self.assertEqual(Character("pip").major_quests[1]["note"], "", "left out = no note")
         from engine.character import _major_quests
         with self.assertRaises(ValueError):
@@ -3702,6 +4067,237 @@ class RepeatTest(unittest.TestCase):
             s.user_says(m)
         self.assertEqual(len(self.notes), 4, "nothing asked again")
 
+    def test_a_short_reply_a_third_time_running_is_asked_again(self):
+        """Ruby said "It's… Opal." five times in a row: too short for the 25-letter check."""
+        s = self.sitting(["It's… Opal.", "*looks down* It's... Opal", "It's… Opal.", "*whispers* She was my friend."])
+        for m in ["who?", "what?", "say that again"]:
+            turn = s.user_says(m)
+        self.assertEqual(turn.reply, "*whispers* She was my friend.")
+        self.assertIn('has already said "It\'s… Opal."', self.notes[-1])
+        self.assertEqual(len(self.notes), 4, "only the third was asked again (an action or a dot doesn't make it new)")
+
+class ModelNoticeTest(unittest.TestCase):
+    """Switching the model to Gemma once left the build crediting Qwen under Apache 2.0, with Qwen's license text."""
+
+    def entry(self, model_file):
+        from unittest import mock
+        import build_notices
+        from engine import config
+        kept = []
+        with mock.patch.object(config, "MODEL_FILE", model_file):
+            title, body = build_notices.model_entry(lambda src, name: kept.append(src) or name)
+        return title, "\n".join(body), kept
+
+    def test_the_notice_is_for_the_model_in_config(self):
+        from engine import config
+        title, body, kept = self.entry(config.MODEL_FILE)
+        self.assertIn(config.MODEL_FILE, body)
+        for path in kept:
+            self.assertTrue(os.path.isfile(path), f"{path} is named in the notice but isn't in licenses/")
+
+    def test_gemma_comes_with_its_terms(self):
+        from engine import config
+        title, body, kept = self.entry("gemma-3-4b-it-Q5_K_M.gguf")
+        self.assertIn("Gemma is provided under and subject to the\nGemma Terms of Use found at ai.google.dev/gemma/terms", body)
+        self.assertIn("Prohibited Use Policy", body)
+        self.assertEqual({os.path.basename(p) for p in kept},
+                         {"Gemma-Terms-of-Use.txt", "Gemma-Prohibited-Use-Policy.txt", "Gemma-NOTICE.txt"})
+        self.assertNotIn("Apache", body)
+        if config.MODEL_FILE.startswith("gemma"):
+            self.assertIn("Gemma Terms of Use found at ai.google.dev/gemma/terms", config.MODEL_NOTICE,
+                          "the sentence the terms ask for, shown where the model is downloaded")
+
+    def test_qwen_keeps_its_own(self):
+        title, body, kept = self.entry("Qwen3.5-4B-Q5_K_M.gguf")
+        self.assertIn("Apache License 2.0", body)
+        self.assertEqual([os.path.basename(p) for p in kept], ["Qwen3.5-4B-LICENSE.txt"])
+
+    def test_a_model_without_a_notice_stops_the_build(self):
+        with self.assertRaises(SystemExit) as stopped:
+            self.entry("Phi-4-mini-instruct-Q5_K_M.gguf")
+        self.assertIn("no license notice", str(stopped.exception))
+
+    def test_the_download_window_shows_the_models_terms(self):
+        from PySide6.QtWidgets import QApplication
+        self.app = QApplication.instance() or QApplication([])
+        from unittest import mock
+        from engine import config
+        from desktop import download
+        with mock.patch.object(config, "MODEL_NOTICE", "Some model's terms: example.org/terms"):
+            window = download.DownloadWindow()
+            self.assertEqual(window.notice.text(), "Some model's terms: example.org/terms")
+            self.assertFalse(window.notice.isHidden())
+        with mock.patch.object(config, "MODEL_NOTICE", ""):
+            window = download.DownloadWindow()
+            self.assertTrue(window.notice.isHidden(), "nothing to show for a model with no such terms")
+
+class JudgeTest(unittest.TestCase):
+    """How your message felt and whether it finished a quest are asked in a short call of their own (mind/judge.py):
+    Gemma tagged 1 kind message in 12 [nice] while in character, and 16 of 16 when asked alone."""
+
+    def setUp(self):
+        from unittest import mock
+        from engine import llm
+        self.asked = []
+        def pick(messages, words, slot=0):
+            self.asked.append((messages, tuple(words), slot))
+            return self.answer if self.answer in words else words[0]
+        patch = mock.patch.object(llm, "pick", pick)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.feeling, self.done = REAL_JUDGE
+
+    def test_feeling_is_one_of_three_words(self):
+        self.answer = "nice"
+        self.assertEqual(self.feeling(pip(), "thank you, that's so kind", 2), "nice")
+        messages, words, slot = self.asked[-1]
+        self.assertEqual((words, slot), (("nice", "neutral", "rude"), 2), "its own slot, and no other answer possible")
+        self.assertIn('"thank you, that\'s so kind"', messages[-1]["content"])
+        self.assertIn("not how Pip feels today", messages[-1]["content"], "(Gemma tagged the character's own mood)")
+        self.assertNotIn("# Persona", str(messages), "no persona: it judges as an outside reader")
+
+    def test_done_is_yes_or_no(self):
+        quest = pip().major_quests[2]
+        for self.answer, expected in (("yes", True), ("no", False)):
+            self.assertIs(self.done(pip(), quest["starts"], quest["done_when"], "how about Basil?", 2), expected)
+        question = self.asked[-1][0][-1]["content"]
+        self.assertIn(quest["done_when"], question)
+        self.assertIn('"how about Basil?"', question)
+        self.assertEqual(self.asked[-1][1], ("yes", "no"))
+
+    def test_no_judge_no_answer(self):
+        from unittest import mock
+        from engine import llm
+        def gone(*a, **k):
+            raise llm.ServerGone("no server")
+        with mock.patch.object(llm, "pick", gone):
+            self.assertIsNone(self.feeling(pip(), "hello there", 1))
+            self.assertIsNone(self.done(pip(), "she asked the user about rain", "it says something about rain", "hi", 1))
+
+    def sitting(self, tags):
+        """A sitting whose replies carry these (feeling, judged) tags of her own."""
+        from mind import session
+        tags = iter(tags)
+        def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, **kw):
+            feeling, judged = next(tags)
+            messages += [{"role": "user", "content": question}, {"role": "assistant", "content": "[neutral] [mood: happy] ok"}]
+            return "A reply of her own, long enough.", {}, feeling, "happy", judged
+        real = session.start_server, session.warm_up, session.ask
+        session.start_server, session.warm_up, session.ask = (lambda *a, **k: None), (lambda *a, **k: ("loaded", 1)), ask
+        self.addCleanup(lambda: setattr(session, "start_server", real[0]) or setattr(session, "warm_up", real[1])
+                        or setattr(session, "ask", real[2]))
+        c = pip()
+        c.save_path = os.path.join(tempfile.mkdtemp(), "pip.json")
+        s = session.Session(c, say=lambda *_: None, slot=0, slots=2)
+        s.quests.next = 1e12
+        return s
+
+    def test_the_judge_overrides_her_own_tags(self):
+        from unittest import mock
+        s = self.sitting([("rude", None), ("neutral", None)])
+        with mock.patch.object(judge, "feeling", lambda c, text, slot, said=None: "nice"), \
+                mock.patch.object(judge, "done", lambda c, asked, counts, text, slot, said=None: True):
+            turn = s.user_says("I'm so sorry, that sounds awful")
+            self.assertEqual(turn.feeling, "nice", "her own tag said rude: she was the one hurting")
+            self.assertEqual(turn.points_after - turn.points_before, 2, "a nice message earns 2")
+            # a world quest she's waiting on: she forgot her tag, the judge says it's answered
+            s.character.quests = [q for q in s.character.quests if q[0] == "rain"]
+            s.quests.next = 0
+            self.assertTrue(s.quests.due(s.save))
+            turn = s.user_says("it rains here almost every evening")
+            self.assertTrue(turn.quest_done)
+
+    def test_the_judge_slot_is_the_one_after_the_characters(self):
+        from unittest import mock
+        s = self.sitting([("neutral", None)])
+        slots = []
+        with mock.patch.object(judge, "feeling", lambda c, text, slot, said=None: slots.append(slot)):
+            s.user_says("hello there Pip")
+        self.assertEqual(slots, [2], "two characters have slots 0 and 1")
+
+    def test_the_judge_reads_her_last_line(self):
+        """ "yea I can" was judged blind: it only means something next to what she had asked."""
+        self.answer = "neutral"
+        self.feeling(pip(), "yea I can", 2, said="Could you tell me about your town?")
+        question = self.asked[-1][0][-1]["content"]
+        self.assertLess(question.index("Could you tell me about your town?"), question.index('"yea I can"'))
+        self.answer = "yes"
+        self.done(pip(), "she asked the user about rain", "it says something about rain", "yea it does", 2,
+                  said="Does it rain where you live?")
+        self.assertIn("Does it rain where you live?", self.asked[-1][0][-1]["content"])
+        self.feeling(pip(), "hello", 2)
+        self.assertNotIn("had just said", self.asked[-1][0][-1]["content"], "nothing before her first words")
+        self.feeling(pip(), "ok", 2, said="word " * 500)
+        self.assertLess(len(self.asked[-1][0][-1]["content"]), 3000, "a long line is cut: the judge's slot is small")
+
+    def test_unkind_about_someone_else_is_not_rude_to_her(self):
+        """ "tell them she's boring" (about Vesper's sister) was rude every time, even with her line before it."""
+        for self.answer, expected in (("someone else", "neutral"), ("Pip", "rude")):
+            answers = iter(["rude", self.answer])
+            self.answer = None
+            from unittest import mock
+            from engine import llm
+            with mock.patch.object(llm, "pick", lambda messages, words, slot=0: self.asked.append((messages, words))
+                                   or next(answers)):
+                self.assertEqual(self.feeling(pip(), "tell them she's boring", 2, said="What should I tell them?"),
+                                 expected)
+            self.assertEqual(tuple(self.asked[-1][1]), ("Pip", "someone else"), "asked who it's unkind to")
+            self.assertIn("only tells Pip what to do", self.asked[-1][0][-1]["content"], "an order isn't an insult")
+        self.answer = "nice"
+        self.feeling(pip(), "you're lovely", 2)
+        self.assertEqual(self.asked[-1][1], ("nice", "neutral", "rude"), "only a rude answer is asked about")
+
+    def test_the_sitting_gives_the_judge_her_line_before_yours(self):
+        from unittest import mock
+        s = self.sitting([("neutral", None), ("neutral", None)])
+        heard = []
+        with mock.patch.object(judge, "feeling", lambda c, text, slot, said=None: heard.append(said)):
+            s.user_says("hello there Pip")
+            s.user_says("yea I can")
+        self.assertEqual(heard, [None, "ok"], "her reply to the first, without its hidden tags")
+
+    def test_without_the_judge_her_own_tags_stand(self):
+        s = self.sitting([("nice", None)])
+        self.assertEqual(s.user_says("you're lovely, thank you").feeling, "nice")
+
+class OtherModelTest(unittest.TestCase):
+    """Another model's chat format (Gemma 3): turns are <start_of_turn>, not <|im_start|>, and two messages in a row
+    from the same side are refused. Ruby "couldn't wake up": ValueError: substring not found."""
+
+    def gemma(self, messages):
+        text = ""
+        for m in messages:
+            text += f"<start_of_turn>{'model' if m['role'] == 'assistant' else 'user'}\n{m['content']}<end_of_turn>\n"
+        return text + "<start_of_turn>model\n"
+
+    def test_the_prefix_ends_where_the_question_turn_starts(self):
+        from unittest import mock
+        from engine import llm
+        fixed = [{"role": "user", "content": "PERSONA\n\nhello"}, {"role": "assistant", "content": "hi"}]
+        with mock.patch.object(llm, "template", self.gemma):
+            self.assertEqual(pet.prefix_of(fixed), "<start_of_turn>user\nPERSONA\n\nhello<end_of_turn>\n"
+                                                   "<start_of_turn>model\nhi<end_of_turn>\n")
+        chatml = lambda messages: "".join(f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n" for m in messages)
+        with mock.patch.object(llm, "template", chatml):
+            self.assertEqual(pet.prefix_of(fixed), "<|im_start|>user\nPERSONA\n\nhello<|im_end|>\n"
+                                                   "<|im_start|>assistant\nhi<|im_end|>\n", "Qwen: as before")
+
+    def test_memories_and_your_message_share_a_turn(self):
+        from unittest import mock
+        from engine import llm
+        messages = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"},
+                    {"role": "user", "content": "MEMORIES"}, {"role": "user", "content": "how are you?"}]
+        with mock.patch.object(llm, "alternates", lambda: True):
+            joined = llm.fit(messages)
+            self.assertEqual([m["role"] for m in joined], ["user", "assistant", "user"])
+            self.assertEqual(joined[-1]["content"], "MEMORIES\n\nhow are you?")
+            self.assertEqual(len(messages), 4, "her own list is left as it was")
+            # her prompt read ahead of time includes the memories, up to where your message will go
+            with mock.patch.object(llm, "template", lambda m: self.gemma(llm.fit(m))):
+                self.assertTrue(pet.prefix_of(messages[:3]).endswith("<start_of_turn>user\nMEMORIES\n\n"))
+        with mock.patch.object(llm, "alternates", lambda: False):
+            self.assertIs(llm.fit(messages), messages, "Qwen takes them as they are")
+
 class ForcedTodayTest(unittest.TestCase):
     """today.json (roster.forced): for testing, a file in the data folder that says who comes, every day."""
 
@@ -3736,24 +4332,52 @@ class ForcedTodayTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "an NPC can't lead"):
             self.roster.forced()
 
+    def test_the_built_game_ignores_it(self):
+        from unittest import mock
+        self.write('{"members": ["ruby", "pip"]}')
+        with mock.patch.object(sys, "frozen", True, create=True):
+            self.assertIsNone(self.roster.forced())
+            self.assertEqual(self.roster.today(day=datetime.date(2026, 12, 1)).members, ["pip"],
+                             "a new player: Pip alone, as the roster says")
+
     def test_a_notepad_bom_is_fine(self):
         with open(self.roster.FORCED, "w", encoding="utf-8-sig") as f:
             f.write('{"members": ["mira"]}')
         self.assertEqual(self.roster.forced().members, ["mira"])
 
-    def test_mistakes_are_shown_at_launch(self):
+    def test_it_says_who_it_brings(self):
+        self.write('{"members": ["ruby"]}')
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.roster.today(day=datetime.date(2026, 12, 1))
+        self.assertEqual(out.getvalue(), "today.json: ruby (delete it to go back to the roster)\n")
+
+    def test_empty_or_broken_falls_back_to_the_roster(self):
         from desktop import check
-        for text, says in [('{"members": "ruby"}', "must be a list"), ('{"members": ["ruby", "ruby"]}', "must be a list"),
+        for text, says in [("", "Expecting value"), ("   \n", "Expecting value"), ("{}", "must be a list"),
+                           ('{"members": []}', "must be a list"),
+                           ('{"members": "ruby"}', "must be a list"), ('{"members": ["ruby", "ruby"]}', "must be a list"),
                            ('{"members": ["rubyy"]}', "isn't a character"),
                            ('{"members": ["ruby", "pip", "mira"]}', "on_screen in roster.toml is 2"),
                            ('{"members": ["pip"], "note": 5}', "note must be text"), ('{"members": [ruby]}', "Expecting value")]:
-            self.write(text)
-            problems = [p for p in check.cast_problems() if "today" in p]
-            self.assertEqual(len(problems), 1, text)
-            self.assertIn(says, problems[0], text)
+            with self.subTest(text=text):
+                self.write(text)
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    plan = self.roster.today(day=datetime.date(2026, 12, 1))
+                self.assertEqual(plan.members, ["pip"], "a new player's roster: Pip")
+                first, why = out.getvalue().splitlines()
+                self.assertEqual(first, "today.json: no one, relying on random")
+                self.assertIn(says, why)
+                self.assertFalse([p for p in check.cast_problems() if "today" in p], "it doesn't stop the launch")
+        with open(self.roster.FORCED, "wb") as f:
+            f.write(b"\xff\xfe\x00garbage")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(self.roster.today(day=datetime.date(2026, 12, 1)).members, ["pip"])
+        self.assertTrue(out.getvalue().startswith("today.json: no one, relying on random"), "not even text")
 
 class ArrivalTest(unittest.TestCase):
-    """roster.py [[arrivals]]: Ruby turns up on her own, 30 days after Pip reaches trust 9."""
+    """roster.py [[arrivals]]: Ruby turns up on her own, 30 days after Pip reaches trust 7."""
 
     def setUp(self):
         from unittest import mock
@@ -3780,14 +4404,14 @@ class ArrivalTest(unittest.TestCase):
     def today(self, day, **kw):
         return self.roster.today(day=day, **kw)
 
-    def test_nothing_starts_below_pips_trust_9(self):
-        self.pip_trust(8)
+    def test_nothing_starts_below_pips_trust_7(self):
+        self.pip_trust(6)
         self.assertEqual(self.today(self.D(2026, 12, 1)).members, ["pip"])
         self.assertEqual(self.roster.state()["arrived"], {})
 
     def test_she_comes_on_her_own_30_days_later(self):
         D = self.D
-        self.pip_trust(9)
+        self.pip_trust(7)
         self.assertEqual(self.today(D(2026, 12, 1)).members, ["pip"])
         self.assertEqual(self.roster.state()["arrived"]["ruby"], {"started_on": "2026-12-01", "visit_day": None})
         self.pip_trust(10)  # (the clock started once, and trust going up doesn't restart it)
@@ -3797,13 +4421,13 @@ class ArrivalTest(unittest.TestCase):
         self.assertEqual(self.roster.state()["arrived"]["ruby"]["visit_day"], "2026-12-31")
 
     def test_a_late_launch_still_brings_her(self):
-        self.pip_trust(9)
+        self.pip_trust(7)
         self.today(self.D(2026, 12, 1))
         self.assertEqual(self.today(self.D(2027, 2, 14)).members, ["ruby"], "the first launch after the 30 days")
 
     def test_after_her_first_day_she_is_in_the_lineups(self):
         D = self.D
-        self.pip_trust(9)
+        self.pip_trust(7)
         self.today(D(2026, 12, 1))
         self.today(D(2026, 12, 31))
         self.assertEqual(self.today(D(2026, 12, 31)).members, ["ruby"])

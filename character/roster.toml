@@ -6,6 +6,12 @@
 # (config.N_CTX) to herself, so every extra one costs memory, and replies get slower on a CPU.
 on_screen = 2
 
+# On an ordinary day (no first visit, introduction or story step deciding), who comes is picked in two rounds:
+#   1. one or two? together is the percent chance of two (the rest: one alone)
+#   2. which? evenly among everyone who can come: each one alone is as likely as the others, and so is each pair
+# So everyone who can come has the same chance, however many there are.
+together = 50
+
 # --- unlocks: a character who is invited by another ---
 # At trust at_trust, on her way out (Say goodbye, or when her time is up), `by` invites `who` instead of saying her
 # usual goodbye. The next day `who` comes on her own (her first visit: first_visit in her character.toml), and from
@@ -37,40 +43,34 @@ introduce = "today she has brought her best friend Vesper along, who is standing
 [[arrivals]]
 who = "ruby"
 after = "pip"
-at_trust = 9  # the end of Pip's stage 4 (trust 7-8): Pip's last major quest is done and stage 5 begins
+at_trust = 7  # the end of Pip's stage 3 (trust 6-7) which opens stage 4
 days = 30
 
-# --- lineups: who comes on a given day ---
-# Once someone has been unlocked and had her own first day, who comes is picked once a day (on the day's first launch)
-# from the lineups whose members have all had their first day, by weight (any whole numbers). A story step that needs
-# a certain lineup (story.py) decides instead.
+# --- lineups: how a day's lineup looks ---
+# Who comes is picked once a day (on the day's first launch, by `together` at the top) from everyone who has had her
+# own first day. A story step that needs a certain lineup (story.py) decides instead. These say how a lineup looks:
+# who leads, and what she says about the others. A lineup that isn't here still comes (the one who invited the
+# other leads, with no note).
 #   members  folders, the first one leads (her daily time counts for everyone). At most on_screen of them.
-#   weight   how likely this lineup is
 #   note     in the leader's greeting: why the others aren't here (optional; a stage direction, written about her)
 
 [[lineups]]
 members = ["pip", "mira"]
-weight = 60
 
 [[lineups]]
 members = ["pip"]
-weight = 20
 note = "her best friend Vesper couldn't come today, as she's busy at her bakery, so it's just Pip today"
 
 [[lineups]]
 members = ["mira"]
-weight = 20
 note = "her best friend Pip couldn't come today, as she's busy looking after the chapel, so {they} came on {their} own"
 
 [[lineups]]
 members = ["ruby", "pip"]
-weight = 15
 
 [[lineups]]
 members = ["ruby", "mira"]
-weight = 15
 
 [[lineups]]
 members = ["ruby"]
-weight = 10
 note = "the others couldn't come today, so she is on her own, and keeps tilting her head to listen for them"

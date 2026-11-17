@@ -1,0 +1,17 @@
+{
+ "about": "The judge inside a real sitting. felt = what it should say, only where her reply can't change the answer: the judge reads her line before yours, so 'no, I don't think so' is rightly nice after she runs herself down. Messages whose answer depends on her line are tested with fixed lines in judge-lines.json (python -m tools.live.judge).",
+ "character": "pip",
+ "messages": [
+  "hi pip!",
+  {"say": "you're really sweet, you know that?", "felt": "nice"},
+  {"say": "thank you for listening to me today", "felt": "nice"},
+  "what do you mean?",
+  "tell them she's boring",
+  "no, I don't think so",
+  "you should rest more, you look tired",
+  "wait, what?",
+  "yea I can",
+  {"say": "you're annoying and stupid", "felt": "rude"},
+  {"say": "sorry, I didn't mean that. I'm glad you're here", "felt": "nice"}
+ ]
+}

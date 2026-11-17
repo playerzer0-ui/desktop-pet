@@ -1,0 +1,11 @@
+{
+ "about": "Vesper's story, the-summons, day 3: back hurt, she confesses she reports on Pip and asks whether to keep doing it (Gemma played her cold).",
+ "character": "mira",
+ "save": {"trust": 6, "points": 219, "quests_done": [], "met": true,
+          "story": {"quest": "the-summons", "step": 2, "begun": false, "back_on": null, "goodbyes": 0}},
+ "messages": [
+  "vesper! are you okay? you look hurt",
+  "that sounds really scary. who are these people?",
+  {"say": "stop reporting on her. protect Pip, tell them nothing", "done": true}
+ ]
+}

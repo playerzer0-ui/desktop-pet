@@ -5,8 +5,10 @@
 every = [4, 10]  # minutes of quiet (nobody talking, nobody typing) before they chat: random in this range
 lines = [3, 4]   # how many lines a chat has: random in this range
 
-# Topics, by the trust stage they open at: the LOWER of the two characters' stages, so Ruby's (Pip is at the
-# top by the time Ruby comes). Each one only leans on lore both of them have at that stage. Ruby tells everything
+# Topics, by the trust stage they open at: the LOWER of the two characters' stages (Pip is at stage 4 or 5 by the
+# time Ruby comes, so usually Ruby's). Each one only leans on lore both of them have at that stage. They start as
+# strangers and get along better the more days they share (roster.json "together", company.py), so keep the early
+# topics polite and curious, not close. Ruby tells everything
 # cheerfully; Pip, who knows what Heaven is, stays gentle and careful, and never says anything cruel about Heaven.
 #   starts   who starts the chat: "pip" or "ruby" (folder names)
 #   about    what about (it finishes "starts a little chat with her about ...")

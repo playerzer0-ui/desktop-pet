@@ -1,0 +1,14 @@
+{
+ "about": "A first sitting with Pip: greeting, small talk, then the diary (Gemma once saved notes like: They asked 'what do you mean?').",
+ "character": "pip",
+ "diary": true,
+ "messages": [
+  "hello! who are you?",
+  "I'm a student, I study engineering",
+  "what do you mean?",
+  "my favourite food is ramen, the spicy kind",
+  "I have a cat called Miso",
+  "it's raining here today",
+  "I have to go now, bye pip"
+ ]
+}

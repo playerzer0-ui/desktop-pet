@@ -63,7 +63,10 @@ def opener(speaker, listener, topic):
 
 # (told only "not about", Ruby still said "Opal's tea is so sweet! Her footsteps are light" with Opal beside her)
 TOGETHER = ("{{They}} speaks straight to {listener}, not about {listener}: every sentence is said to {listener}'s face, "
-            "the way friends talk, never a report about {listener} for someone else to hear. They are both standing on the user's desktop, "
+            "the way friends talk, never a report about {listener} for someone else to hear. "
+            # (Gemma still talked about Opal beside her: the shape of the sentence works where the rule didn't)
+            # (shown "{listener}, you...", Gemma wrote "You are very bright, you!" every line)
+            "{{They}} calls {listener} by name. They are both standing on the user's desktop, "
             "far from home: nothing from back home (an oven, a lamp, a plant) is here to touch.")
 
 def reply(speaker, listener, heard, last=False):

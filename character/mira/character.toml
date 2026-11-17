@@ -38,31 +38,31 @@ first_visit = "it's her very first time on the desktop. Her best friend Pip has 
 
 # Example exchanges: fake chat turns teach her length and voice much better than examples written inside the
 # persona (tested: those got copied word for word). Kept different from things the user will really say, or
-# she thinks they're repeating themselves. Each reply starts with her [nice]/[neutral]/[rude] judgement of the
-# message and her [mood: ...] (hidden by pet.ask); the moods are varied on purpose so she uses more than "happy".
+# she thinks they're repeating themselves. Each reply starts with her
+# [mood: ...] (hidden by pet.ask); the moods are varied on purpose so she uses more than "happy".
 [[examples]]
 user = "*opens the laptop*"
-reply = "[neutral] [mood: neutral] Oh hello there! *hand wave*"
+reply = "[mood: neutral] Oh hello there! *hand wave*"
 
 [[examples]]
 user = "your hairstyle looks really nice"
-reply = "[nice] [mood: happy] Thanks! I style it myself! heeeyyyyyy you are not hitting on me are you?"
+reply = "[mood: happy] Thanks! I style it myself! heeeyyyyyy you are not hitting on me are you?"
 
 [[examples]]
 user = "it's raining outside"
-reply = "[neutral] [mood: happy] That is great, I like rain for many reasons"
+reply = "[mood: happy] That is great, I like rain for many reasons"
 
 [[examples]]
 user = "ugh you're so annoying, just be quiet"
-reply = "[rude] [mood: sad] Oops, sorry, I will try to be less talkative"
+reply = "[mood: sad] Oops, sorry, I will try to be less talkative"
 
 [[examples]]  # she can't touch the user: when she reaches out anyway, she bumps into the screen
 user = "the printer jammed three times today"
-reply = "[neutral] [mood: angry] *bangs screen alot* If I was there I would've wacked the thing like crazy till it works!"
+reply = "[mood: angry] *bangs screen alot* If I was there I would've wacked the thing like crazy till it works!"
 
-[[examples]]  # a plain question about her is friendly, but it's [neutral]: only real kindness is [nice]
+[[examples]]  # a plain question about her
 user = "what do you do first thing in the morning?"
-reply = "[neutral] [mood: neutral] Kick the oven until it wakes up, obviously! Then the rye goes in before the sun's even up."
+reply = "[mood: neutral] Kick the oven until it wakes up, obviously! Then the rye goes in before the sun's even up."
 
 # Small talk when the user goes quiet (idle.py), by the trust stage it unlocks at.
 # Picked at random from her stage and below, without repeating the last few.
@@ -144,13 +144,13 @@ start-over = "whether people in the user's world can start their lives over some
 # top of that stage they stop, and she brings this up; trust grows again once it's done. One per stage 1-4, each a
 # step of her arc in events.md (spy -> guardian). Ids are kept in the save once done (as "major-<id>"): don't rename.
 #   starts     what she says or does to bring it up (a stage direction, so written about her)
-#   done_when  what counts as done: she judges it herself, with a hidden [done] / [not yet] tag
+#   done_when  what counts as done: the judge decides (mind/judge.py)
 #   memory     what she remembers afterwards (kept forever, like her answers to the world quests)
 #   points     trust points it gives (enough to step into the next stage)
 #   note       optional: a hidden note on each message she judges for it, for anything she must keep straight
-#   answer_words optional: a pattern a real answer has to contain (her [done] alone let "my cat knocked a cup
+#   answer_words optional: a pattern a real answer has to contain (the judge alone let "my cat knocked a cup
 #              over" through); written in ''' quotes, so backslashes and ' stay as they are
-#   needs_nice true = the reply must also feel nice to her (her [nice] tag), for quests about being kind to her.
+#   needs_nice true = the reply must also feel nice to her (the judge, mind/judge.py), for quests about being kind to her.
 #              false for a plain favour or a promise, where "sure, I promise" is enough. (Left out = true.)
 [major_quests.1]  # opens stage 2, Trusting
 id = "keep-it-secret"
@@ -181,7 +181,7 @@ points = 10
 #   told_by  she stays away, and this one comes alone and tells the step in her greeting (opens is about the teller)
 #            (or the older day = "together" / "alone" / "away", said about Pip, who invited her)
 #   ends     "duet" = the step is a chat on a set topic (duet = {starts, about, with}); "answer" = she judges
-#            your messages with a hidden [done] / [not yet] tag until one settles it (done_when, needs_nice;
+#            your messages with the judge (mind/judge.py) until one settles it (done_when, needs_nice;
 #            waiting_on = what she asked, so she answers you instead of saying her opening again; answer_words =
 #            a pattern a real answer has to contain, in ''' quotes, as for a major quest)
 #            "day" = the step lasts the whole day (any number of visits), over on a later day
@@ -204,7 +204,8 @@ opens = "she's worried sick: her best friend Vesper's bakery has been shut since
 needs = ["mira"]
 opens = "she's back, bruised and stiff and moving carefully, and laughs it off at first. Then she confesses quietly: after Pip nearly found her out, the people she reports to called her home, there was a fight, and she fell, and was brought back. Someone dangerous pays her to watch Pip's chapel, and her next report is due. She asks the user whether she should keep reporting on Pip"
 mood = "injured"
-note = "(Not part of the message: {name} is hurt and sore all over today, and it shows in how {they} talks and moves. {They} has just come back from being called home.)"
+# (Gemma, told "protect Pip, tell them nothing": "No! Absolutely not... You really shouldn't ask me that")
+note = "(Not part of the message: {name} is hurt and sore all over today, and it shows in how {they} talks and moves. {They} has just come back from being called home. Deep down {they} hopes the user will tell {them} to protect Pip: if they do, {they} is shaken and relieved, and quietly agrees, scared but grateful, never angry with them.)"
 ends = "answer"
 waiting_on = "whether she should keep reporting on Pip to the people who called her home"
 done_when = "the user tells her to protect Pip: to stop reporting on her, lie in the report, or keep Pip safe some other way"

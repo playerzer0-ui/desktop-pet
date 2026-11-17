@@ -2,7 +2,10 @@
 who, and she wears a mask: her secrets aren't in her prompt at all.
 (Told "never say these in front of Pip", Vesper still let them slip: a small model leaks its prompt.)
 """
+from engine.character import folder_of, is_npc
 from progress import roster, trust
+
+GET_ALONG = 5  # days on the desktop together before two strangers get along well (fewer: still getting to know)
 
 class Company:
     def __init__(self, character, names=()):
@@ -47,15 +50,42 @@ class Company:
         fill = self.character.fill
         if heard:  # (told only to "greet too", she once repeated it word for word)
             name, words = heard
-            return fill(f"{{Their}} friend {name} is on the desktop with {{them}} today, and has just "
+            return fill(f"{self._who([name])} is on the desktop with {{them}} today, and has just "
                 f'greeted the user, saying: "{words}" Now {{name}} greets the user too, as {{name}}, in {{their}} own '
                 f"words and {{their}} own way: {{they}} never repeats or copies {name}'s greeting, and can react to it.")
         introduce = roster.introduce(self.character, self.names)
         if introduce:
             return introduce + "."
-        friends = "{Their} friend " if len(self.names) == 1 else "{Their} friends "
-        return fill(friends) + " and ".join(self.names) + fill(
-            f" {self._are} on the desktop with {{them}} today too, but this greeting is {{their}} own, to the user.")
+        return fill(f"{self._who(self.names)} {self._are} on the desktop with {{them}} today too, but this greeting "
+                    "is {their} own, to the user.")
+
+    def known(self, name):
+        """How well she knows `name`: "friend" (from before the desktop: one invited the other, or an NPC who
+        comes in her story), else how many days they've shared the desktop before today (roster.json)."""
+        other = folder_of(name)
+        if not other or is_npc(other) or is_npc(self.character.folder) or roster.knew_before(self.character.folder, other):
+            return "friend"
+        return roster.days_before(self.character.folder, other)
+
+    def _who(self, names):
+        """The others as her greeting names them, like "{Their} friend Vesper" or "Ruby, whom {they} has never met
+        before today". (Each still has {their} etc. in it, for fill.)"""
+        friends = [n for n in names if self.known(n) == "friend"]
+        parts = []
+        if friends:
+            parts.append(("{Their} friend " if len(friends) == 1 else "{Their} friends ") + " and ".join(friends))
+        for n in names:
+            days = self.known(n)
+            if days == "friend":
+                continue
+            if days == 0:
+                parts.append(f"{n}, whom {{they}} has never met before (a stranger: they meet for the first time today),")
+            elif days < GET_ALONG:
+                parts.append(f"{n}, whom {{they}} has only met here a few times and is still getting to know,")
+            else:
+                parts.append(f"{n}, whom {{they}} has spent many days with here and gets along well with,")
+        text = " and ".join(parts).rstrip(",")
+        return text[0].upper() + text[1:]
 
     def note(self):
         """A hidden note on each of your messages to keep who's who straight, or None when she's alone.
@@ -76,7 +106,25 @@ class Company:
             f"About {others}, {{they}} knows only what {{their}} own background says and what was said in this chat: "
             f"{{they}} never makes up how they met, a shared past, or what {others} likes. If {{their}} background "
             f"doesn't say how {{they}} knows {others}, they have only ever met here, on the user's desktop, and "
-            f"{{they}} says so.)")
+            f"{{they}} says so.{self._closeness()})")
+
+    def _closeness(self):
+        """For the note: how well she knows each one she only knows from the desktop ("" if all are old friends)."""
+        said = []
+        for n in self.names:
+            days = self.known(n)
+            if days == "friend":
+                continue
+            if days == 0:
+                said.append(f"{{name}} and {n} have never met before today: they are strangers, polite and curious "
+                            "about each other, not friends yet.")
+            elif days < GET_ALONG:
+                said.append(f"{{name}} has shared the desktop with {n} on a few days before, so they are still getting "
+                            "to know each other: friendly, but not close yet.")
+            else:
+                said.append(f"{{name}} has shared the desktop with {n} on many days, so they get along well now and "
+                            "are comfortable with each other.")
+        return (" " + " ".join(said)) if said else ""
 
     @property
     def _are(self):

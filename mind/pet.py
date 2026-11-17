@@ -1,6 +1,6 @@
 """How a character talks: her prompt (new_conversation), caching it (warm_up), and asking the model (ask)."""
 import glob, hashlib, os, re
-from engine import llm
+from engine import config, llm
 from engine.config import N_CTX, MODEL, CACHE_DIR, FORGET_AT
 from engine.save import load_save, stage_of
 from engine.character import Character
@@ -68,7 +68,17 @@ def prefix_of(messages):
     """The exact text a request with these messages starts with, before the next question."""
     marker = "PIP_NEXT_QUESTION"
     full = llm.template(messages + [{"role": "user", "content": marker}])
-    return full[:full.rindex("<|im_start|>", 0, full.index(marker))]
+    before = full[:full.index(marker)]
+    # back to where the question's turn starts, whatever the model calls it (Qwen: <|im_start|>, Gemma: <start_of_turn>)
+    start = max(before.rfind(mark) for mark in TURN_STARTS)
+    if start < 0:
+        return before  # a chat format we don't know: the text up to the question is still what a request starts with
+    last = messages[-1] if messages else None
+    if last and last["role"] == "user" and last["content"][-40:] in before[start:]:
+        return before  # the question shares its turn with the message before it (llm.py joined them: Gemma)
+    return before[:start]
+
+TURN_STARTS = ("<|im_start|>", "<start_of_turn>", "<|start_header_id|>", "[INST]")
 
 FEELING_TAG = re.compile(r"\s*\[(?:feeling:\s*)?(nice|neutral|rude)\]", re.I)  # (it sometimes adds "feeling:")
 MOOD_TAG = re.compile(r"\s*\[mood:\s*([a-z]+)\]", re.I)
@@ -77,6 +87,19 @@ ANSWER_TAG = re.compile(r"\s*\[(?:\w+:\s*)?(not[ _]answered|unanswered|answered|
 YES_TAGS = {"answered", "done"}
 LEFTOVER_TAGS = re.compile(r"(\s*\[\w+(?::\s*[\w ]+)?\])+\s*$")  # any other tag-like slip at the end, like [happy]
 LEADING_TAGS = re.compile(r"^\s*(?:\[(?:\w+(?::\s*[\w ]+)?|not answered|not yet)\]\s*)*", re.I)  # [nice] [mood: happy]
+# "you" used as the user's name: Gemma read "call the user you" as their name is You, and kept writing "It's lovely to
+# see you, you!" and "Goodbye, you." even when told not to. Dropped from her reply: ", you" just before the end of a
+# sentence (", you know" stays)
+YOU_AS_NAME = re.compile(r",\s*you(?=\s*[!?.…~*])", re.I)
+YOU_AT_THE_END = re.compile(r",\s*you\s*$", re.I)
+MAYBE_YOU = re.compile(r",\s*(?:y(?:o(?:u\s*)?)?)?$", re.I)  # the end of what's streamed so far could still become one
+
+def without_you_as_name(text, final=True):
+    """Her words without "you" as a name. While her reply is still arriving (final=False), a trailing "," or ", you"
+    is held back until what follows shows whether it is one."""
+    text = YOU_AS_NAME.sub("", text)
+    return (YOU_AT_THE_END if final else MAYBE_YOU).sub("", text)
+
 def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0, on_mood=None, max_tokens=200):
     """Send a question, return (reply, timings, feeling, mood, answered). Adds both to messages.
     Her hidden tags: feeling (nice/neutral/rude), mood (one of `moods`, else None), answered (True/False/None).
@@ -86,9 +109,7 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0,
     messages.append({"role": "user", "content": question})
     request = messages[:-1] + [{"role": "user", "content": f"{question}\n\n{note}"}] if note else messages
 
-    chunks = llm.chat_stream(request, slot=slot, max_tokens=max_tokens,
-                             temperature=0.7, top_p=0.8, top_k=20, min_p=0.05,
-                             presence_penalty=0.5)  # Qwen's chat settings, but a light penalty: 1.5 pushed her to odd words
+    chunks = llm.chat_stream(request, slot=slot, max_tokens=max_tokens, **config.SAMPLING)  # (per model: config.py)
 
     reply = ""
     shown = 0  # how much of her words on_text has been given
@@ -112,7 +133,7 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0,
             body = reply[lead:]
             if body.startswith("[") and "]" not in body:
                 continue  # another tag still being written
-            visible = body.split("[")[0]  # hold back a possible tag at the end
+            visible = without_you_as_name(body.split("[")[0], final=False)  # hold back a possible tag at the end
             if on_text and len(visible) > shown:
                 on_text(visible[shown:])
                 shown = len(visible)
@@ -129,12 +150,13 @@ def ask(messages, question, on_text=None, keep=1, moods=None, note=None, slot=0,
     answer_tag = ANSWER_TAG.search(reply)
     answered = (answer_tag.group(1).lower() in YES_TAGS) if answer_tag else None
     reply = LEFTOVER_TAGS.sub("", MOOD_TAG.sub("", FEELING_TAG.sub("", ANSWER_TAG.sub("", reply)))).rstrip()
-    reply = LEADING_TAGS.sub("", reply)
+    reply = without_you_as_name(LEADING_TAGS.sub("", reply))
     if on_text and len(reply) > shown:  # a "[" that wasn't a tag after all
         on_text(reply[shown:])
 
-    # kept with her tags: seeing her own tags keeps her writing them
-    messages.append({"role": "assistant", "content": f"[{feeling}] [mood: {mood or 'neutral'}] {reply}"})
+    # kept with her mood tag: seeing it keeps her writing it. (How your message felt and whether it answered her are
+    # the judge's now, mind/judge.py: she isn't asked for those tags, and one she writes anyway is only a fallback)
+    messages.append({"role": "assistant", "content": f"[mood: {mood or 'neutral'}] {reply}"})
 
     forget_oldest(messages, keep, context_used(timings))
     return reply.strip(), timings, feeling, mood, answered
